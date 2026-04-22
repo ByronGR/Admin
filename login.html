@@ -159,24 +159,23 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   getUserProfile,
-  redirectByRole,
-  isAdminDomain
+  isAdminRole,
+  redirectToDashboard
 } from './firebase-config.js';
 
-/* ── If already logged in as admin, go straight to dashboard ── */
+/* ── Remove .html from URL if present ── */
+if (location.pathname.endsWith('.html')) {
+  history.replaceState(null, '', location.pathname.replace('.html', '') + location.search);
+}
+
+/* ── If already logged in as admin, skip to dashboard ── */
 onAuthStateChanged(auth, async user => {
   if (!user) return;
   const profile = await getUserProfile(user.uid);
-  if (profile?.role === 'admin') {
-    window.location.href = 'admin-dashboard.html';
+  if (profile && isAdminRole(profile.role)) {
+    redirectToDashboard();
   }
-  // If logged in but not admin, do nothing — let them try to sign in
 });
-
-/* ── Clean URL ── */
-if (location.pathname.endsWith('.html')) {
-  history.replaceState(null, '', location.pathname.slice(0, -5) + location.search);
-}
 
 /* ── Sign in ── */
 window.doAdminLogin = async function() {
@@ -184,15 +183,17 @@ window.doAdminLogin = async function() {
   const pw    = document.getElementById('adm-pw').value;
   const errEl = document.getElementById('login-err');
   const pwEl  = document.getElementById('adm-pw');
+
   if (!email || !pw) { showToast('Please enter your email and password.'); return; }
   errEl.classList.remove('show');
   pwEl.classList.remove('err');
   setLoading('login-btn', true);
+
   try {
-    const cred = await signInWithEmailAndPassword(auth, email, pw);
+    const cred    = await signInWithEmailAndPassword(auth, email, pw);
     const profile = await getUserProfile(cred.user.uid);
-    if (profile?.role !== 'admin') {
-      // Signed in but not admin — block access
+
+    if (!profile || !isAdminRole(profile.role)) {
       await auth.signOut();
       errEl.textContent = 'This account does not have admin access.';
       errEl.classList.add('show');
@@ -200,9 +201,14 @@ window.doAdminLogin = async function() {
       setLoading('login-btn', false);
       return;
     }
-    window.location.href = 'admin-dashboard.html';
+
+    redirectToDashboard();
+
   } catch(e) {
-    errEl.textContent = 'Incorrect email or password.';
+    const msg = e.code === 'auth/too-many-requests'
+      ? 'Too many attempts — try again later or reset your password.'
+      : 'Incorrect email or password.';
+    errEl.textContent = msg;
     errEl.classList.add('show');
     pwEl.classList.add('err');
     setLoading('login-btn', false);
@@ -239,7 +245,9 @@ function setLoading(btnId, loading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
-  btn.innerHTML = loading ? '<span class="spin"></span>Signing in...' : (btn.dataset.label || btn.textContent);
+  btn.innerHTML = loading
+    ? '<span class="spin"></span>Signing in...'
+    : (btn.dataset.label || 'Sign in →');
 }
 
 function showToast(msg) {

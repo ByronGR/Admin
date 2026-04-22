@@ -2,14 +2,13 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/admin-dashboard/:path*", "destination": "/admin-dashboard.html" },
-    { "source": "/admin-login",            "destination": "/admin-login.html" },
-    { "source": "/apply/:path*",           "destination": "/admin-dashboard.html" }
+    { "source": "/dashboard/:path*", "destination": "/dashboard.html" }
   ],
   "redirects": [
-    { "source": "/",        "destination": "/admin-login",    "permanent": false },
-    { "source": "/login",   "destination": "/admin-login",    "permanent": false },
-    { "source": "/dashboard","destination": "/admin-dashboard","permanent": false }
+    { "source": "/",               "destination": "/login",     "permanent": false },
+    { "source": "/admin",          "destination": "/dashboard", "permanent": false },
+    { "source": "/admin-login",    "destination": "/login",     "permanent": false },
+    { "source": "/admin-dashboard","destination": "/dashboard", "permanent": false }
   ],
   "headers": [
     {

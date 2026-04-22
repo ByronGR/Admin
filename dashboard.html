@@ -590,13 +590,13 @@ document.body.insertAdjacentHTML('afterbegin', `
 
 onAuthStateChanged(auth, async user => {
   if (!user) {
-    window.location.href = '/admin-login';
+    window.location.href = '/login';
     return;
   }
   const profile = await getUserProfile(user.uid);
   if (!profile || !isAdminRole(profile.role)) {
     await auth.signOut();
-    window.location.href = '/admin-login';
+    window.location.href = '/login';
     return;
   }
   // Set super admin flag
@@ -2472,7 +2472,7 @@ function navTo(id, label){
   closeDrawer();
   // Update URL
   const slug=id==='dashboard'?'':'/'+id;
-  history.pushState({page:id},'','/admin-dashboard'+slug);
+  history.pushState({page:id},'','/dashboard'+slug);
 }
 function toggleDrawer(){
   document.getElementById('drawer').classList.toggle('open');
@@ -2613,7 +2613,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', '/admin-dashboard' + slug);
+  history.replaceState({ page: currentPage }, '', '/dashboard' + slug);
 };
 
 window.openCandFullProfile = function() {
@@ -2724,7 +2724,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   if (editMode) setTimeout(toggleOpeningEdit, 50);
 
   navTo('opening-detail', title);
-  history.replaceState({ page:'opening-detail', code }, '', '/admin-dashboard/openings/' + code.toLowerCase());
+  history.replaceState({ page:'opening-detail', code }, '', '/dashboard/openings/' + code.toLowerCase());
 };
 
 window.openNewOpening = function() {
@@ -2756,7 +2756,7 @@ window.openNewOpening = function() {
   });
   ['about','responsibilities','skills','qualifications'].forEach(s => editSection(s));
   navTo('opening-detail', 'New Opening');
-  history.replaceState({ page:'opening-detail', code:newCode }, '', '/admin-dashboard/openings/' + newCode.toLowerCase());
+  history.replaceState({ page:'opening-detail', code:newCode }, '', '/dashboard/openings/' + newCode.toLowerCase());
 };
 
 window.toggleOpeningEdit = function() {
@@ -3224,7 +3224,7 @@ window.toggleRowPublished = async function(btn, code) {
   const path = window.location.pathname;
 
   if (path.includes('/openings/open-')) {
-    // e.g. /admin-dashboard/openings/open-csm-4x8b — restore specific opening
+    // e.g. /dashboard/openings/open-csm-4x8b — restore specific opening
     const codeLower = path.split('/openings/')[1];
     if (codeLower) {
       const codeUpper = codeLower.toUpperCase();
@@ -3388,7 +3388,7 @@ function filterOrgs() {
 function signOut(){
   toast('Signing out...','');
   import('./firebase-config.js').then(({auth, signOut: firebaseSignOut}) => {
-    firebaseSignOut(auth).then(() => { window.location.href = '/admin-login'; });
+    firebaseSignOut(auth).then(() => { window.location.href = '/login'; });
   });
 }
 
@@ -3497,7 +3497,7 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   document.getElementById('nav-current-label').textContent = name;
   // Push URL — override the one navTo just pushed so it includes the org slug
   const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  history.replaceState({ page: 'org-detail', orgId, name }, '', '/admin-dashboard/org/' + slug);
+  history.replaceState({ page: 'org-detail', orgId, name }, '', '/dashboard/org/' + slug);
 };
 
 /* ── Org detail tab switcher ── */

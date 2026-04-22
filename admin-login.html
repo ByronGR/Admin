@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nearwork Admin | Sign in</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --purple:#6C3CE1;--pd:#4F28B8;--pl:#8B5CF6;--pp:#F0EBFF;
+  --black:#0D0D0D;--white:#fff;
+  --g1:#F9FAFB;--g2:#F3F4F6;--g3:#D1D5DB;--g4:#9CA3AF;--g5:#6B7280;
+  --amber:#F59E0B;--red:#EF4444;--green:#10B981;
+}
+html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--black);color:var(--white);overflow:hidden;}
+body{display:flex;align-items:center;justify-content:center;}
+
+/* Background */
+.bg{position:fixed;inset:0;
+  background:radial-gradient(ellipse at 15% 40%,rgba(108,60,225,0.2),transparent 50%),
+             radial-gradient(ellipse at 85% 60%,rgba(245,158,11,0.08),transparent 50%);
+  pointer-events:none;}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);background-size:52px 52px;pointer-events:none;}
+
+/* Card */
+.card{position:relative;z-index:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:44px;width:100%;max-width:400px;backdrop-filter:blur(8px);box-shadow:0 24px 64px rgba(0,0,0,0.4);animation:fadeIn .4s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+/* Logo + chip */
+.logo{font-size:20px;font-weight:900;color:#fff;letter-spacing:-1px;margin-bottom:6px;}
+.logo em{font-style:normal;color:var(--pl);}
+.admin-chip{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:700;color:var(--amber);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.25);padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:28px;}
+
+.title{font-size:22px;font-weight:800;color:#fff;letter-spacing:-1px;margin-bottom:5px;}
+.sub{font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:26px;line-height:1.6;}
+
+/* Fields */
+.f{margin-bottom:13px;}
+.f label{display:block;font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:5px;letter-spacing:.06em;text-transform:uppercase;}
+.f input{width:100%;padding:11px 13px;border:1.5px solid rgba(255,255,255,0.12);border-radius:9px;font-size:13px;font-family:'Poppins',sans-serif;color:#fff;background:rgba(255,255,255,0.06);outline:none;transition:border-color .2s,box-shadow .2s;}
+.f input:focus{border-color:rgba(108,60,225,0.6);box-shadow:0 0 0 3px rgba(108,60,225,0.15);}
+.f input::placeholder{color:rgba(255,255,255,0.2);}
+.f input.err{border-color:var(--red);}
+.ferr{font-size:11px;color:var(--red);margin-top:5px;display:none;}
+.ferr.show{display:block;}
+.pw-r{position:relative;}
+.pw-r input{padding-right:40px;}
+.eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.3);font-size:13px;padding:2px;transition:color .15s;}
+.eye:hover{color:rgba(255,255,255,0.7);}
+
+/* Forgot */
+.forgot-row{text-align:right;margin-bottom:14px;}
+.forgot-row a{font-size:11px;color:rgba(255,255,255,0.4);cursor:pointer;text-decoration:none;transition:color .15s;}
+.forgot-row a:hover{color:var(--pl);}
+
+/* Button */
+.btn-p{width:100%;padding:13px;border-radius:9px;background:var(--purple);color:#fff;font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;border:none;cursor:pointer;transition:background .2s,transform .15s;}
+.btn-p:hover{background:var(--pd);transform:translateY(-1px);}
+.btn-p:disabled{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);cursor:not-allowed;transform:none;}
+.btn-sec{width:100%;padding:11px;border-radius:9px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;border:1px solid rgba(255,255,255,0.1);cursor:pointer;margin-top:8px;}
+.btn-sec:hover{background:rgba(255,255,255,0.1);}
+
+/* Security note */
+.sec-note{display:flex;align-items:flex-start;gap:8px;margin-top:20px;padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.18);border-radius:9px;}
+.sn-icon{font-size:13px;flex-shrink:0;margin-top:1px;}
+.sn-text{font-size:11px;color:rgba(255,255,255,0.35);line-height:1.6;}
+
+/* Steps */
+.step{display:none;}
+.step.show{display:block;animation:fadeIn .25s ease;}
+
+/* Spinner */
+.spin{width:13px;height:13px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:5px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* Success */
+.succ{text-align:center;padding:8px 0;}
+.succ-icon{font-size:44px;margin-bottom:14px;display:block;}
+.succ-title{font-size:17px;font-weight:800;color:#fff;letter-spacing:-1px;margin-bottom:6px;}
+.succ-sub{font-size:12px;color:rgba(255,255,255,0.4);line-height:1.65;}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#fff;color:var(--black);font-size:12px;font-weight:600;padding:11px 20px;border-radius:9px;box-shadow:0 8px 32px rgba(0,0,0,0.3);transition:transform .35s cubic-bezier(.4,0,.2,1);z-index:999;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.bad{background:var(--red);color:#fff;}
+
+/* Footer */
+.page-footer{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(255,255,255,0.15);white-space:nowrap;}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="grid"></div>
+
+<div class="card">
+  <div class="logo">Near<em>work</em></div>
+  <div class="admin-chip">⚡ Admin HQ</div>
+
+  <!-- Sign in step -->
+  <div class="step show" id="s-signin">
+    <div class="title">Admin sign in.</div>
+    <p class="sub">Restricted access. Nearwork team only.</p>
+
+    <div class="f">
+      <label>Email</label>
+      <input type="email" id="adm-email" placeholder="you@nearwork.co" onkeydown="if(event.key==='Enter')document.getElementById('adm-pw').focus()">
+    </div>
+    <div class="f">
+      <label>Password</label>
+      <div class="pw-r">
+        <input type="password" id="adm-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAdminLogin()">
+        <button class="eye" onclick="togglePw()" type="button">👁</button>
+      </div>
+      <div class="ferr" id="login-err">Incorrect email or password.</div>
+    </div>
+
+    <div class="forgot-row"><a onclick="showStep('s-forgot')">Forgot password?</a></div>
+    <button class="btn-p" id="login-btn" data-label="Sign in →" onclick="doAdminLogin()">Sign in →</button>
+
+    <div class="sec-note">
+      <span class="sn-icon">🔒</span>
+      <div class="sn-text">This portal is for Nearwork team members only. Unauthorized access attempts are logged. If you're a client, go to <a href="https://app.nearwork.co/client-login" style="color:rgba(139,92,246,0.8);">client-login</a>.</div>
+    </div>
+  </div>
+
+  <!-- Forgot step -->
+  <div class="step" id="s-forgot">
+    <button onclick="showStep('s-signin')" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:11px;cursor:pointer;padding:0;margin-bottom:20px;font-family:'Poppins',sans-serif;display:flex;align-items:center;gap:4px;">← Back to sign in</button>
+    <div class="title">Reset password.</div>
+    <p class="sub" style="margin-bottom:18px;">Enter your Nearwork email and we'll send a reset link.</p>
+    <div class="f">
+      <label>Email</label>
+      <input type="email" id="reset-email" placeholder="you@nearwork.co" onkeydown="if(event.key==='Enter')doReset()">
+    </div>
+    <button class="btn-p" id="reset-btn" data-label="Send reset link →" onclick="doReset()">Send reset link →</button>
+    <button class="btn-sec" onclick="showStep('s-signin')">Back to sign in</button>
+  </div>
+
+  <!-- Reset sent step -->
+  <div class="step" id="s-reset-sent">
+    <div class="succ">
+      <span class="succ-icon">📧</span>
+      <div class="succ-title">Check your inbox.</div>
+      <p class="succ-sub">Reset link sent to <strong id="reset-email-show" style="color:#fff;"></strong>.<br>Expires in 1 hour. Check spam if needed.</p>
+    </div>
+    <button class="btn-sec" onclick="showStep('s-signin')" style="margin-top:20px;">Back to sign in</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="page-footer">Nearwork Admin · Restricted access</div>
+
+<script type="module">
+import {
+  auth,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  onAuthStateChanged,
+  getUserProfile,
+  redirectByRole,
+  isAdminDomain
+} from './firebase-config.js';
+
+/* ── If already logged in as admin, go straight to dashboard ── */
+onAuthStateChanged(auth, async user => {
+  if (!user) return;
+  const profile = await getUserProfile(user.uid);
+  if (profile?.role === 'admin') {
+    window.location.href = 'admin-dashboard.html';
+  }
+  // If logged in but not admin, do nothing — let them try to sign in
+});
+
+/* ── Clean URL ── */
+if (location.pathname.endsWith('.html')) {
+  history.replaceState(null, '', location.pathname.slice(0, -5) + location.search);
+}
+
+/* ── Sign in ── */
+window.doAdminLogin = async function() {
+  const email = document.getElementById('adm-email').value.trim();
+  const pw    = document.getElementById('adm-pw').value;
+  const errEl = document.getElementById('login-err');
+  const pwEl  = document.getElementById('adm-pw');
+  if (!email || !pw) { showToast('Please enter your email and password.'); return; }
+  errEl.classList.remove('show');
+  pwEl.classList.remove('err');
+  setLoading('login-btn', true);
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pw);
+    const profile = await getUserProfile(cred.user.uid);
+    if (profile?.role !== 'admin') {
+      // Signed in but not admin — block access
+      await auth.signOut();
+      errEl.textContent = 'This account does not have admin access.';
+      errEl.classList.add('show');
+      pwEl.classList.add('err');
+      setLoading('login-btn', false);
+      return;
+    }
+    window.location.href = 'admin-dashboard.html';
+  } catch(e) {
+    errEl.textContent = 'Incorrect email or password.';
+    errEl.classList.add('show');
+    pwEl.classList.add('err');
+    setLoading('login-btn', false);
+  }
+};
+
+/* ── Reset password ── */
+window.doReset = async function() {
+  const email = document.getElementById('reset-email').value.trim();
+  if (!email) { showToast('Please enter your email.'); return; }
+  setLoading('reset-btn', true);
+  try {
+    await sendPasswordResetEmail(auth, email);
+    document.getElementById('reset-email-show').textContent = email;
+    showStep('s-reset-sent');
+  } catch(e) {
+    showToast('Could not send reset email. Check the address.');
+    setLoading('reset-btn', false);
+  }
+};
+
+/* ── Utilities ── */
+window.showStep = function(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('show'));
+  document.getElementById(id).classList.add('show');
+};
+
+window.togglePw = function() {
+  const el = document.getElementById('adm-pw');
+  el.type = el.type === 'password' ? 'text' : 'password';
+};
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spin"></span>Signing in...' : (btn.dataset.label || btn.textContent);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show bad';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

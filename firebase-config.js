@@ -72,11 +72,11 @@ export async function saveUserProfile(uid, data) {
 
 // ─── Redirect helpers (clean URLs — no .html) ─────────────────────────────
 export function redirectToLogin() {
-  window.location.href = '/admin-login';
+  window.location.href = '/login';
 }
 
 export function redirectToDashboard() {
-  window.location.href = '/admin-dashboard';
+  window.location.href = '/dashboard';
 }
 
 // ─── Auth guard ──────────────────────────

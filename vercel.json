@@ -1,0 +1,30 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/admin-dashboard/:path*", "destination": "/admin-dashboard.html" },
+    { "source": "/admin-login",            "destination": "/admin-login.html" },
+    { "source": "/apply/:path*",           "destination": "/admin-dashboard.html" }
+  ],
+  "redirects": [
+    { "source": "/",        "destination": "/admin-login",    "permanent": false },
+    { "source": "/login",   "destination": "/admin-login",    "permanent": false },
+    { "source": "/dashboard","destination": "/admin-dashboard","permanent": false }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options",        "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/firebase-config.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}

@@ -577,7 +577,7 @@ body{font-family:'Poppins',sans-serif;background:var(--g1);color:var(--black);mi
 <body>
 <!-- ══ AUTH GUARD — blocks non-admins before page renders ══ -->
 <script type="module">
-import { auth, onAuthStateChanged, getUserProfile } from './firebase-config.js';
+import { auth, onAuthStateChanged, getUserProfile, isAdminRole } from './firebase-config.js';
 
 // Show a loading overlay instantly — hides the dashboard until auth is confirmed
 document.body.insertAdjacentHTML('afterbegin', `
@@ -590,23 +590,28 @@ document.body.insertAdjacentHTML('afterbegin', `
 
 onAuthStateChanged(auth, async user => {
   if (!user) {
-    window.location.href = 'admin-login.html';
+    window.location.href = '/admin-login';
     return;
   }
   const profile = await getUserProfile(user.uid);
-  if (!profile || !['admin','super_admin'].includes(profile.role)) {
-    window.location.href = profile?.role === 'client' ? 'client-dashboard.html' : 'admin-login.html';
+  if (!profile || !isAdminRole(profile.role)) {
+    await auth.signOut();
+    window.location.href = '/admin-login';
     return;
   }
-  // Set super admin flag globally — controls archive/restore and hard-delete visibility
+  // Set super admin flag
   window._isSuperAdmin = (profile.role === 'super_admin');
-  // Confirmed admin — remove the guard and show the page
+  // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // Update the nav avatar with their name
+  // Update nav avatar initials
   if (profile.name) {
     const initials = profile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
     const av = document.querySelector('.av');
     if (av) av.textContent = initials;
+    const dav = document.getElementById('drawer-av');
+    if (dav) dav.textContent = initials;
+    const dname = document.getElementById('drawer-name');
+    if (dname) dname.textContent = profile.name;
   }
   // Update greeting
   const greet = document.querySelector('.ph-title');
@@ -3382,8 +3387,8 @@ function filterOrgs() {
 
 function signOut(){
   toast('Signing out...','');
-  import('./firebase-config.js').then(({auth}) => {
-    auth.signOut().then(() => { window.location.href = 'admin-login.html'; });
+  import('./firebase-config.js').then(({auth, signOut: firebaseSignOut}) => {
+    firebaseSignOut(auth).then(() => { window.location.href = '/admin-login'; });
   });
 }
 

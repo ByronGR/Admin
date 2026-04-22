@@ -173,7 +173,7 @@ onAuthStateChanged(auth, async user => {
   if (!user) return;
   const profile = await getUserProfile(user.uid);
   if (profile && isAdminRole(profile.role)) {
-    redirectToDashboard();
+    window.location.href = '/dashboard';
   }
 });
 
@@ -202,7 +202,7 @@ window.doAdminLogin = async function() {
       return;
     }
 
-    redirectToDashboard();
+    window.location.href = '/dashboard';
 
   } catch(e) {
     const msg = e.code === 'auth/too-many-requests'

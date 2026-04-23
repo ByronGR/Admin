@@ -2,7 +2,12 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/dashboard/:path*", "destination": "/dashboard.html" }
+    { "source": "/dashboard/:path*",   "destination": "/dashboard.html" },
+    { "source": "/openings/:path*",    "destination": "/dashboard.html" },
+    { "source": "/candidates/:path*",  "destination": "/dashboard.html" },
+    { "source": "/pipeline/:path*",    "destination": "/dashboard.html" },
+    { "source": "/orgs/:path*",        "destination": "/dashboard.html" },
+    { "source": "/apply/:path*",       "destination": "/dashboard.html" }
   ],
   "redirects": [
     { "source": "/",               "destination": "/login",     "permanent": false },
@@ -21,9 +26,7 @@
     },
     {
       "source": "/firebase-config.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
   ]
 }

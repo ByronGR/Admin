@@ -437,7 +437,53 @@ body{font-family:'Poppins',sans-serif;background:var(--g1);color:var(--black);mi
 .toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
 .toggle.on::after{transform:translateX(16px);}
 
-/* ══ OPENING DETAIL PAGE ══ */
+/* ══ OPENING APPLICANTS PAGE ══ */
+.applicants-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.applicant-card{background:#fff;border:1.5px solid var(--g3);border-radius:13px;padding:18px;cursor:pointer;transition:all .18s;position:relative;}
+.applicant-card:hover{border-color:var(--purple);box-shadow:0 4px 20px rgba(108,60,225,0.1);transform:translateY(-2px);}
+.applicant-card.pending-outreach{border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.03);}
+.applicant-card.in-pipeline{border-color:rgba(16,185,129,0.35);background:rgba(16,185,129,0.03);}
+.ac-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;}
+.ac-av{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--purple),var(--pl));color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ac-name{font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;}
+.ac-meta{font-size:11px;color:var(--g5);}
+.ac-score{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:50%;background:var(--purple);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.ac-score.high{background:var(--green);}
+.ac-score.mid{background:var(--amber);}
+.ac-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;}
+.ac-tag{font-size:10px;font-weight:600;color:var(--purple);background:var(--pp);padding:3px 9px;border-radius:99px;}
+.ac-tag.match{color:#059669;background:rgba(16,185,129,0.1);}
+.ac-footer{display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--g2);}
+.ac-date{font-size:10px;color:var(--g4);}
+.ac-actions{display:flex;gap:6px;}
+.ac-status-chip{font-size:9px;font-weight:700;padding:3px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.06em;}
+.ac-status-chip.new{background:rgba(108,60,225,0.1);color:var(--purple);}
+.ac-status-chip.pipeline{background:rgba(16,185,129,0.1);color:#059669;}
+.ac-status-chip.outreach{background:rgba(245,158,11,0.12);color:#D97706;}
+
+/* ══ SUGGESTIONS SECTION ══ */
+.suggestions-section{margin-top:24px;}
+.suggestions-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.suggestions-title{font-size:14px;font-weight:800;color:var(--black);display:flex;align-items:center;gap:8px;}
+.suggestions-badge{font-size:10px;font-weight:700;background:linear-gradient(135deg,var(--purple),var(--pl));color:#fff;padding:3px 10px;border-radius:99px;}
+.suggestion-card{background:#fff;border:1.5px dashed var(--g3);border-radius:13px;padding:16px;cursor:pointer;transition:all .18s;position:relative;}
+.suggestion-card:hover{border-color:var(--purple);border-style:solid;box-shadow:0 4px 16px rgba(108,60,225,0.08);}
+.suggestion-card .ac-av{background:linear-gradient(135deg,#4F28B8,#6C3CE1);}
+.match-bar{height:4px;border-radius:99px;background:var(--g2);margin-bottom:10px;overflow:hidden;}
+.match-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--purple),var(--pl));transition:width .6s ease;}
+.match-label{font-size:9px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+.prev-opening-chip{font-size:9px;color:var(--g5);background:var(--g1);border:1px solid var(--g2);padding:2px 8px;border-radius:99px;margin-top:6px;display:inline-block;}
+
+/* ══ CANDIDATE BRIEF (in applicants context) ══ */
+.open-profile-btn{width:100%;padding:11px;border-radius:9px;background:linear-gradient(135deg,var(--purple),var(--pl));color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;font-family:'Poppins',sans-serif;margin-top:10px;transition:opacity .15s;}
+.open-profile-btn:hover{opacity:.9;}
+.add-pipeline-btn{width:100%;padding:10px;border-radius:9px;background:#fff;color:var(--purple);font-size:12px;font-weight:700;border:1.5px solid var(--purple);cursor:pointer;font-family:'Poppins',sans-serif;margin-top:6px;transition:all .15s;}
+.add-pipeline-btn:hover{background:var(--pp);}
+
+/* ══ STAGE SELECT DROPDOWN ══ */
+.stage-select-wrap{display:flex;gap:8px;margin-top:8px;align-items:center;}
+.stage-select-wrap select{flex:1;padding:8px 10px;border:1.5px solid var(--g3);border-radius:8px;font-size:12px;font-family:'Poppins',sans-serif;outline:none;}
+.stage-select-wrap select:focus{border-color:var(--purple);}
 .opening-header{background:linear-gradient(135deg,#2D1B69 0%,#4F28B8 50%,#6C3CE1 100%);border-radius:16px;padding:32px;margin-bottom:24px;color:#fff;position:relative;overflow:hidden;}
 .opening-header::before{content:'';position:absolute;top:-60px;right:-60px;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,0.05);pointer-events:none;}
 .opening-header::after{content:'';position:absolute;bottom:-40px;left:40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,0.04);pointer-events:none;}
@@ -1890,6 +1936,7 @@ Project coordination & time management</textarea>
             </select>
           </div>
           <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+            <button class="btn btn-p btn-sm" style="justify-content:center;" onclick="openApplicantsPage()">👥 View applicants <span id="applicant-count-badge" style="background:rgba(255,255,255,0.25);padding:1px 7px;border-radius:99px;font-size:10px;margin-left:4px;">20</span></button>
             <button class="btn btn-ghost btn-sm" style="justify-content:center;" onclick="copyOpeningLink()">🔗 Copy candidate link</button>
             <button class="btn btn-ghost btn-sm" style="justify-content:center;" onclick="navTo('pipeline','Pipelines')">🔄 View pipeline</button>
             <button class="btn btn-danger btn-sm" style="justify-content:center;" id="od-archive-btn" onclick="archiveCurrentOpening()">Archive opening</button>
@@ -1911,8 +1958,218 @@ Project coordination & time management</textarea>
   </div>
 
   <!-- ══════════════════════════════
-       ASSESSMENTS
+       OPENING APPLICANTS
   ══════════════════════════════ -->
+  <div class="page" id="page-opening-applicants">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn btn-ghost btn-sm" onclick="backToOpening()">← Back to opening</button>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--black);letter-spacing:-.5px;" id="appl-title">Customer Success Manager — Applicants</div>
+          <div style="font-size:11px;color:var(--g5);margin-top:2px;font-family:monospace;" id="appl-code">OPEN-CSM-4X8B</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="sbox"><span class="si">🔍</span><input type="text" id="appl-search" placeholder="Search applicants..." oninput="filterApplicants()" style="width:200px;"></div>
+        <select class="fsel" id="appl-filter-status" onchange="filterApplicants()">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="pipeline">In pipeline</option>
+          <option value="outreach">Pending outreach</option>
+        </select>
+        <select class="fsel" id="appl-filter-city" onchange="filterApplicants()">
+          <option value="">All cities</option>
+          <option>Medellín</option><option>Bogotá</option><option>Cali</option><option>Barranquilla</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:22px;font-weight:900;color:var(--black);letter-spacing:-1px;" id="stat-total">20</div>
+        <div style="font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;">Total applied</div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:22px;font-weight:900;color:var(--purple);letter-spacing:-1px;" id="stat-new">14</div>
+        <div style="font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;">New / unreviewed</div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:22px;font-weight:900;color:#059669;letter-spacing:-1px;" id="stat-pipeline">4</div>
+        <div style="font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;">Added to pipeline</div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:22px;font-weight:900;color:#D97706;letter-spacing:-1px;" id="stat-outreach">2</div>
+        <div style="font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;">Pending outreach</div>
+      </div>
+    </div>
+
+    <!-- Applicants grid -->
+    <div class="applicants-grid" id="applicants-grid">
+
+      <!-- Applicant 1 — in pipeline -->
+      <div class="applicant-card in-pipeline" data-name="valentina ríos" data-city="medellín" data-status="pipeline" onclick="openApplicantBrief('Valentina Ríos','C1 · Medellín','CAND-2N6Q8',91,['CRM','SaaS','Salesforce','Customer Success'],'pipeline','OPEN-CSM-4X8B')">
+        <div class="ac-score high">91</div>
+        <div class="ac-header">
+          <div class="ac-av">VR</div>
+          <div><div class="ac-name">Valentina Ríos</div><div class="ac-meta">C1 · Medellín · 4 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag match">CRM</span><span class="ac-tag match">Salesforce</span><span class="ac-tag match">SaaS</span><span class="ac-tag">HubSpot</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 10</span>
+          <span class="ac-status-chip pipeline">✓ In pipeline</span>
+        </div>
+      </div>
+
+      <!-- Applicant 2 — new -->
+      <div class="applicant-card" data-name="isabella gómez" data-city="medellín" data-status="new" onclick="openApplicantBrief('Isabella Gómez','C1 · Medellín','CAND-4R7K1',88,['CRM','Customer Success','Excel','SaaS'],'new','OPEN-CSM-4X8B')">
+        <div class="ac-score high">88</div>
+        <div class="ac-header">
+          <div class="ac-av">IG</div>
+          <div><div class="ac-name">Isabella Gómez</div><div class="ac-meta">C1 · Medellín · 3 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag match">CRM</span><span class="ac-tag match">Customer Success</span><span class="ac-tag">Excel</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 11</span>
+          <span class="ac-status-chip new">New</span>
+        </div>
+      </div>
+
+      <!-- Applicant 3 — new -->
+      <div class="applicant-card" data-name="david herrera" data-city="bogotá" data-status="new" onclick="openApplicantBrief('David Herrera','C1 · Bogotá','CAND-7P2M5',87,['SaaS','Account Management','CRM','Salesforce'],'new','OPEN-CSM-4X8B')">
+        <div class="ac-score high">87</div>
+        <div class="ac-header">
+          <div class="ac-av">DH</div>
+          <div><div class="ac-name">David Herrera</div><div class="ac-meta">C1 · Bogotá · 5 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag match">Account Management</span><span class="ac-tag match">Salesforce</span><span class="ac-tag">SaaS</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 12</span>
+          <span class="ac-status-chip new">New</span>
+        </div>
+      </div>
+
+      <!-- Applicant 4 — pending outreach -->
+      <div class="applicant-card pending-outreach" data-name="jorge pérez" data-city="cali" data-status="outreach" onclick="openApplicantBrief('Jorge Pérez','C1 · Cali','CAND-9L4X3',81,['CRM','Customer Retention','SaaS'],'outreach','OPEN-CSM-4X8B')">
+        <div class="ac-score mid">81</div>
+        <div class="ac-header">
+          <div class="ac-av" style="background:linear-gradient(135deg,#D97706,#F59E0B);">JP</div>
+          <div><div class="ac-name">Jorge Pérez</div><div class="ac-meta">C1 · Cali · 3 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag match">Customer Retention</span><span class="ac-tag">SaaS</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 9</span>
+          <span class="ac-status-chip outreach">⏳ Pending outreach</span>
+        </div>
+      </div>
+
+      <!-- Applicant 5 — new -->
+      <div class="applicant-card" data-name="sofía vargas" data-city="medellín" data-status="new" onclick="openApplicantBrief('Sofía Vargas','C1 · Medellín','CAND-3T8N2',71,['CRM','SaaS','Excel'],'new','OPEN-CSM-4X8B')">
+        <div class="ac-score mid">71</div>
+        <div class="ac-header">
+          <div class="ac-av">SV</div>
+          <div><div class="ac-name">Sofía Vargas</div><div class="ac-meta">C1 · Medellín · 2 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag">CRM</span><span class="ac-tag">Excel</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 13</span>
+          <span class="ac-status-chip new">New</span>
+        </div>
+      </div>
+
+      <!-- Applicant 6 — in pipeline -->
+      <div class="applicant-card in-pipeline" data-name="maría lópez" data-city="medellín" data-status="pipeline" onclick="openApplicantBrief('María López','C1 · Medellín','CAND-5K9Q7',72,['CRM','SaaS','HubSpot'],'pipeline','OPEN-CSM-4X8B')">
+        <div class="ac-score mid">72</div>
+        <div class="ac-header">
+          <div class="ac-av">ML</div>
+          <div><div class="ac-name">María López</div><div class="ac-meta">C1 · Medellín · 2 yrs exp</div></div>
+        </div>
+        <div class="ac-tags">
+          <span class="ac-tag">CRM</span><span class="ac-tag">HubSpot</span>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-date">Applied Apr 8</span>
+          <span class="ac-status-chip pipeline">✓ In pipeline</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Suggestions section -->
+    <div class="suggestions-section">
+      <div class="suggestions-hdr">
+        <div class="suggestions-title">
+          ✨ Suggested candidates
+          <span class="suggestions-badge">AI matched</span>
+        </div>
+        <div style="font-size:11px;color:var(--g5);">Not in this opening — matched by skills &amp; past performance</div>
+      </div>
+      <div style="background:rgba(108,60,225,0.04);border:1px solid rgba(108,60,225,0.12);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:11px;color:var(--g6);line-height:1.7;">
+        ⚠️ <strong>These candidates have not applied to this opening.</strong> Before adding to the pipeline, reach out first to confirm interest and availability. Click a candidate to mark as <em>Pending outreach</em> or add directly.
+      </div>
+      <div class="applicants-grid" id="suggestions-grid">
+
+        <!-- Suggestion 1 -->
+        <div class="suggestion-card" data-name="carlos ruiz" data-city="bogotá" onclick="openApplicantBrief('Carlos Ruiz','C1 · Bogotá','CAND-8B5R4',85,['CRM','Customer Success','Salesforce','SaaS'],'suggestion','OPEN-CSM-4X8B')">
+          <div class="ac-score high" style="background:linear-gradient(135deg,var(--purple),var(--pl));">85</div>
+          <div class="match-label">94% match</div>
+          <div class="match-bar"><div class="match-fill" style="width:94%;"></div></div>
+          <div class="ac-header">
+            <div class="ac-av">CR</div>
+            <div><div class="ac-name">Carlos Ruiz</div><div class="ac-meta">C1 · Bogotá · 4 yrs exp</div></div>
+          </div>
+          <div class="ac-tags">
+            <span class="ac-tag match">CRM</span><span class="ac-tag match">Customer Success</span><span class="ac-tag match">Salesforce</span>
+          </div>
+          <div class="prev-opening-chip">Previously applied: SDR / Sales Development Rep</div>
+        </div>
+
+        <!-- Suggestion 2 -->
+        <div class="suggestion-card" data-name="alejandro ríos" data-city="medellín" onclick="openApplicantBrief('Alejandro Ríos','C1 · Medellín','CAND-6W3P9',79,['Account Management','SaaS','HubSpot','CRM'],'suggestion','OPEN-CSM-4X8B')">
+          <div class="ac-score mid" style="background:linear-gradient(135deg,var(--purple),var(--pl));">79</div>
+          <div class="match-label">87% match</div>
+          <div class="match-bar"><div class="match-fill" style="width:87%;"></div></div>
+          <div class="ac-header">
+            <div class="ac-av">AR</div>
+            <div><div class="ac-name">Alejandro Ríos</div><div class="ac-meta">C1 · Medellín · 3 yrs exp</div></div>
+          </div>
+          <div class="ac-tags">
+            <span class="ac-tag match">Account Management</span><span class="ac-tag match">HubSpot</span><span class="ac-tag">CRM</span>
+          </div>
+          <div class="prev-opening-chip">Previously applied: Technical Support Specialist</div>
+        </div>
+
+        <!-- Suggestion 3 -->
+        <div class="suggestion-card" data-name="camila torres" data-city="bogotá" onclick="openApplicantBrief('Camila Torres','C1 · Bogotá','CAND-1N7Y6',70,['SaaS','Customer Retention','CRM'],'suggestion','OPEN-CSM-4X8B')">
+          <div class="ac-score mid" style="background:linear-gradient(135deg,var(--purple),var(--pl));">70</div>
+          <div class="match-label">79% match</div>
+          <div class="match-bar"><div class="match-fill" style="width:79%;"></div></div>
+          <div class="ac-header">
+            <div class="ac-av">CT</div>
+            <div><div class="ac-name">Camila Torres</div><div class="ac-meta">C1 · Bogotá · 2 yrs exp</div></div>
+          </div>
+          <div class="ac-tags">
+            <span class="ac-tag">Customer Retention</span><span class="ac-tag">CRM</span>
+          </div>
+          <div class="prev-opening-chip">Previously applied: Technical Support Specialist</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="applicants-empty" style="display:none;padding:40px;text-align:center;font-size:13px;color:var(--g4);">No applicants match your filters.</div>
+  </div>
   <div class="page" id="page-assessments">
     <div class="ph">
       <div><div class="ph-title">Assessments</div><div class="ph-sub">Review AI-generated questions before launching to candidates.</div></div>
@@ -2448,10 +2705,10 @@ Project coordination & time management</textarea>
 
 
 /* ══ PAGES ══ */
-const PAGES=['dashboard','orgs','org-detail','pipeline','candidates','openings','opening-detail','assessments','hired','blog','team','audit'];
+const PAGES=['dashboard','orgs','org-detail','pipeline','candidates','openings','opening-detail','opening-applicants','assessments','hired','blog','team','audit'];
 const PAGE_LABELS={
   dashboard:'Dashboard',orgs:'Organizations','org-detail':'Organization','pipeline':'Pipelines',candidates:'Candidates',
-  openings:'Openings','opening-detail':'Opening',assessments:'Assessments',hired:'Hired',
+  openings:'Openings','opening-detail':'Opening','opening-applicants':'Applicants',assessments:'Assessments',hired:'Hired',
   blog:'Blog',team:'Team settings',audit:'Audit Log'
 };
 function showPage(id){
@@ -2724,7 +2981,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   if (editMode) setTimeout(toggleOpeningEdit, 50);
 
   navTo('opening-detail', title);
-  history.replaceState({ page:'opening-detail', code }, '', '/dashboard/openings/' + code.toLowerCase());
+  history.replaceState({ page:'opening-detail', code }, '', '/openings/' + code.toLowerCase());
 };
 
 window.openNewOpening = function() {
@@ -2756,7 +3013,7 @@ window.openNewOpening = function() {
   });
   ['about','responsibilities','skills','qualifications'].forEach(s => editSection(s));
   navTo('opening-detail', 'New Opening');
-  history.replaceState({ page:'opening-detail', code:newCode }, '', '/dashboard/openings/' + newCode.toLowerCase());
+  history.replaceState({ page:'opening-detail', code:newCode }, '', '/openings/' + newCode.toLowerCase());
 };
 
 window.toggleOpeningEdit = function() {
@@ -3223,9 +3480,9 @@ window.toggleRowPublished = async function(btn, code) {
 (function routeOnLoad() {
   const path = window.location.pathname;
 
-  if (path.includes('/openings/open-')) {
+  if (path.includes('/openings/') && !path.includes('/applicants')) {
     // e.g. /dashboard/openings/open-csm-4x8b — restore specific opening
-    const codeLower = path.split('/openings/')[1];
+    const codeLower = path.split('/openings/')[1]?.split('/')[0];
     if (codeLower) {
       const codeUpper = codeLower.toUpperCase();
       // Try localStorage first (works offline and without Firebase)
@@ -3273,6 +3530,10 @@ window.toggleRowPublished = async function(btn, code) {
     }
   }
 
+  if (path.includes('/openings') && path.includes('/applicants')) {
+    setTimeout(() => navTo('opening-applicants', 'Applicants'), 80);
+    return;
+  }
   if (path.includes('/openings')) {
     setTimeout(() => navTo('openings', 'Openings'), 80);
     return;
@@ -4302,5 +4563,243 @@ function loadPipelineInline(url) {
     </div>
   </div>
 </div>
+<!-- ══ APPLICANT BRIEF PANEL ══ -->
+<div class="cand-brief-bg" id="appl-brief-bg" onclick="closeApplicantBrief()"></div>
+<div class="cand-brief" id="appl-brief">
+  <div class="cb-hdr">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="cb-av" id="appl-av">VR</div>
+      <div>
+        <div class="cb-name" id="appl-name">Valentina Ríos</div>
+        <div class="cb-role" id="appl-role">C1 · Medellín</div>
+      </div>
+    </div>
+    <button class="cb-close" onclick="closeApplicantBrief()">✕</button>
+  </div>
+  <div class="cb-body" style="flex:1;overflow-y:auto;padding:16px;">
+
+    <!-- Score -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:14px;background:var(--g1);border-radius:10px;">
+      <svg width="56" height="56" viewBox="0 0 56 56">
+        <circle cx="28" cy="28" r="22" fill="none" stroke="var(--g2)" stroke-width="5"/>
+        <circle cx="28" cy="28" r="22" fill="none" stroke="var(--purple)" stroke-width="5"
+          stroke-dasharray="138.2" id="appl-score-arc" stroke-dashoffset="20"
+          stroke-linecap="round" transform="rotate(-90 28 28)"/>
+        <text x="28" y="33" text-anchor="middle" font-size="13" font-weight="800" fill="var(--black)" font-family="Poppins,sans-serif" id="appl-score-num">91</text>
+      </svg>
+      <div>
+        <div style="font-size:11px;color:var(--g5);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;">NW Score</div>
+        <div style="font-size:12px;color:var(--g6);" id="appl-score-label">Excellent match</div>
+        <div style="font-size:10px;color:var(--g4);margin-top:2px;" id="appl-status-label">Applied to this opening</div>
+      </div>
+    </div>
+
+    <!-- Skills match -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Skills match</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;" id="appl-skill-tags"></div>
+    </div>
+
+    <!-- Quick info -->
+    <div style="background:#fff;border:1px solid var(--g2);border-radius:10px;overflow:hidden;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--g2);font-size:12px;"><span style="color:var(--g5);">City</span><strong id="appl-city-val">Medellín</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--g2);font-size:12px;"><span style="color:var(--g5);">English</span><strong>C1 Advanced</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--g2);font-size:12px;"><span style="color:var(--g5);">Code</span><span style="font-family:monospace;font-size:11px;color:var(--purple);cursor:pointer;" id="appl-code-val" onclick="copyCode(this)">CAND-2N6Q8</span></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 12px;font-size:12px;"><span style="color:var(--g5);">Status</span><span id="appl-pipeline-status" style="font-size:11px;font-weight:700;color:#059669;">In pipeline</span></div>
+    </div>
+
+    <!-- Add to pipeline section -->
+    <div id="appl-pipeline-section" style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--black);margin-bottom:8px;">Add to pipeline stage</div>
+      <div class="stage-select-wrap">
+        <select id="appl-stage-sel">
+          <option value="applied">Applied</option>
+          <option value="profile-review">Profile Review</option>
+          <option value="assessment">Assessment</option>
+          <option value="background">Background Check</option>
+          <option value="presented">Presented</option>
+          <option value="client-review">Client Review</option>
+          <option value="hired">Hired</option>
+        </select>
+        <button class="btn btn-p btn-sm" onclick="addApplicantToPipeline()">Add →</button>
+      </div>
+    </div>
+
+    <!-- Pending outreach -->
+    <div id="appl-outreach-section" style="margin-bottom:12px;display:none;">
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:9px;padding:12px;font-size:11px;color:var(--g6);line-height:1.7;">
+        ⚠️ This candidate has been <strong>marked for outreach</strong>. Reach out to confirm interest before adding to the pipeline.
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;width:100%;justify-content:center;" onclick="markPendingOutreach()">✓ Outreach done — add to pipeline</button>
+    </div>
+
+  </div>
+  <div style="padding:12px 16px;border-top:1px solid var(--g2);display:flex;flex-direction:column;gap:8px;">
+    <button class="open-profile-btn" onclick="openCandidateFullProfile()">Open full profile ↗</button>
+    <button class="add-pipeline-btn" id="appl-outreach-btn" onclick="markPendingOutreach()">⏳ Mark as pending outreach</button>
+  </div>
+</div>
+
+<script>
+/* ══ APPLICANTS PAGE ══ */
+let _currentApplicant = {};
+let _currentApplicantOpeningCode = '';
+let _applicantOpeningTitle = '';
+
+window.openApplicantsPage = function() {
+  const code  = _currentOpening?.code  || 'OPEN-CSM-4X8B';
+  const title = _currentOpening?.title || 'Opening';
+  _currentApplicantOpeningCode = code;
+  _applicantOpeningTitle = title;
+
+  document.getElementById('appl-title').textContent = title + ' — Applicants';
+  document.getElementById('appl-code').textContent  = code;
+
+  navTo('opening-applicants', 'Applicants');
+  history.replaceState({ page:'opening-applicants', code },
+    '', '/openings/' + code.toLowerCase() + '/applicants');
+};
+
+window.backToOpening = function() {
+  const code  = _currentApplicantOpeningCode || 'OPEN-CSM-4X8B';
+  const title = _applicantOpeningTitle || 'Opening';
+  navTo('opening-detail', title);
+  history.replaceState({ page:'opening-detail', code },
+    '', '/openings/' + code.toLowerCase());
+};
+
+window.openApplicantBrief = function(name, cityMeta, candCode, score, skills, status, openingCode) {
+  _currentApplicant = { name, cityMeta, candCode, score, skills, status, openingCode };
+
+  const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  document.getElementById('appl-av').textContent    = initials;
+  document.getElementById('appl-name').textContent  = name;
+  document.getElementById('appl-role').textContent  = cityMeta + ' · C1 English';
+  document.getElementById('appl-score-num').textContent = score;
+  document.getElementById('appl-city-val').textContent  = cityMeta.split('·').pop().trim();
+  const codeEl = document.getElementById('appl-code-val');
+  codeEl.textContent = candCode; codeEl.dataset.copy = candCode;
+
+  // Score arc
+  const arc = document.getElementById('appl-score-arc');
+  if (arc) arc.setAttribute('stroke-dashoffset', (138.2 * (1 - score / 100)).toFixed(1));
+
+  // Score label
+  const scoreLabel = score >= 85 ? 'Excellent match' : score >= 70 ? 'Good match' : 'Partial match';
+  document.getElementById('appl-score-label').textContent = scoreLabel;
+
+  // Status label
+  const statusLabels = {
+    pipeline:   'In pipeline for this opening',
+    outreach:   'Pending outreach',
+    new:        'Applied to this opening',
+    suggestion: 'Suggested — not yet applied'
+  };
+  document.getElementById('appl-status-label').textContent = statusLabels[status] || 'Applied';
+  document.getElementById('appl-pipeline-status').textContent = statusLabels[status] || '';
+  document.getElementById('appl-pipeline-status').style.color =
+    status === 'pipeline' ? '#059669' : status === 'outreach' ? '#D97706' : 'var(--g5)';
+
+  // Skills
+  const tagsEl = document.getElementById('appl-skill-tags');
+  tagsEl.innerHTML = skills.map(s => `<span class="ac-tag match">${s}</span>`).join('');
+
+  // Show/hide sections
+  document.getElementById('appl-pipeline-section').style.display =
+    (status === 'pipeline') ? 'none' : 'block';
+  document.getElementById('appl-outreach-section').style.display =
+    (status === 'outreach') ? 'block' : 'none';
+  document.getElementById('appl-outreach-btn').style.display =
+    (status === 'outreach' || status === 'pipeline') ? 'none' : 'flex';
+
+  document.getElementById('appl-brief-bg').classList.add('show');
+  document.getElementById('appl-brief').classList.add('show');
+};
+
+window.closeApplicantBrief = function() {
+  document.getElementById('appl-brief-bg').classList.remove('show');
+  document.getElementById('appl-brief').classList.remove('show');
+};
+
+window.addApplicantToPipeline = function() {
+  const stage = document.getElementById('appl-stage-sel').value;
+  const name  = _currentApplicant.name;
+  const code  = _currentApplicant.candCode;
+  // Find the card and update its status chip
+  const cards = document.querySelectorAll('.applicant-card, .suggestion-card');
+  cards.forEach(card => {
+    if (card.dataset.name === name.toLowerCase()) {
+      card.classList.add('in-pipeline');
+      card.classList.remove('pending-outreach');
+      card.dataset.status = 'pipeline';
+      const chip = card.querySelector('.ac-status-chip');
+      if (chip) { chip.className = 'ac-status-chip pipeline'; chip.textContent = '✓ In pipeline'; }
+    }
+  });
+  // Update stats
+  updateApplicantStats();
+  closeApplicantBrief();
+  toast(name + ' added to pipeline at ' + stage.replace('-', ' ') + ' stage.', 'ok');
+  // In production: write to Firestore pipeline document
+};
+
+window.markPendingOutreach = function() {
+  const name = _currentApplicant.name;
+  const cards = document.querySelectorAll('.applicant-card, .suggestion-card');
+  cards.forEach(card => {
+    if (card.dataset.name === name.toLowerCase()) {
+      card.classList.add('pending-outreach');
+      card.dataset.status = 'outreach';
+      const chip = card.querySelector('.ac-status-chip');
+      if (chip) { chip.className = 'ac-status-chip outreach'; chip.textContent = '⏳ Pending outreach'; }
+    }
+  });
+  updateApplicantStats();
+  closeApplicantBrief();
+  toast(name + ' marked as pending outreach.', 'ok');
+};
+
+window.openCandidateFullProfile = function() {
+  const code = _currentApplicant.candCode;
+  if (code) window.open('/candidates/' + code.toLowerCase(), '_blank');
+};
+
+function updateApplicantStats() {
+  const cards = document.querySelectorAll('#applicants-grid .applicant-card');
+  let total = cards.length, inPipeline = 0, outreach = 0, newCount = 0;
+  cards.forEach(c => {
+    if (c.dataset.status === 'pipeline') inPipeline++;
+    else if (c.dataset.status === 'outreach') outreach++;
+    else newCount++;
+  });
+  const ts = document.getElementById('stat-total');
+  const ns = document.getElementById('stat-new');
+  const ps = document.getElementById('stat-pipeline');
+  const os = document.getElementById('stat-outreach');
+  if (ts) ts.textContent = total;
+  if (ns) ns.textContent = newCount;
+  if (ps) ps.textContent = inPipeline;
+  if (os) os.textContent = outreach;
+}
+
+window.filterApplicants = function() {
+  const q       = (document.getElementById('appl-search')?.value || '').toLowerCase();
+  const status  = (document.getElementById('appl-filter-status')?.value || '').toLowerCase();
+  const city    = (document.getElementById('appl-filter-city')?.value || '').toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('#applicants-grid .applicant-card').forEach(card => {
+    const name   = (card.dataset.name   || '');
+    const cStat  = (card.dataset.status || '');
+    const cCity  = (card.dataset.city   || '');
+    const match  = (!q || name.includes(q))
+                && (!status || cStat === status)
+                && (!city   || cCity === city);
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  const empty = document.getElementById('applicants-empty');
+  if (empty) empty.style.display = visible === 0 ? 'block' : 'none';
+};
+</script>
 
 </body>

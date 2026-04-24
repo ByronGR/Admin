@@ -3143,35 +3143,21 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
 };
 
 window.openNewOpening = function() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const rand = Array.from({length:4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
-  const newCode = 'OPEN-NEW-' + rand;
-  _currentOpening = { code:newCode, title:'', status:'draft', published:false, recruiter:'Byron Giraldo' };
-  _openingDirty = true;
-
-  document.getElementById('od-title').textContent = 'New Opening';
-  document.getElementById('inp-title').value = '';
-  document.getElementById('od-code-badge').textContent = newCode;
-  document.getElementById('osb-code').textContent = newCode;
-  document.getElementById('od-opening-status-badge').textContent = 'Draft';
-  document.getElementById('od-opening-status-badge').style.cssText = 'background:rgba(107,114,128,0.15);color:#6B7280;font-weight:700;padding:4px 14px;border-radius:99px;font-size:11px;display:inline-flex;align-items:center;border:1px solid #9CA3AF;';
-  document.getElementById('od-posted-date').textContent = 'Created ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  document.getElementById('view-osb-org').textContent = '— select org —';
-  document.getElementById('view-osb-status').textContent = 'Draft';
-  document.getElementById('od-draft-chip').style.display = 'inline-flex';
-  document.getElementById('od-save-btn').style.display = 'inline-flex';
-
-  _openingEditMode = true;
-  document.getElementById('od-edit-btn').textContent = '✓ Done editing';
-  document.querySelectorAll('.opening-edit-btn').forEach(b => b.style.display = 'inline-block');
-  setSidebarEditMode(true);
-  ['title','skills-chips','meta'].forEach(id => {
-    const v = document.getElementById('view-' + id); const e = document.getElementById('edit-' + id);
-    if (v) v.style.display = 'none'; if (e) e.style.display = 'block';
-  });
-  ['about','responsibilities','skills','qualifications'].forEach(s => editSection(s));
-  navTo('opening-detail', 'New Opening');
-  history.replaceState({ page:'opening-detail', code:newCode }, '', '/openings/' + newCode.toLowerCase());
+  // Reset the new opening modal state
+  document.getElementById('no-step-1').style.display = 'block';
+  document.getElementById('no-step-2').style.display = 'none';
+  document.getElementById('no-title').value = '';
+  document.getElementById('no-org').selectedIndex = 0;
+  document.getElementById('no-recruiter').selectedIndex = 0;
+  document.getElementById('no-questionnaire-list').innerHTML = '';
+  document.getElementById('no-q-count').textContent = '0';
+  document.getElementById('no-questionnaire-empty').style.display = 'block';
+  document.getElementById('no-step-indicator').textContent = 'Step 1 of 2';
+  document.getElementById('no-next-btn').style.display = 'inline-flex';
+  document.getElementById('no-save-btn').style.display = 'none';
+  // Clear temp questions
+  window._newOpeningQuestions = [];
+  openModal('new-opening-wizard');
 };
 
 window.toggleOpeningEdit = function() {
@@ -3280,49 +3266,60 @@ window.togglePubVisibility = async function() {
   const btn = document.getElementById('osb-pub-toggle');
   const lbl = document.getElementById('osb-pub-label');
   if (!btn) return;
+
+  // Block publishing if questionnaire is empty
+  const currentlyOff = !btn.classList.contains('on');
+  if (currentlyOff) {
+    const qCount = document.getElementById('questionnaire-list')?.children.length || 0;
+    if (qCount === 0) {
+      toast('Add at least 1 question to the questionnaire before publishing.', 'bad');
+      const qs = document.getElementById('ods-questionnaire');
+      if (qs) {
+        qs.style.borderColor = 'var(--amber)';
+        qs.style.transition = 'border-color .3s';
+        qs.scrollIntoView({ behavior:'smooth', block:'center' });
+        setTimeout(() => { qs.style.borderColor = ''; }, 2500);
+      }
+      return;
+    }
+  }
+
   btn.classList.toggle('on');
   const on = btn.classList.contains('on');
   lbl.textContent = on ? 'Published' : 'Private';
   lbl.style.color  = on ? 'var(--green)' : 'var(--g4)';
 
-  // Immediately update the status badge in header
+  // Update header status badge
   const statusBadge = document.getElementById('od-opening-status-badge');
   if (statusBadge) {
     if (!on) {
       statusBadge.textContent = 'Private';
       statusBadge.style.cssText = 'background:rgba(107,114,128,0.12);color:#6B7280;font-weight:700;';
     } else {
-      // Restore to current operational status
       const opStatus = document.getElementById('inp-status')?.value || 'active';
-      const statusMap = { Active:['Active','rgba(16,185,129,0.12)','#059669'], 'On hold':['On hold','rgba(245,158,11,0.12)','#D97706'], Closed:['Closed','rgba(107,114,128,0.12)','#6B7280'], Cancelled:['Cancelled','rgba(239,68,68,0.1)','#DC2626'] };
+      const statusMap = { Active:['Active','rgba(16,185,129,0.18)','#059669'], 'On hold':['On hold','rgba(245,158,11,0.2)','#D97706'], Closed:['Closed','rgba(107,114,128,0.12)','#6B7280'], Cancelled:['Cancelled','rgba(239,68,68,0.1)','#DC2626'] };
       const [txt, bg, color] = statusMap[opStatus] || statusMap['Active'];
       statusBadge.textContent = txt;
-      statusBadge.style.cssText = 'background:' + bg + ';color:' + color + ';font-weight:700;';
+      statusBadge.style.cssText = 'background:#fff;color:' + color + ';font-weight:700;padding:4px 14px;border-radius:99px;font-size:11px;display:inline-flex;align-items:center;border:2px solid ' + color + ';';
     }
   }
 
-  // Update the row in the openings list immediately
+  // Update row in openings list
   const code = _currentOpening.code;
   if (code) {
     const row = document.querySelector('.ot-row[data-code="' + code.toLowerCase() + '"]');
     if (row) {
       const rowToggle = row.querySelector('.toggle');
       const rowLabel  = row.querySelector('.pub-toggle span');
-      if (rowToggle) { rowToggle.classList.toggle('on', on); }
+      if (rowToggle) rowToggle.classList.toggle('on', on);
       if (rowLabel)  { rowLabel.textContent = on ? 'Published' : 'Private'; rowLabel.style.color = on ? 'var(--green)' : 'var(--g4)'; }
     }
-    // Persist to localStorage immediately (Firebase in saveOpening)
     const key = 'nw_opening_' + code;
-    try {
-      const ex = JSON.parse(localStorage.getItem(key) || '{}');
-      ex.published = on;
-      localStorage.setItem(key, JSON.stringify(ex));
-    } catch(e) {}
-    // Write to Firebase immediately without waiting for full save
+    try { const ex = JSON.parse(localStorage.getItem(key) || '{}'); ex.published = on; localStorage.setItem(key, JSON.stringify(ex)); } catch(e) {}
     try {
       const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
       await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-    } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
+    } catch(e) {}
   }
 
   toast(on ? 'Opening published.' : 'Opening set to private — saved.', 'ok');
@@ -5428,6 +5425,262 @@ document.addEventListener('DOMContentLoaded', function() {
   renderSkills();
   document.querySelectorAll('#questionnaire-list .qb-q-row').forEach(initQRowDrag);
 });
+</script>
+
+<!-- ══ NEW OPENING WIZARD ══ -->
+<div class="modal-bg" id="new-opening-wizard" onclick="if(event.target===this)closeModal('new-opening-wizard')">
+  <div class="modal lg" style="max-width:700px;">
+
+    <!-- Modal header with step indicator -->
+    <div class="modal-hdr" style="flex-direction:column;align-items:flex-start;gap:6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+        <div class="modal-title">Create new opening</div>
+        <button class="modal-close" onclick="closeModal('new-opening-wizard')">✕</button>
+      </div>
+      <!-- Step progress bar -->
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
+        <div id="now-step-1-pill" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;">
+          <span>1</span> Opening details
+        </div>
+        <div style="flex:1;height:2px;background:var(--g2);border-radius:99px;" id="now-progress-bar">
+          <div style="height:100%;width:50%;background:var(--purple);border-radius:99px;transition:width .3s;" id="now-progress-fill"></div>
+        </div>
+        <div id="now-step-2-pill" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;">
+          <span>2</span> Questionnaire
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1: Opening details -->
+    <div id="no-step-1">
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field"><label>Position title *</label><input type="text" id="no-title" placeholder="e.g. Customer Success Manager" autofocus></div>
+          <div class="field"><label>Client org *</label>
+            <select id="no-org"><option value="">— Select org —</option><option>Crestline SaaS</option><option>Axiom Tech</option><option>NovaDash</option></select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Recruiter *</label>
+            <select id="no-recruiter"><option>Byron Giraldo</option><option>Nany Salcedo</option><option>Andres García</option></select>
+          </div>
+          <div class="field"><label>Work type</label>
+            <select id="no-wfh"><option>Remote</option><option>On-site</option><option>Hybrid</option></select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Salary min (USD/mo)</label><input type="number" id="no-sal-min" placeholder="2000"></div>
+          <div class="field"><label>Salary max (USD/mo)</label><input type="number" id="no-sal-max" placeholder="2600"></div>
+        </div>
+        <div class="field"><label>Experience required</label>
+          <select id="no-exp"><option>Junior (0–2 yrs)</option><option selected>Mid (2–5 yrs)</option><option>Senior (5+ yrs)</option></select>
+        </div>
+        <div style="padding:11px 14px;background:var(--pp);border-radius:9px;font-size:11px;color:var(--g6);border:1px solid rgba(108,60,225,0.12);line-height:1.65;">
+          💡 You'll fill out the full job description, responsibilities, skills, and qualifications on the next screen after saving. <strong>The opening stays in Draft until you add at least 1 question in Step 2.</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('new-opening-wizard')">Cancel</button>
+        <button class="btn btn-p" onclick="wizardGoStep2()">Next: Add questions →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Questionnaire -->
+    <div id="no-step-2" style="display:none;">
+      <div class="modal-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--black);" id="no-opening-title-label">Customer Success Manager</div>
+            <div style="font-size:11px;color:var(--g5);margin-top:2px;">Select questions candidates will answer when applying for this role.</div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--purple);background:var(--pp);padding:4px 12px;border-radius:99px;"><span id="no-q-count">0</span> questions selected</div>
+        </div>
+
+        <!-- Search + filter -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <div class="sbox" style="flex:1;min-width:160px;"><span class="si">🔍</span><input type="text" id="no-q-search" placeholder="Search questions..." oninput="filterWizardQuestions()"></div>
+          <select class="fsel" id="no-q-cat" onchange="filterWizardQuestions()"><option value="">All categories</option><option value="skills">Skills</option><option value="roles">Roles</option><option value="personal">Personal</option><option value="tools">Tools</option><option value="custom">Custom</option></select>
+        </div>
+
+        <!-- Question bank list (compact) -->
+        <div id="no-bank-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:14px;padding-right:4px;"></div>
+
+        <!-- Selected questions preview -->
+        <div style="border-top:1px solid var(--g2);padding-top:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Selected for this opening</div>
+          <div id="no-questionnaire-list" style="display:flex;flex-direction:column;gap:5px;"></div>
+          <div id="no-questionnaire-empty" style="padding:16px;text-align:center;font-size:12px;color:var(--g4);border:1.5px dashed var(--g3);border-radius:8px;">
+            No questions selected yet. Pick from the list above.
+          </div>
+        </div>
+
+        <div style="margin-top:12px;padding:10px 13px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:8px;font-size:11px;color:var(--g6);line-height:1.65;" id="no-zero-warning" style="display:none;">
+          ⚠️ <strong>At least 1 question is required</strong> before you can publish this opening.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="wizardGoStep1()">← Back</button>
+        <button class="btn btn-p" onclick="wizardSaveAndOpen()" id="no-save-btn">
+          Save &amp; open opening →
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ══ NEW OPENING WIZARD ══ */
+window._newOpeningQuestions = [];
+let _wizardCode = '';
+
+window.wizardGoStep2 = function() {
+  const title = document.getElementById('no-title').value.trim();
+  const org   = document.getElementById('no-org').value;
+  if (!title) { toast('Position title is required.','bad'); return; }
+  if (!org)   { toast('Select a client org.','bad'); return; }
+
+  // Generate code
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const rand = Array.from({length:4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  _wizardCode = 'OPEN-' + title.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,3) + '-' + rand;
+
+  document.getElementById('no-opening-title-label').textContent = title + ' — ' + org;
+  document.getElementById('no-step-1').style.display = 'none';
+  document.getElementById('no-step-2').style.display = 'block';
+  document.getElementById('now-step-1-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:rgba(108,60,225,0.15);color:var(--purple);font-size:11px;font-weight:700;';
+  document.getElementById('now-step-2-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
+  document.getElementById('now-progress-fill').style.width = '100%';
+  window._newOpeningQuestions = [];
+  renderWizardBankList();
+  renderWizardSelected();
+};
+
+window.wizardGoStep1 = function() {
+  document.getElementById('no-step-1').style.display = 'block';
+  document.getElementById('no-step-2').style.display = 'none';
+  document.getElementById('now-step-1-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
+  document.getElementById('now-step-2-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;';
+  document.getElementById('now-progress-fill').style.width = '50%';
+};
+
+function renderWizardBankList() {
+  const q   = (document.getElementById('no-q-search')?.value || '').toLowerCase();
+  const cat = document.getElementById('no-q-cat')?.value || '';
+  const list = document.getElementById('no-bank-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const catColors = { skills:'q-cat-skills', roles:'q-cat-roles', personal:'q-cat-personal', tools:'q-cat-tools', custom:'q-cat-custom' };
+  (_questions || []).forEach(q2 => {
+    if (q && !q2.text.toLowerCase().includes(q)) return;
+    if (cat && q2.cat !== cat) return;
+    const isAdded = _newOpeningQuestions.some(x => x.id === q2.id);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1.5px solid ' + (isAdded?'rgba(16,185,129,0.3)':'var(--g2)') + ';background:' + (isAdded?'rgba(16,185,129,0.03)':'#fff') + ';cursor:pointer;transition:all .15s;';
+    row.dataset.qid = q2.id;
+    row.innerHTML = `<span class="q-cat-chip ${catColors[q2.cat]||'q-cat-custom'}" style="flex-shrink:0;">${q2.cat.charAt(0).toUpperCase()+q2.cat.slice(1)}</span><span style="flex:1;font-size:12px;color:var(--black);">${q2.text}</span><button style="flex-shrink:0;padding:4px 11px;border-radius:6px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:'Poppins',sans-serif;background:${isAdded?'rgba(16,185,129,0.1)':'var(--purple)'};color:${isAdded?'#059669':'#fff'};" onclick="wizardToggleQuestion('${q2.id}','${q2.text.replace(/'/g,"\\'")}','${q2.cat}',this)" data-qid="${q2.id}">${isAdded?'✓ Added':'+ Add'}</button>`;
+    list.appendChild(row);
+  });
+}
+
+window.filterWizardQuestions = renderWizardBankList;
+
+window.wizardToggleQuestion = function(qid, text, cat, btn) {
+  const idx = _newOpeningQuestions.findIndex(q => q.id === qid);
+  if (idx > -1) {
+    _newOpeningQuestions.splice(idx, 1);
+  } else {
+    _newOpeningQuestions.push({ id:qid, text, cat });
+  }
+  renderWizardBankList();
+  renderWizardSelected();
+};
+
+function renderWizardSelected() {
+  const list  = document.getElementById('no-questionnaire-list');
+  const empty = document.getElementById('no-questionnaire-empty');
+  const count = document.getElementById('no-q-count');
+  if (!list) return;
+  list.innerHTML = '';
+  const catColors = { skills:'q-cat-skills', roles:'q-cat-roles', personal:'q-cat-personal', tools:'q-cat-tools', custom:'q-cat-custom' };
+  _newOpeningQuestions.forEach((q, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g1);border-radius:7px;';
+    row.innerHTML = `<span style="color:var(--g4);font-size:12px;width:16px;text-align:center;flex-shrink:0;">${i+1}</span><span class="q-cat-chip ${catColors[q.cat]||'q-cat-custom'}" style="flex-shrink:0;">${q.cat.charAt(0).toUpperCase()+q.cat.slice(1)}</span><span style="flex:1;font-size:12px;color:var(--black);">${q.text}</span><button onclick="wizardToggleQuestion('${q.id}','${q.text.replace(/'/g,"\\'")}','${q.cat}',this)" style="background:none;border:none;color:var(--g4);cursor:pointer;font-size:13px;padding:2px 5px;">✕</button>`;
+    list.appendChild(row);
+  });
+  if (count) count.textContent = _newOpeningQuestions.length;
+  if (empty) empty.style.display = _newOpeningQuestions.length === 0 ? 'block' : 'none';
+  const warn = document.getElementById('no-zero-warning');
+  if (warn) warn.style.display = 'none'; // hide warning while editing
+}
+
+window.wizardSaveAndOpen = async function() {
+  const title     = document.getElementById('no-title').value.trim();
+  const org       = document.getElementById('no-org').value;
+  const recruiter = document.getElementById('no-recruiter').value;
+  const wfh       = document.getElementById('no-wfh').value;
+  const exp       = document.getElementById('no-exp').value;
+  const salMin    = document.getElementById('no-sal-min').value;
+  const salMax    = document.getElementById('no-sal-max').value;
+
+  if (_newOpeningQuestions.length === 0) {
+    document.getElementById('no-zero-warning').style.display = 'block';
+    toast('Add at least 1 question before saving.','bad');
+    return;
+  }
+
+  const code = _wizardCode;
+  const data = {
+    code, title, org, recruiter, wfh, exp,
+    salaryMin: parseInt(salMin)||0,
+    salaryMax: parseInt(salMax)||0,
+    currency: 'USD',
+    status: 'draft',
+    published: false,
+    questionnaire: _newOpeningQuestions,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Save to localStorage + Firebase
+  localStorage.setItem('nw_opening_' + code, JSON.stringify(data));
+  try {
+    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    await setDoc(doc(db, 'openings', code), { ...data, savedAt: serverTimestamp() }, { merge: true });
+  } catch(e) {}
+
+  closeModal('new-opening-wizard');
+
+  // Open the full opening detail in edit mode
+  _currentOpening = { code, title, status:'draft', published:false, recruiter, org };
+  // Pre-populate questionnaire on the detail page
+  const qList = document.getElementById('questionnaire-list');
+  if (qList) {
+    qList.innerHTML = '';
+    _newOpeningQuestions.forEach(q => {
+      const catColors = { skills:'q-cat-skills', roles:'q-cat-roles', personal:'q-cat-personal', tools:'q-cat-tools', custom:'q-cat-custom' };
+      const row = document.createElement('div');
+      row.className = 'qb-q-row';
+      row.draggable = true;
+      row.dataset.qid = q.id;
+      row.innerHTML = `<span class="qb-drag-handle">⠿</span><span class="qb-q-text">${q.text}</span><span class="qb-q-cat ${catColors[q.cat]||'q-cat-custom'}">${q.cat.charAt(0).toUpperCase()+q.cat.slice(1)}</span><button class="qb-q-remove" onclick="removeFromQuestionnaire(this)" title="Remove">✕</button>`;
+      if (typeof initQRowDrag === 'function') initQRowDrag(row);
+      qList.appendChild(row);
+    });
+    updateQCount();
+  }
+
+  // Add row to openings list
+  upsertOpeningRow(code, data);
+
+  // Now open the detail page in edit mode
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  _openingDirty = false;
+  openOpeningDetail(code, title, 'draft', false, recruiter, true);
+
+  toast('Opening created — now fill in the full details.', 'ok');
+};
 </script>
 
 </body>

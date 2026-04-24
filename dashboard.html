@@ -2464,15 +2464,23 @@ function showPage(id){
 }
 function navTo(id, label){
   showPage(id);
-  document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('on'));
-  const dt=document.getElementById('dtab-'+id);
-  if(dt) dt.classList.add('on');
-  const lbl=document.getElementById('nav-current-label');
-  if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
-  closeDrawer();
-  // Update URL
-  const slug=id==='dashboard'?'':'/'+id;
-  history.pushState({page:id},'','/dashboard'+slug);
+  const lbl = PAGE_LABELS[id] || label || id;
+  const labelEl = document.getElementById('nav-current-label');
+  if (labelEl) labelEl.textContent = lbl;
+  document.querySelectorAll('.dtab').forEach(t => t.classList.remove('on'));
+  const tab = document.getElementById('dtab-' + id);
+  if (tab) tab.classList.add('on');
+  const slugMap = {
+    dashboard:'/', orgs:'/orgs', 'org-detail':'/orgs',
+    pipeline:'/pipeline', candidates:'/candidates',
+    openings:'/openings', 'opening-detail':'/openings',
+    'opening-applicants':'/openings',
+    'question-bank':'/questions', skills:'/skills',
+    assessments:'/assessments', hired:'/hired',
+    blog:'/blog', team:'/team', audit:'/audit'
+  };
+  const slug = slugMap[id] !== undefined ? slugMap[id] : '/' + id;
+  history.pushState({page:id},'',slug);
 }
 function toggleDrawer(){
   document.getElementById('drawer').classList.toggle('open');
@@ -2613,7 +2621,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', '/dashboard' + slug);
+  history.replaceState({ page: currentPage }, '', '/' + slug);
 };
 
 window.openCandFullProfile = function() {
@@ -2725,7 +2733,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   if (editMode) setTimeout(toggleOpeningEdit, 50);
 
   navTo('opening-detail', title);
-  history.replaceState({ page:'opening-detail', code }, '', '/dashboard/openings/' + code.toLowerCase());
+  history.replaceState({ page:'opening-detail', code }, '', '/openings/' + code.toLowerCase());
 };
 
 window.openNewOpening = function() {
@@ -3487,7 +3495,7 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   document.getElementById('nav-current-label').textContent = name;
   // Push URL — override the one navTo just pushed so it includes the org slug
   const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  history.replaceState({ page: 'org-detail', orgId, name }, '', '/dashboard/org/' + slug);
+  history.replaceState({ page: 'org-detail', orgId, name }, '', '/orgs/' + slug);
 };
 
 /* ── Org detail tab switcher ── */
@@ -4324,6 +4332,10 @@ function loadPipelineInline(url) {
     setTimeout(function(){ navTo('candidates','Candidates'); },100);
   } else if (path.indexOf('/pipeline') > -1) {
     setTimeout(function(){ navTo('pipeline','Pipelines'); },100);
+  } else if (path.indexOf('/questions') > -1) {
+    setTimeout(function(){ navTo('question-bank','Question Bank'); },100);
+  } else if (path.indexOf('/skills') > -1) {
+    setTimeout(function(){ navTo('skills','Skills'); },100);
   }
 })();
 </script>

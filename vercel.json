@@ -3,75 +3,12 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/openings",
-      "destination": "/dashboard.html"
+      "source": "/login",
+      "destination": "/login.html"
     },
     {
-      "source": "/openings/:path*",
+      "source": "/(.*)",
       "destination": "/dashboard.html"
-    },
-    {
-      "source": "/candidates",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/candidates/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/pipeline",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/pipeline/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/orgs",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/orgs/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/questions",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/skills",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/team",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/audit",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/assessments",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/hired",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/firebase-config.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
     }
   ]
 }

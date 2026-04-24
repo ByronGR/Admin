@@ -7,7 +7,15 @@
       "destination": "/login.html"
     },
     {
+      "source": "/openings",
+      "destination": "/dashboard.html"
+    },
+    {
       "source": "/openings/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/candidates",
       "destination": "/dashboard.html"
     },
     {
@@ -15,11 +23,23 @@
       "destination": "/dashboard.html"
     },
     {
+      "source": "/pipeline",
+      "destination": "/dashboard.html"
+    },
+    {
       "source": "/pipeline/:path*",
       "destination": "/dashboard.html"
     },
     {
+      "source": "/orgs",
+      "destination": "/dashboard.html"
+    },
+    {
       "source": "/orgs/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/questions",
       "destination": "/dashboard.html"
     },
     {
@@ -44,6 +64,10 @@
     },
     {
       "source": "/hired",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard",
       "destination": "/dashboard.html"
     }
   ],

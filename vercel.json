@@ -2,28 +2,64 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/dashboard",         "destination": "/dashboard.html" },
-    { "source": "/dashboard/:path*",  "destination": "/dashboard.html" },
-    { "source": "/openings/:path*",   "destination": "/dashboard.html" },
-    { "source": "/candidates/:path*", "destination": "/dashboard.html" },
-    { "source": "/pipeline/:path*",   "destination": "/dashboard.html" },
-    { "source": "/orgs/:path*",       "destination": "/dashboard.html" },
-    { "source": "/org/:path*",        "destination": "/dashboard.html" }
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/openings/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/candidates/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/pipeline/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/orgs/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/org/:path*",
+      "destination": "/dashboard.html"
+    }
   ],
   "redirects": [
-    { "source": "/", "destination": "/login", "permanent": false }
+    {
+      "source": "/",
+      "destination": "/login",
+      "permanent": false
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options",        "value": "DENY" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
       ]
     },
     {
       "source": "/firebase-config.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
     }
   ]
 }

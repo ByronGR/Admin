@@ -2,18 +2,16 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/dashboard/:path*",   "destination": "/dashboard.html" },
-    { "source": "/openings/:path*",    "destination": "/dashboard.html" },
-    { "source": "/candidates/:path*",  "destination": "/dashboard.html" },
-    { "source": "/pipeline/:path*",    "destination": "/dashboard.html" },
-    { "source": "/orgs/:path*",        "destination": "/dashboard.html" },
-    { "source": "/apply/:path*",       "destination": "/dashboard.html" }
+    { "source": "/openings/:path*",   "destination": "/dashboard.html" },
+    { "source": "/candidates/:path*", "destination": "/dashboard.html" },
+    { "source": "/pipeline/:path*",   "destination": "/dashboard.html" },
+    { "source": "/orgs/:path*",       "destination": "/dashboard.html" },
+    { "source": "/apply/:path*",      "destination": "/dashboard.html" },
+    { "source": "/dashboard",         "destination": "/dashboard.html" }
   ],
   "redirects": [
-    { "source": "/",               "destination": "/login",     "permanent": false },
-    { "source": "/admin",          "destination": "/dashboard", "permanent": false },
-    { "source": "/admin-login",    "destination": "/login",     "permanent": false },
-    { "source": "/admin-dashboard","destination": "/dashboard", "permanent": false }
+    { "source": "/",        "destination": "/login",    "permanent": false },
+    { "source": "/admin",   "destination": "/login",    "permanent": false }
   ],
   "headers": [
     {

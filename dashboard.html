@@ -3144,18 +3144,36 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
 
 window.openNewOpening = function() {
   // Reset the new opening modal state
-  document.getElementById('no-step-1').style.display = 'block';
-  document.getElementById('no-step-2').style.display = 'none';
-  document.getElementById('no-title').value = '';
-  document.getElementById('no-org').selectedIndex = 0;
-  document.getElementById('no-recruiter').selectedIndex = 0;
-  document.getElementById('no-questionnaire-list').innerHTML = '';
-  document.getElementById('no-q-count').textContent = '0';
-  document.getElementById('no-questionnaire-empty').style.display = 'block';
-  document.getElementById('no-step-indicator').textContent = 'Step 1 of 2';
-  document.getElementById('no-next-btn').style.display = 'inline-flex';
-  document.getElementById('no-save-btn').style.display = 'none';
-  // Clear temp questions
+  const noStep1 = document.getElementById('no-step-1');
+  const noStep2 = document.getElementById('no-step-2');
+  const noTitle = document.getElementById('no-title');
+  const noOrg   = document.getElementById('no-org');
+  const noRec   = document.getElementById('no-recruiter');
+  const noQList = document.getElementById('no-questionnaire-list');
+  const noQCount= document.getElementById('no-q-count');
+  const noQEmpty= document.getElementById('no-questionnaire-empty');
+  const noSave  = document.getElementById('no-save-btn');
+
+  if (noStep1)  noStep1.style.display  = 'block';
+  if (noStep2)  noStep2.style.display  = 'none';
+  if (noTitle)  noTitle.value          = '';
+  if (noOrg)    noOrg.selectedIndex    = 0;
+  if (noRec)    noRec.selectedIndex    = 0;
+  if (noQList)  noQList.innerHTML      = '';
+  if (noQCount) noQCount.textContent   = '0';
+  if (noQEmpty) noQEmpty.style.display = 'block';
+  if (noSave)   noSave.style.display   = 'none';
+
+  // Reset step pills to step 1
+  if (typeof wizardGoStep1 === 'function') {
+    const p1 = document.getElementById('now-step-1-pill');
+    const p2 = document.getElementById('now-step-2-pill');
+    const pf = document.getElementById('now-progress-fill');
+    if (p1) p1.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
+    if (p2) p2.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;';
+    if (pf) pf.style.width   = '50%';
+  }
+
   window._newOpeningQuestions = [];
   openModal('new-opening-wizard');
 };

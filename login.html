@@ -167,16 +167,14 @@ import {
 onAuthStateChanged(auth, async user => {
   if (!user) return;
   const profile = await getUserProfile(user.uid);
-  if (profile && ['admin','super_admin','sr_recruiter','recruiter'].includes(profile.role)) {
+  if (profile && ['admin','super_admin','sr_recruiter','recruiter'].includes(profile?.role)) {
     window.location.href = '/dashboard';
   }
   // If logged in but not admin, do nothing — let them try to sign in
 });
  
 /* ── Clean URL ── */
-if (location.pathname.endsWith('.html')) {
-  history.replaceState(null, '', location.pathname.slice(0, -5) + location.search);
-}
+ 
  
 /* ── Sign in ── */
 window.doAdminLogin = async function() {
@@ -191,7 +189,7 @@ window.doAdminLogin = async function() {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, pw);
     const profile = await getUserProfile(cred.user.uid);
-    if (profile?.role !== 'admin') {
+    if (!profile || !['admin','super_admin','sr_recruiter','recruiter'].includes(profile?.role)) {
       // Signed in but not admin — block access
       await auth.signOut();
       errEl.textContent = 'This account does not have admin access.';

@@ -2,24 +2,24 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/openings/:path*",   "destination": "/dashboard.html" },
-    { "source": "/candidates/:path*", "destination": "/dashboard.html" },
-    { "source": "/pipeline/:path*",   "destination": "/dashboard.html" },
-    { "source": "/orgs/:path*",       "destination": "/dashboard.html" },
-    { "source": "/apply/:path*",      "destination": "/dashboard.html" },
-    { "source": "/dashboard",         "destination": "/dashboard.html" }
+    { "source": "/dashboard",              "destination": "/dashboard.html" },
+    { "source": "/dashboard/:path*",       "destination": "/dashboard.html" },
+    { "source": "/openings/:path*",        "destination": "/dashboard.html" },
+    { "source": "/candidates/:path*",      "destination": "/dashboard.html" },
+    { "source": "/pipeline/:path*",        "destination": "/dashboard.html" },
+    { "source": "/orgs/:path*",            "destination": "/dashboard.html" },
+    { "source": "/org/:path*",             "destination": "/dashboard.html" }
   ],
   "redirects": [
-    { "source": "/",        "destination": "/login",    "permanent": false },
-    { "source": "/admin",   "destination": "/login",    "permanent": false }
+    { "source": "/",        "destination": "/login",     "permanent": false },
+    { "source": "/login",   "destination": "/login.html","permanent": false }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Frame-Options",        "value": "DENY" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     },
     {

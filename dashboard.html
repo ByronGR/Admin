@@ -2786,13 +2786,13 @@ Project coordination & time management</textarea>
     <div class="modal-hdr"><div class="modal-title">Invite team member</div><button class="modal-close" onclick="closeModal('new-team-modal')">✕</button></div>
     <div class="modal-body">
       <div style="background:var(--pp);border:1px solid rgba(108,60,225,0.15);border-radius:9px;padding:11px 14px;margin-bottom:16px;font-size:11px;color:var(--g6);line-height:1.65;">
-        🔒 <strong style="color:var(--black);">@nearwork.co only.</strong> A Firebase account will be created and a password-reset email sent as the invitation. They set their own password on first login.
+        🔐 A Firebase account will be created and a password-reset email sent as the invitation. They set their own password on first login.
       </div>
       <div class="field-row">
         <div class="field"><label>First name</label><input type="text" id="tm-fname" placeholder="Jane"></div>
         <div class="field"><label>Last name</label><input type="text" id="tm-lname" placeholder="Doe"></div>
       </div>
-      <div class="field"><label>Work email (@nearwork.co only) *</label><input type="email" id="tm-email" placeholder="jane@nearwork.co"></div>
+      <div class="field"><label>Work email *</label><input type="email" id="tm-email" placeholder="name@nearwork.co"></div>
       <div class="field"><label>Access level</label>
         <select id="tm-access">
           <option value="recruiter">Recruiter — manage assigned openings only</option>
@@ -4263,6 +4263,7 @@ window.inviteTeamMember = async function() {
   }
 };
 
+</script>
 
 <!-- Add user to org modal -->
 <div class="modal-bg" id="add-org-user-modal" onclick="if(event.target===this)closeModal('add-org-user-modal')">
@@ -5503,10 +5504,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ══ NEW OPENING WIZARD ══ -->
 <div class="modal-bg" id="new-opening-wizard" onclick="if(event.target===this)closeModal('new-opening-wizard')">
-  <div class="modal lg" style="max-width:700px;">
+  <div class="modal lg" style="max-width:700px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
 
     <!-- Modal header with step indicator -->
-    <div class="modal-hdr" style="flex-direction:column;align-items:flex-start;gap:6px;">
+    <div class="modal-hdr" style="flex-direction:column;align-items:flex-start;gap:6px;flex-shrink:0;">
       <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
         <div class="modal-title">Create new opening</div>
         <button class="modal-close" onclick="closeModal('new-opening-wizard')">✕</button>
@@ -5560,8 +5561,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 
     <!-- STEP 2: Questionnaire -->
-    <div id="no-step-2" style="display:none;">
-      <div class="modal-body">
+    <div id="no-step-2" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--black);" id="no-opening-title-label">Customer Success Manager</div>
@@ -5592,7 +5593,7 @@ document.addEventListener('DOMContentLoaded', function() {
           ⚠️ <strong>At least 1 question is required</strong> before you can publish this opening.
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="flex-shrink:0;">
         <button class="btn btn-ghost" onclick="wizardGoStep1()">← Back</button>
         <button class="btn btn-p" onclick="wizardSaveAndOpen()" id="no-save-btn">
           Save &amp; open opening →
@@ -5621,7 +5622,7 @@ window.wizardGoStep2 = function() {
 
   document.getElementById('no-opening-title-label').textContent = title + ' — ' + org;
   document.getElementById('no-step-1').style.display = 'none';
-  document.getElementById('no-step-2').style.display = 'block';
+  document.getElementById('no-step-2').style.display = 'flex';
   document.getElementById('now-step-1-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:rgba(108,60,225,0.15);color:var(--purple);font-size:11px;font-weight:700;';
   document.getElementById('now-step-2-pill').style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
   document.getElementById('now-progress-fill').style.width = '100%';

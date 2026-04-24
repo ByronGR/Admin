@@ -3328,13 +3328,21 @@ window.togglePubVisibility = async function() {
 
 window.copyOpeningLink = function() {
   const code = _currentOpening.code || 'OPEN-???';
-  const url  = window.location.origin + '/apply/' + code.toLowerCase();
-  navigator.clipboard?.writeText(url).then(() => toast('Link copied: ' + url,'ok')).catch(() => toast('Link: ' + url,'ok'));
+  const url  = 'https://jobs.nearwork.co/apply/' + code.toLowerCase();
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(() => toast('Candidate link copied: ' + url, 'ok')).catch(() => toast('Link: ' + url, 'ok'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.cssText = 'position:fixed;left:-9999px;'; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand('copy'); toast('Link copied!', 'ok'); } catch(e) { toast('Link: ' + url, 'ok'); }
+    document.body.removeChild(ta);
+  }
 };
 
 window.handleApplyClick = function() {
-  const code = _currentOpening.code || 'OPEN-???';
-  toast('Apply page coming soon — URL: /apply/' + code.toLowerCase(), 'ok');
+  const code = _currentOpening.code;
+  if (!code) { toast('Save the opening first to get the apply link.', 'bad'); return; }
+  window.open('https://jobs.nearwork.co/apply/' + code.toLowerCase(), '_blank');
 };
 
 // ── Click-to-copy any code ──────────────────────────────────────────────────
@@ -4102,6 +4110,41 @@ window.openModal = function(id) {
     genOrgId();
     userRowCount = 1;
   }
+
+  // Populate pick-questions-modal before showing it
+  if (id === 'pick-questions-modal') {
+    const list = document.getElementById('pick-questions-list');
+    if (list && window._questions) {
+      list.innerHTML = '';
+      window._questions.forEach(q => {
+        const isAdded = (window._questionnaire || []).some(qr => qr.id === q.id);
+        const catClass = 'q-cat-' + q.cat;
+        const card = document.createElement('div');
+        card.className = 'q-card' + (isAdded ? ' in-questionnaire' : '');
+        card.dataset.cat = q.cat; card.dataset.type = q.type; card.dataset.qid = q.id;
+        const safeText = q.text.replace(/'/g, "\\'");
+        card.innerHTML = `<div class="q-card-hdr"><span class="q-cat-chip ${catClass}">${q.cat.charAt(0).toUpperCase()+q.cat.slice(1)}</span><div><div class="q-text">${q.text}</div><div class="q-type">${q.type.replace('_',' ')}</div></div></div><div class="q-actions"><button class="q-add-btn${isAdded?' added':''}" onclick="addQuestionToOpening(this,'${q.id}','${safeText}','${q.cat}')">${isAdded?'✓ Added':'+ Add'}</button></div>`;
+        list.appendChild(card);
+      });
+    }
+  }
+
+  // Reset new-question-modal state
+  if (id === 'new-question-modal') {
+    const titleEl = document.getElementById('nq-modal-title');
+    const textEl  = document.getElementById('nq-text');
+    if (titleEl) titleEl.textContent = 'New question';
+    if (textEl)  textEl.value = '';
+    delete document.getElementById('new-question-modal').dataset.editId;
+    const typeEl = document.getElementById('nq-type');
+    const choicesWrap = document.getElementById('nq-choices-wrap');
+    if (typeEl && choicesWrap) {
+      typeEl.onchange = function() {
+        choicesWrap.style.display = this.value === 'multiple' ? 'block' : 'none';
+      };
+    }
+  }
+
   origOpen(id);
 };
 </script>
@@ -5259,20 +5302,7 @@ window.openPickQuestionsModal = function() {
   openModal('pick-questions-modal');
 };
 
-// Override openModal for pick-questions-modal to populate it
-const _origOpenModal = window.openModal;
-window.openModal = function(id) {
-  if (id === 'pick-questions-modal') { openPickQuestionsModal(); return; }
-  if (id === 'new-question-modal') {
-    document.getElementById('nq-modal-title').textContent = 'New question';
-    document.getElementById('nq-text').value = '';
-    delete document.getElementById('new-question-modal').dataset.editId;
-    document.getElementById('nq-type').addEventListener('change', function() {
-      document.getElementById('nq-choices-wrap').style.display = this.value === 'multiple' ? 'block' : 'none';
-    }, { once: false });
-  }
-  if (_origOpenModal) _origOpenModal(id);
-};
+// openModal for pick-questions-modal is handled in the main override above
 
 window.filterPickQuestions = function() {
   const q   = (document.getElementById('pick-q-search')?.value || '').toLowerCase();

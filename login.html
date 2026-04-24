@@ -174,7 +174,9 @@ onAuthStateChanged(auth, async user => {
 });
  
 /* ── Clean URL ── */
- 
+if (location.pathname.endsWith('.html')) {
+  history.replaceState(null, '', location.pathname.slice(0, -5) + location.search);
+}
  
 /* ── Sign in ── */
 window.doAdminLogin = async function() {
@@ -189,10 +191,24 @@ window.doAdminLogin = async function() {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, pw);
     const profile = await getUserProfile(cred.user.uid);
-    if (!profile || !['admin','super_admin','sr_recruiter','recruiter'].includes(profile?.role)) {
-      // Signed in but not admin — block access
+ 
+    // If no Firestore profile exists, create one as admin (first-time setup)
+    if (!profile) {
+      const { saveUserProfile } = await import('./firebase-config.js');
+      await saveUserProfile(cred.user.uid, {
+        email: email,
+        name: email.split('@')[0],
+        role: 'admin',
+        createdAt: new Date().toISOString()
+      });
+      window.location.href = '/dashboard';
+      return;
+    }
+ 
+    const ADMIN_ROLES = ['admin','super_admin','sr_recruiter','recruiter'];
+    if (!ADMIN_ROLES.includes(profile.role)) {
       await auth.signOut();
-      errEl.textContent = 'This account does not have admin access.';
+      errEl.textContent = 'Account exists but has no admin access. Role: "' + (profile.role || 'none') + '"';
       errEl.classList.add('show');
       pwEl.classList.add('err');
       setLoading('login-btn', false);
@@ -200,7 +216,12 @@ window.doAdminLogin = async function() {
     }
     window.location.href = '/dashboard';
   } catch(e) {
-    errEl.textContent = 'Incorrect email or password.';
+    const msg = e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
+      ? 'Incorrect email or password.'
+      : e.code === 'auth/too-many-requests'
+      ? 'Too many attempts — wait a minute or reset your password.'
+      : 'Error: ' + e.message;
+    errEl.textContent = msg;
     errEl.classList.add('show');
     pwEl.classList.add('err');
     setLoading('login-btn', false);

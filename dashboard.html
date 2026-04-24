@@ -3513,7 +3513,9 @@ function upsertOpeningRow(code, data) {
   const codeLower = code.toLowerCase();
   let row = list.querySelector('.ot-row[data-code="' + codeLower + '"]');
   const title    = data.title || code;
-  const status   = data['sb-status'] || data.status || 'active';
+  const rawStatus = data['sb-status'] || data.status || 'active';
+  // Normalize to lowercase for consistent badge lookup
+  const status = rawStatus.toLowerCase().replace(/\s+/g,'-').replace('on-hold','on hold');
   const recruiter = data.recruiter || 'Byron Giraldo';
   const published = data.published;
   const statusBadgeMap = {
@@ -3611,7 +3613,7 @@ window.toggleRowPublished = async function(btn, code) {
         // New opening created via the form — add its row
         if (data.title) upsertOpeningRow(data.code, data);
       } else {
-        // Existing row — restore published toggle from localStorage
+        // Existing row — restore published toggle AND status badge from localStorage
         if (typeof data.published === 'boolean') {
           const btn   = row.querySelector('.toggle');
           const label = btn?.nextElementSibling;
@@ -3622,6 +3624,24 @@ window.toggleRowPublished = async function(btn, code) {
           if (label) {
             label.textContent = data.published ? 'Published' : 'Draft';
             label.style.color  = data.published ? 'var(--green)' : 'var(--g4)';
+          }
+        }
+        // Restore status badge if it changed (e.g. was draft, now active)
+        if (data.status) {
+          const statusCell = row.children[3]; // 4th column = Status
+          if (statusCell) {
+            const statusBadgeMap = {
+              active:    ['Active',   'rgba(16,185,129,0.12)', '#059669'],
+              'on hold': ['On hold',  'rgba(245,158,11,0.12)', '#D97706'],
+              closed:    ['Closed',   'rgba(107,114,128,0.1)', '#6B7280'],
+              draft:     ['Draft',    'rgba(107,114,128,0.1)', '#6B7280'],
+              cancelled: ['Cancelled','rgba(239,68,68,0.1)',   '#DC2626'],
+              finished:  ['Finished', 'rgba(37,99,235,0.1)',   '#2563EB'],
+              archived:  ['Archived', 'rgba(107,114,128,0.08)','#9CA3AF'],
+            };
+            const normStatus = data.status.toLowerCase().replace(/\s+/g, ' ').trim();
+            const [sbTxt, sbBg, sbColor] = statusBadgeMap[normStatus] || statusBadgeMap.draft;
+            statusCell.innerHTML = '<span style="background:' + sbBg + ';color:' + sbColor + ';font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">' + sbTxt + '</span>';
           }
         }
         // Restore title if it changed
@@ -5666,7 +5686,7 @@ window.wizardSaveAndOpen = async function() {
     salaryMin: parseInt(salMin)||0,
     salaryMax: parseInt(salMax)||0,
     currency: 'USD',
-    status: 'draft',
+    status: 'active',
     published: false,
     questionnaire: _newOpeningQuestions,
     createdAt: new Date().toISOString(),
@@ -5683,7 +5703,7 @@ window.wizardSaveAndOpen = async function() {
   closeModal('new-opening-wizard');
 
   // Open the full opening detail in edit mode
-  _currentOpening = { code, title, status:'draft', published:false, recruiter, org };
+  _currentOpening = { code, title, status:'active', published:false, recruiter, org };
   // Pre-populate questionnaire on the detail page
   const qList = document.getElementById('questionnaire-list');
   if (qList) {

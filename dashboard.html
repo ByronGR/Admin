@@ -2464,22 +2464,14 @@ function showPage(id){
 }
 function navTo(id, label){
   showPage(id);
-  const lbl = PAGE_LABELS[id] || label || id;
-  const labelEl = document.getElementById('nav-current-label');
-  if (labelEl) labelEl.textContent = lbl;
-  document.querySelectorAll('.dtab').forEach(t => t.classList.remove('on'));
-  const tab = document.getElementById('dtab-' + id);
-  if (tab) tab.classList.add('on');
-  const slugMap = {
-    dashboard:'/', orgs:'/orgs', 'org-detail':'/orgs',
-    pipeline:'/pipeline', candidates:'/candidates',
-    openings:'/openings', 'opening-detail':'/openings',
-    'opening-applicants':'/openings',
-    'question-bank':'/questions', skills:'/skills',
-    assessments:'/assessments', hired:'/hired',
-    blog:'/blog', team:'/team', audit:'/audit'
-  };
-  const slug = slugMap[id] !== undefined ? slugMap[id] : '/' + id;
+  document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('on'));
+  const dt=document.getElementById('dtab-'+id);
+  if(dt) dt.classList.add('on');
+  const lbl=document.getElementById('nav-current-label');
+  if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
+  closeDrawer();
+  const slugMap={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
+  const slug=slugMap[id]!==undefined?slugMap[id]:'/'+id;
   history.pushState({page:id},'',slug);
 }
 function toggleDrawer(){
@@ -2621,7 +2613,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', '/' + slug);
+  history.replaceState({ page: currentPage }, '', slug || '/');
 };
 
 window.openCandFullProfile = function() {
@@ -2659,11 +2651,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
     try {
       const d = JSON.parse(stored);
       if (d.title)     title     = d.title;
-      // Normalize status: published openings never show as Draft
-      if (d.status) {
-        const s = d.status.toLowerCase();
-        status = (s === 'draft' && d.published) ? 'active' : d.status;
-      }
+      if (d.status)    status    = d.status;
       if (typeof d.published === 'boolean') published = d.published;
       if (d.recruiter) recruiter = d.recruiter;
     } catch(e) {}
@@ -2740,25 +2728,36 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
 };
 
 window.openNewOpening = function() {
-  var s1 = document.getElementById('nw-step-1');
-  var s2 = document.getElementById('nw-step-2');
-  if (s1) s1.style.display = 'block';
-  if (s2) s2.style.display = 'none';
-  ['nw-title','nw-sal-min','nw-sal-max'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const rand = Array.from({length:4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  const newCode = 'OPEN-NEW-' + rand;
+  _currentOpening = { code:newCode, title:'', status:'draft', published:false, recruiter:'Byron Giraldo' };
+  _openingDirty = true;
+
+  document.getElementById('od-title').textContent = 'New Opening';
+  document.getElementById('inp-title').value = '';
+  document.getElementById('od-code-badge').textContent = newCode;
+  document.getElementById('osb-code').textContent = newCode;
+  document.getElementById('od-opening-status-badge').textContent = 'Draft';
+  document.getElementById('od-opening-status-badge').style.cssText = 'background:rgba(107,114,128,0.15);color:#6B7280;font-weight:700;padding:4px 14px;border-radius:99px;font-size:11px;display:inline-flex;align-items:center;border:1px solid #9CA3AF;';
+  document.getElementById('od-posted-date').textContent = 'Created ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('view-osb-org').textContent = '— select org —';
+  document.getElementById('view-osb-status').textContent = 'Draft';
+  document.getElementById('od-draft-chip').style.display = 'inline-flex';
+  document.getElementById('od-save-btn').style.display = 'inline-flex';
+
+  _openingEditMode = true;
+  document.getElementById('od-edit-btn').textContent = '✓ Done editing';
+  document.querySelectorAll('.opening-edit-btn').forEach(b => b.style.display = 'inline-block');
+  setSidebarEditMode(true);
+  ['title','skills-chips','meta'].forEach(id => {
+    const v = document.getElementById('view-' + id); const e = document.getElementById('edit-' + id);
+    if (v) v.style.display = 'none'; if (e) e.style.display = 'block';
   });
-  var el;
-  el=document.getElementById('nw-org'); if(el) el.selectedIndex=0;
-  el=document.getElementById('nw-recruiter'); if(el) el.selectedIndex=0;
-  el=document.getElementById('nw-q-list'); if(el) el.innerHTML='';
-  el=document.getElementById('nw-q-count'); if(el) el.textContent='0';
-  el=document.getElementById('nw-q-empty'); if(el) el.style.display='block';
-  el=document.getElementById('nwp1'); if(el) el.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
-  el=document.getElementById('nwp2'); if(el) el.style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;';
-  el=document.getElementById('nwpf'); if(el) el.style.width='50%';
-  window._nwQ = [];
-  openModal('nw-opening-wizard');
-};;
+  ['about','responsibilities','skills','qualifications'].forEach(s => editSection(s));
+  navTo('opening-detail', 'New Opening');
+  history.replaceState({ page:'opening-detail', code:newCode }, '', '/openings/' + newCode.toLowerCase());
+};
 
 window.toggleOpeningEdit = function() {
   _openingEditMode = !_openingEditMode;
@@ -3157,38 +3156,17 @@ window.toggleRowPublished = async function(btn, code) {
     label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
   }
-
-  // Update the status badge in the same row
-  const row = btn.closest('.ot-row');
-  if (row) {
-    row.dataset.published = on ? '1' : '0';
-    // If unpublishing, update status badge to show 'Private'
-    const statusCell = row.children[3];
-    if (statusCell && !on) {
-      statusCell.innerHTML = '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>';
-    } else if (statusCell && on) {
-      const st = row.dataset.status || 'active';
-      const colors = {active:['rgba(16,185,129,0.12)','#059669'],draft:['rgba(107,114,128,0.1)','#6B7280'],'on hold':['rgba(245,158,11,0.12)','#D97706']};
-      const [bg,color] = colors[st] || colors.active;
-      const label2 = st.charAt(0).toUpperCase()+st.slice(1);
-      statusCell.innerHTML = '<span style="background:'+bg+';color:'+color+';font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">'+label2+'</span>';
-    }
-  }
-
-  // Save to localStorage immediately
   const key = 'nw_opening_' + code;
   const existing = JSON.parse(localStorage.getItem(key) || '{}');
   existing.published = on;
   existing.code = existing.code || code;
   localStorage.setItem(key, JSON.stringify(existing));
-
-  // Write to Firebase — published field controls jobs visibility
   try {
-    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
-    await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-    toast((on ? 'Published — now visible on jobs.nearwork.co' : 'Set to Private — removed from jobs page') + '.', 'ok');
+    const mod = await import('./firebase-config.js');
+    await mod.setDoc(mod.doc(mod.db, 'openings', code), { published: on, updatedAt: mod.serverTimestamp() }, { merge: true });
+    toast(on ? '✓ Published — visible on jobs page' : '✓ Unpublished — hidden from jobs page', 'ok');
   } catch(e) {
-    toast((on ? 'Published' : 'Set to Private') + ' — saved locally.', 'ok');
+    toast('Saved locally. Firebase: ' + e.message, 'ok');
   }
 };
 
@@ -3310,7 +3288,7 @@ window.toggleRowPublished = async function(btn, code) {
   }
 
   // Default: dashboard — ensure clean state pushed
-  history.replaceState({ page: 'dashboard' }, '', path);
+  history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 
 window.editSection = function(section) {
@@ -3714,7 +3692,7 @@ window.openModal = function(id) {
 <script type="module">
 /* ── Org suspend / reactivate (writes to Firestore) ── */
 window.suspendOrg = async function(orgId, slug, name) {
-  if (!confirm(`Suspend \${name}? Their client users will be blocked from logging in.`)) return;
+  if (!confirm(\`Suspend \${name}? Their client users will be blocked from logging in.\`)) return;
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
@@ -3724,7 +3702,7 @@ window.suspendOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '0.6';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Reactivate'; btn.className = 'btn btn-g btn-sm'; btn.onclick = () => reactivateOrg(orgId, slug, name); }
-    toast(`\${name} suspended. Client logins blocked.`, 'ok');
+    toast(\`\${name} suspended. Client logins blocked.\`, 'ok');
   } catch(e) { toast('Failed to suspend org: ' + e.message, 'bad'); }
 };
 
@@ -3738,7 +3716,7 @@ window.reactivateOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '1';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Suspend'; btn.className = 'btn btn-danger btn-sm'; btn.onclick = () => suspendOrg(orgId, slug, name); }
-    toast(`\${name} reactivated.`, 'ok');
+    toast(\`\${name} reactivated.\`, 'ok');
   } catch(e) { toast('Failed to reactivate: ' + e.message, 'bad'); }
 };
 
@@ -3752,6 +3730,7 @@ window.inviteTeamMember = async function() {
   errEl.style.display = 'none';
 
   if (!email) { errEl.textContent = 'Email is required.'; errEl.style.display = 'block'; return; }
+  if (!email.endsWith('@nearwork.co')) { errEl.textContent = 'Only @nearwork.co email addresses are allowed.'; errEl.style.display = 'block'; return; }
 
   const btn = document.getElementById('tm-invite-btn');
   btn.disabled = true;
@@ -3768,7 +3747,7 @@ window.inviteTeamMember = async function() {
     });
     await sendPasswordResetEmail(auth, email);
     closeModal('new-team-modal');
-    toast(`Invite sent to \${email}.`, 'ok');
+    toast(\`Invite sent to \${email}.\`, 'ok');
   } catch(e) {
     const msg = e.code === 'auth/email-already-in-use' ? 'This email already has an account.' : e.message;
     errEl.textContent = msg;
@@ -3778,7 +3757,6 @@ window.inviteTeamMember = async function() {
   }
 };
 
-</script>
 
 <!-- Add user to org modal -->
 <div class="modal-bg" id="add-org-user-modal" onclick="if(event.target===this)closeModal('add-org-user-modal')">
@@ -4322,209 +4300,5 @@ function loadPipelineInline(url) {
   </div>
 </div>
 
-
-<script>
-// Route on load — handles URL refresh
-(function routeOnLoad() {
-  var path = window.location.pathname;
-  if (path.indexOf('/openings/') > -1 && path.indexOf('/applicants') === -1) {
-    var codeLower = path.split('/openings/')[1].split('/')[0];
-    if (codeLower) {
-      var codeUpper = codeLower.toUpperCase();
-      var raw = localStorage.getItem('nw_opening_' + codeUpper);
-      if (raw) {
-        try {
-          var d = JSON.parse(raw);
-          var st = (d.status === 'draft' && d.published) ? 'active' : (d.status || 'active');
-          setTimeout(function() { openOpeningDetail(d.code || codeUpper, d.title || codeUpper, st, !!d.published, d.recruiter || 'Byron Giraldo'); }, 100);
-          return;
-        } catch(e) {}
-      }
-      var sm = {'OPEN-CSM-4X8B':['Customer Success Manager','active',true,'Byron Giraldo'],'OPEN-SDR-9K2M':['SDR / Sales Development Rep','active',true,'Byron Giraldo'],'OPEN-SUP-3B7R':['Technical Support Specialist','on hold',false,'Nany Salcedo'],'OPEN-OPS-5P2W':['Operations Manager','active',true,'Andres García'],'OPEN-MKT-7Q4N':['Marketing Ops Specialist','on hold',false,'Byron Giraldo']};
-      var match = sm[codeUpper];
-      if (match) { setTimeout(function(){ openOpeningDetail.apply(null,[codeUpper].concat(match)); },100); }
-      else { setTimeout(function(){ navTo('openings','Openings'); },100); }
-    }
-  } else if (path.indexOf('/openings') > -1) {
-    setTimeout(function(){ navTo('openings','Openings'); },100);
-  } else if (path.indexOf('/orgs') > -1) {
-    setTimeout(function(){ navTo('orgs','Organizations'); },100);
-  } else if (path.indexOf('/candidates') > -1) {
-    setTimeout(function(){ navTo('candidates','Candidates'); },100);
-  } else if (path.indexOf('/pipeline') > -1) {
-    setTimeout(function(){ navTo('pipeline','Pipelines'); },100);
-  } else if (path.indexOf('/questions') > -1) {
-    setTimeout(function(){ navTo('question-bank','Question Bank'); },100);
-  } else if (path.indexOf('/skills') > -1) {
-    setTimeout(function(){ navTo('skills','Skills'); },100);
-  }
-})();
-</script>
-
-
-<!-- ══ NEW OPENING WIZARD ══ -->
-<div class="modal-bg" id="nw-opening-wizard" onclick="if(event.target===this)closeModal('nw-opening-wizard')">
-  <div class="modal lg" style="max-width:660px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
-    <div class="modal-hdr" style="flex-direction:column;align-items:flex-start;gap:8px;flex-shrink:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-        <div class="modal-title">Create new opening</div>
-        <button class="modal-close" onclick="closeModal('nw-opening-wizard')">✕</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;width:100%;">
-        <div id="nwp1" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;">1 Details</div>
-        <div style="flex:1;height:2px;background:var(--g2);border-radius:99px;"><div id="nwpf" style="height:100%;width:50%;background:var(--purple);border-radius:99px;transition:width .3s;"></div></div>
-        <div id="nwp2" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;">2 Questions</div>
-      </div>
-    </div>
-    <div id="nw-step-1">
-      <div class="modal-body">
-        <div class="field-row">
-          <div class="field"><label>Position title *</label><input type="text" id="nw-title" placeholder="e.g. Customer Success Manager"></div>
-          <div class="field"><label>Client org *</label><select id="nw-org"><option value="">— Select org —</option><option>Crestline SaaS</option><option>Axiom Tech</option><option>NovaDash</option></select></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Recruiter</label><select id="nw-recruiter"><option>Byron Giraldo</option><option>Nany Salcedo</option><option>Andres García</option></select></div>
-          <div class="field"><label>Work type</label><select id="nw-wfh"><option>Remote</option><option>On-site</option><option>Hybrid</option></select></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Salary min (USD/mo)</label><input type="number" id="nw-sal-min" placeholder="2000"></div>
-          <div class="field"><label>Salary max (USD/mo)</label><input type="number" id="nw-sal-max" placeholder="2600"></div>
-        </div>
-        <div class="field"><label>Experience</label><select id="nw-exp"><option>Junior (0-2 yrs)</option><option selected>Mid (2-5 yrs)</option><option>Senior (5+ yrs)</option></select></div>
-      </div>
-      <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('nw-opening-wizard')">Cancel</button><button class="btn btn-p" onclick="nwStep2()">Next: Questions →</button></div>
-    </div>
-    <div id="nw-step-2" style="display:none;flex:1;min-height:0;flex-direction:column;">
-      <div class="modal-body" style="flex:1;overflow-y:auto;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div><div style="font-size:13px;font-weight:700;color:var(--black);" id="nw-opening-lbl">Opening</div><div style="font-size:11px;color:var(--g5);margin-top:2px;">Add questions — or skip and add later inside the opening.</div></div>
-          <div style="font-size:11px;font-weight:700;color:var(--purple);background:var(--pp);padding:4px 12px;border-radius:99px;"><span id="nw-q-count">0</span> selected</div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <div class="sbox" style="flex:1;"><span class="si">🔍</span><input type="text" id="nw-q-search" placeholder="Search questions..." oninput="nwFilterQ()"></div>
-          <select class="fsel" id="nw-q-cat" onchange="nwFilterQ()"><option value="">All</option><option value="skills">Skills</option><option value="roles">Roles</option><option value="personal">Personal</option><option value="tools">Tools</option><option value="custom">Custom</option></select>
-        </div>
-        <div id="nw-bank" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;margin-bottom:12px;border:1px solid var(--g2);border-radius:8px;padding:8px;"></div>
-        <div style="border-top:1px solid var(--g2);padding-top:12px;">
-          <div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Selected</div>
-          <div id="nw-q-list" style="display:flex;flex-direction:column;gap:5px;"></div>
-          <div id="nw-q-empty" style="padding:12px;text-align:center;font-size:12px;color:var(--g4);border:1.5px dashed var(--g3);border-radius:8px;">None selected — you can add questions later.</div>
-        </div>
-      </div>
-      <div class="modal-footer" style="flex-shrink:0;">
-        <button class="btn btn-ghost" onclick="nwStep1()">← Back</button>
-        <button class="btn btn-p" onclick="nwSave()">Save &amp; open opening →</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-window._nwQ = [];
-var _nwCode = '';
-var _nwDefaultQ = [
-  {id:'q-sf-1',cat:'tools',text:'Have you worked with Salesforce? If so, for how long and in what capacity?'},
-  {id:'q-cs-1',cat:'skills',text:'Describe a time you retained a client who was considering canceling. What was your approach?'},
-  {id:'q-r-1',cat:'roles',text:'Have you worked in a US-facing or international client role before?'},
-  {id:'q-p-1',cat:'personal',text:'Are you available to work on US Eastern or Central time zone hours (EST/CST)?'},
-  {id:'q-p-2',cat:'personal',text:'Do you have a valid US work visa or are you eligible to work in the United States?'},
-  {id:'q-hs-1',cat:'tools',text:'Have you used HubSpot CRM in a professional setting?'},
-  {id:'q-r-2',cat:'roles',text:'How do you typically handle escalations from a frustrated client?'},
-  {id:'q-c-1',cat:'custom',text:'What makes you excited about working with US SaaS companies from Colombia?'},
-];
-var _catMap = {skills:'q-cat-skills',roles:'q-cat-roles',personal:'q-cat-personal',tools:'q-cat-tools',custom:'q-cat-custom'};
-
-window.nwStep2 = function() {
-  var title=document.getElementById('nw-title').value.trim();
-  var org=document.getElementById('nw-org').value;
-  if(!title){toast('Position title is required.','bad');return;}
-  if(!org){toast('Select a client org.','bad');return;}
-  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var rand=Array.from({length:4},function(){return chars[Math.floor(Math.random()*chars.length)];}).join('');
-  _nwCode='OPEN-'+title.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,3)+'-'+rand;
-  document.getElementById('nw-opening-lbl').textContent=title+' — '+org;
-  document.getElementById('nw-step-1').style.display='none';
-  document.getElementById('nw-step-2').style.display='flex';
-  document.getElementById('nwp1').style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:rgba(108,60,225,0.15);color:var(--purple);font-size:11px;font-weight:700;';
-  document.getElementById('nwp2').style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
-  document.getElementById('nwpf').style.width='100%';
-  window._nwQ=[];
-  nwRenderBank();nwRenderSelected();
-};
-window.nwStep1=function(){
-  document.getElementById('nw-step-1').style.display='block';
-  document.getElementById('nw-step-2').style.display='none';
-  document.getElementById('nwp1').style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;';
-  document.getElementById('nwp2').style.cssText='display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--g2);color:var(--g5);font-size:11px;font-weight:700;';
-  document.getElementById('nwpf').style.width='50%';
-};
-window.nwFilterQ=function(){nwRenderBank();};
-function nwRenderBank(){
-  var q=(document.getElementById('nw-q-search').value||'').toLowerCase();
-  var cat=document.getElementById('nw-q-cat').value||'';
-  var list=document.getElementById('nw-bank');
-  if(!list)return;
-  list.innerHTML='';
-  var qs=window._questions&&window._questions.length?window._questions:_nwDefaultQ;
-  qs.forEach(function(q2){
-    if(q&&q2.text.toLowerCase().indexOf(q)===-1)return;
-    if(cat&&q2.cat!==cat)return;
-    var added=_nwQ.some(function(x){return x.id===q2.id;});
-    var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;background:'+(added?'rgba(16,185,129,0.05)':'#fff')+';border:1px solid '+(added?'rgba(16,185,129,0.25)':'var(--g2)')+';';
-    var catCls=_catMap[q2.cat]||'q-cat-custom';
-    var catLbl=q2.cat.charAt(0).toUpperCase()+q2.cat.slice(1);
-    row.innerHTML='<span class="q-cat-chip '+catCls+'" style="flex-shrink:0;">'+catLbl+'</span><span style="flex:1;font-size:12px;color:var(--black);">'+q2.text+'</span><button style="flex-shrink:0;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;border:none;cursor:pointer;background:'+(added?'rgba(16,185,129,0.1)':'var(--purple)')+';color:'+(added?'#059669':'#fff')+';">'+(added?'✓ Added':'+ Add')+'</button>';
-    var qRef=q2;
-    row.querySelector('button').onclick=function(){nwToggleQ(qRef.id,qRef.text,qRef.cat);};
-    list.appendChild(row);
-  });
-}
-function nwToggleQ(qid,text,cat){
-  var idx=_nwQ.findIndex(function(q){return q.id===qid;});
-  if(idx>-1)_nwQ.splice(idx,1);else _nwQ.push({id:qid,text:text,cat:cat});
-  nwRenderBank();nwRenderSelected();
-}
-function nwRenderSelected(){
-  var list=document.getElementById('nw-q-list');
-  var empty=document.getElementById('nw-q-empty');
-  var count=document.getElementById('nw-q-count');
-  if(!list)return;
-  list.innerHTML='';
-  _nwQ.forEach(function(q,i){
-    var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:7px;padding:7px 10px;background:var(--g1);border-radius:7px;';
-    var catCls=_catMap[q.cat]||'q-cat-custom';
-    row.innerHTML='<span style="color:var(--g4);font-size:11px;width:14px;flex-shrink:0;">'+(i+1)+'</span><span class="q-cat-chip '+catCls+'" style="flex-shrink:0;">'+q.cat.charAt(0).toUpperCase()+q.cat.slice(1)+'</span><span style="flex:1;font-size:12px;color:var(--black);">'+q.text+'</span><button style="background:none;border:none;color:var(--g4);cursor:pointer;font-size:13px;">✕</button>';
-    var qRef=q;
-    row.querySelector('button').onclick=function(){nwToggleQ(qRef.id,qRef.text,qRef.cat);};
-    list.appendChild(row);
-  });
-  if(count)count.textContent=_nwQ.length;
-  if(empty)empty.style.display=_nwQ.length===0?'block':'none';
-}
-window.nwSave=async function(){
-  var title=document.getElementById('nw-title').value.trim();
-  var org=document.getElementById('nw-org').value;
-  var recruiter=document.getElementById('nw-recruiter').value;
-  var wfh=document.getElementById('nw-wfh').value;
-  var exp=document.getElementById('nw-exp').value;
-  var salMin=parseInt(document.getElementById('nw-sal-min').value)||0;
-  var salMax=parseInt(document.getElementById('nw-sal-max').value)||0;
-  var code=_nwCode;
-  var data={code:code,title:title,org:org,recruiter:recruiter,wfh:wfh,exp:exp,salaryMin:salMin,salaryMax:salMax,currency:'USD',status:'active',published:false,questionnaire:_nwQ,skills:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-  localStorage.setItem('nw_opening_'+code,JSON.stringify(data));
-  try{
-    var mod=await import('./firebase-config.js');
-    await mod.setDoc(mod.doc(mod.db,'openings',code),Object.assign({},data,{createdAt:mod.serverTimestamp(),updatedAt:mod.serverTimestamp()}),{merge:false});
-    toast('Opening created in Firebase','ok');
-  }catch(e){console.error('Firebase:',e.message);toast('Saved locally — Firebase: '+e.message,'ok');}
-  closeModal('nw-opening-wizard');
-  if(typeof upsertOpeningRow==='function')upsertOpeningRow(code,data);
-  _currentOpening={code:code,title:title,status:'active',published:false,recruiter:recruiter,org:org};
-  if(typeof openOpeningDetail==='function')openOpeningDetail(code,title,'active',false,recruiter,true);
-  else navTo('opening-detail',title);
-};
-</script>
 
 </body>

@@ -437,6 +437,57 @@ body{font-family:'Poppins',sans-serif;background:var(--g1);color:var(--black);mi
 .toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
 .toggle.on::after{transform:translateX(16px);}
 
+/* ══ QUESTION BANK ══ */
+.qb-layout{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start;}
+.qb-cats{background:#fff;border:1px solid var(--g3);border-radius:12px;overflow:hidden;position:sticky;top:80px;}
+.qb-cat-hdr{padding:12px 16px;font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--g2);display:flex;align-items:center;justify-content:space-between;}
+.qb-cat-item{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;font-size:13px;font-weight:500;color:var(--g6);cursor:pointer;transition:background .15s;border-bottom:1px solid var(--g2);}
+.qb-cat-item:last-child{border-bottom:none;}
+.qb-cat-item:hover{background:var(--g1);}
+.qb-cat-item.active{background:var(--pp);color:var(--purple);font-weight:700;}
+.qb-cat-count{font-size:10px;font-weight:700;background:var(--g2);color:var(--g5);padding:2px 7px;border-radius:99px;}
+.qb-cat-item.active .qb-cat-count{background:rgba(108,60,225,0.15);color:var(--purple);}
+.qb-main{display:flex;flex-direction:column;gap:10px;}
+.q-card{background:#fff;border:1.5px solid var(--g3);border-radius:12px;padding:16px 18px;transition:border-color .15s;}
+.q-card:hover{border-color:var(--purple);}
+.q-card.in-questionnaire{border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.02);}
+.q-card-hdr{display:flex;align-items:flex-start;gap:10px;}
+.q-cat-chip{font-size:9px;font-weight:700;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;margin-top:2px;}
+.q-cat-skills{background:rgba(108,60,225,0.1);color:var(--purple);}
+.q-cat-roles{background:rgba(37,99,235,0.1);color:#2563EB;}
+.q-cat-personal{background:rgba(16,185,129,0.1);color:#059669;}
+.q-cat-tools{background:rgba(245,158,11,0.1);color:#D97706;}
+.q-cat-custom{background:var(--g2);color:var(--g5);}
+.q-text{font-size:13px;color:var(--black);font-weight:500;flex:1;line-height:1.5;}
+.q-type{font-size:10px;color:var(--g4);margin-top:4px;}
+.q-actions{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--g2);}
+.q-add-btn{display:flex;align-items:center;gap:5px;padding:5px 13px;border-radius:7px;background:var(--purple);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:'Poppins',sans-serif;transition:background .15s;}
+.q-add-btn:hover{background:var(--pd);}
+.q-add-btn.added{background:rgba(16,185,129,0.1);color:#059669;border:1.5px solid rgba(16,185,129,0.3);}
+.q-edit-btn{padding:5px 11px;border-radius:7px;background:var(--g1);color:var(--g5);font-size:11px;font-weight:600;border:1px solid var(--g2);cursor:pointer;font-family:'Poppins',sans-serif;}
+.q-edit-btn:hover{background:var(--g2);}
+.q-del-btn{padding:5px 11px;border-radius:7px;background:rgba(239,68,68,0.07);color:var(--red);font-size:11px;font-weight:600;border:1px solid rgba(239,68,68,0.15);cursor:pointer;font-family:'Poppins',sans-serif;}
+.q-del-btn:hover{background:rgba(239,68,68,0.12);}
+/* Questionnaire builder on opening detail */
+.questionnaire-section{background:#fff;border:1.5px solid var(--g3);border-radius:13px;padding:24px;margin-bottom:14px;}
+.qb-opening-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.qb-q-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--g1);border-radius:9px;margin-bottom:6px;border:1.5px solid transparent;transition:all .15s;}
+.qb-q-row:hover{border-color:var(--g3);background:#fff;}
+.qb-drag-handle{color:var(--g4);font-size:14px;flex-shrink:0;cursor:grab;user-select:none;}
+.qb-q-text{flex:1;font-size:12px;color:var(--black);font-weight:500;}
+.qb-q-cat{font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;}
+.qb-q-remove{background:none;border:none;color:var(--g4);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:5px;transition:all .15s;}
+.qb-q-remove:hover{background:rgba(239,68,68,0.1);color:var(--red);}
+.qb-empty-state{padding:24px;text-align:center;font-size:12px;color:var(--g4);border:1.5px dashed var(--g3);border-radius:9px;}
+/* Skills manager */
+.skills-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;}
+.skill-mgr-card{background:#fff;border:1.5px solid var(--g3);border-radius:9px;padding:10px 13px;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:border-color .15s;}
+.skill-mgr-card:hover{border-color:var(--purple);}
+.skill-mgr-name{font-size:12px;font-weight:600;color:var(--black);}
+.skill-mgr-cat{font-size:9px;color:var(--g4);}
+.skill-del-btn{background:none;border:none;color:var(--g4);cursor:pointer;font-size:12px;padding:2px 5px;border-radius:4px;transition:all .15s;flex-shrink:0;}
+.skill-del-btn:hover{background:rgba(239,68,68,0.1);color:var(--red);}
+
 /* ══ OPENING APPLICANTS PAGE ══ */
 .applicants-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
 .applicant-card{background:#fff;border:1.5px solid var(--g3);border-radius:13px;padding:18px;cursor:pointer;transition:all .18s;position:relative;}
@@ -750,6 +801,12 @@ onAuthStateChanged(auth, async user => {
     </button>
     <button class="dtab" id="dtab-assessments" onclick="navTo('assessments','Assessments')">
       <span class="dtab-icon">🧪</span>Assessments
+    </button>
+    <button class="dtab" id="dtab-question-bank" onclick="navTo('question-bank','Question Bank')">
+      <span class="dtab-icon">🗃️</span>Question Bank
+    </button>
+    <button class="dtab" id="dtab-skills" onclick="navTo('skills','Skills')">
+      <span class="dtab-icon">🏷️</span>Skills
     </button>
     <button class="dtab" id="dtab-hired" onclick="navTo('hired','Hired')">
       <span class="dtab-icon">🎉</span>Hired
@@ -1787,6 +1844,44 @@ Project coordination & time management</textarea>
           </div>
         </div>
 
+        <!-- Questionnaire — Opening Questions section -->
+        <div class="questionnaire-section" id="ods-questionnaire">
+          <div class="qb-opening-hdr">
+            <div>
+              <div style="font-size:14px;font-weight:800;color:var(--black);">Opening Questions</div>
+              <div style="font-size:11px;color:var(--g5);margin-top:2px;">Questions candidates will answer when applying for this role. Drag to reorder.</div>
+            </div>
+            <button class="btn btn-p btn-sm" onclick="openModal('pick-questions-modal')">+ Add from bank</button>
+          </div>
+          <!-- Selected questions list -->
+          <div id="questionnaire-list">
+            <div class="qb-q-row" draggable="true" data-qid="q-sf-1">
+              <span class="qb-drag-handle">⠿</span>
+              <span class="qb-q-text">Have you worked with Salesforce? If so, for how long and in what capacity?</span>
+              <span class="qb-q-cat q-cat-tools">Tools</span>
+              <button class="qb-q-remove" onclick="removeFromQuestionnaire(this)" title="Remove">✕</button>
+            </div>
+            <div class="qb-q-row" draggable="true" data-qid="q-cs-1">
+              <span class="qb-drag-handle">⠿</span>
+              <span class="qb-q-text">Describe a time you retained a client who was considering canceling. What was your approach?</span>
+              <span class="qb-q-cat q-cat-skills">Skills</span>
+              <button class="qb-q-remove" onclick="removeFromQuestionnaire(this)" title="Remove">✕</button>
+            </div>
+            <div class="qb-q-row" draggable="true" data-qid="q-tz-1">
+              <span class="qb-drag-handle">⠿</span>
+              <span class="qb-q-text">Are you available to work on US Eastern or Central time zone hours (EST/CST)?</span>
+              <span class="qb-q-cat q-cat-personal">Personal</span>
+              <button class="qb-q-remove" onclick="removeFromQuestionnaire(this)" title="Remove">✕</button>
+            </div>
+          </div>
+          <div id="questionnaire-empty" style="display:none;" class="qb-empty-state">
+            No questions added yet. Click <strong>+ Add from bank</strong> to select questions for this opening.
+          </div>
+          <div style="margin-top:12px;font-size:10px;color:var(--g5);">
+            <strong id="q-count">3</strong> questions · Candidates will see these after completing Profile and Experience sections
+          </div>
+        </div>
+
         <!-- About Nearwork — fixed -->
         <div class="opening-section opening-section-nearwork">
           <div class="opening-section-hdr">
@@ -2170,6 +2265,69 @@ Project coordination & time management</textarea>
     <!-- Empty state -->
     <div id="applicants-empty" style="display:none;padding:40px;text-align:center;font-size:13px;color:var(--g4);">No applicants match your filters.</div>
   </div>
+    <!-- Empty state -->
+    <div id="applicants-empty" style="display:none;padding:40px;text-align:center;font-size:13px;color:var(--g4);">No applicants match your filters.</div>
+  </div>
+
+  <!-- ══════════════════════════════
+       QUESTION BANK
+  ══════════════════════════════ -->
+  <div class="page" id="page-question-bank">
+    <div class="ph">
+      <div><div class="ph-title">Question Bank</div><div class="ph-sub">Manage questions used in opening applications. Click + to add a question to the currently open opening.</div></div>
+      <button class="btn btn-p btn-sm" onclick="openModal('new-question-modal')">+ New question</button>
+    </div>
+    <div class="toolbar" style="margin-bottom:16px;">
+      <div class="sbox"><span class="si">🔍</span><input type="text" id="qb-search" placeholder="Search questions..." oninput="filterQuestions()" style="width:240px;"></div>
+      <select class="fsel" id="qb-cat-filter" onchange="filterQuestions()"><option value="">All categories</option><option value="skills">Skills</option><option value="roles">Roles</option><option value="personal">Personal</option><option value="tools">Tools</option><option value="custom">Custom</option></select>
+      <select class="fsel" id="qb-type-filter" onchange="filterQuestions()"><option value="">All types</option><option value="yes_no">Yes / No</option><option value="short">Short answer</option><option value="long">Long answer</option><option value="multiple">Multiple choice</option></select>
+    </div>
+    <div class="qb-layout">
+      <div class="qb-cats">
+        <div class="qb-cat-hdr">Categories</div>
+        <div class="qb-cat-item active" data-cat="" onclick="selectQBCat(this,'')">All <span class="qb-cat-count" id="qb-count-all">14</span></div>
+        <div class="qb-cat-item" data-cat="skills" onclick="selectQBCat(this,'skills')">🏷️ Skills <span class="qb-cat-count" id="qb-count-skills">4</span></div>
+        <div class="qb-cat-item" data-cat="roles" onclick="selectQBCat(this,'roles')">👔 Roles <span class="qb-cat-count" id="qb-count-roles">3</span></div>
+        <div class="qb-cat-item" data-cat="personal" onclick="selectQBCat(this,'personal')">🙋 Personal <span class="qb-cat-count" id="qb-count-personal">3</span></div>
+        <div class="qb-cat-item" data-cat="tools" onclick="selectQBCat(this,'tools')">🔧 Tools <span class="qb-cat-count" id="qb-count-tools">3</span></div>
+        <div class="qb-cat-item" data-cat="custom" onclick="selectQBCat(this,'custom')">✏️ Custom <span class="qb-cat-count" id="qb-count-custom">1</span></div>
+        <div style="padding:12px 16px;border-top:1px solid var(--g2);"><button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;" onclick="openModal('new-category-modal')">+ New category</button></div>
+      </div>
+      <div class="qb-main" id="qb-questions-list">
+        <div class="q-card in-questionnaire" data-cat="tools" data-type="short" data-qid="q-sf-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-tools">Tools</span><div><div class="q-text">Have you worked with Salesforce? If so, for how long and in what capacity?</div><div class="q-type">Short answer</div></div></div><div class="q-actions"><button class="q-add-btn added" onclick="addQuestionToOpening(this,'q-sf-1','Have you worked with Salesforce? If so, for how long and in what capacity?','tools')">✓ Added</button><button class="q-edit-btn" onclick="editQuestion(this,'q-sf-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-sf-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="skills" data-type="long" data-qid="q-cs-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-skills">Skills</span><div><div class="q-text">Describe a time you retained a client who was considering canceling. What was your approach?</div><div class="q-type">Long answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-cs-1','Describe a time you retained a client who was considering canceling. What was your approach?','skills')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-cs-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-cs-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="skills" data-type="short" data-qid="q-cs-2"><div class="q-card-hdr"><span class="q-cat-chip q-cat-skills">Skills</span><div><div class="q-text">How many client accounts have you managed simultaneously at peak? What was your process for prioritization?</div><div class="q-type">Short answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-cs-2','How many client accounts have you managed simultaneously at peak?','skills')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-cs-2')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-cs-2')">Delete</button></div></div>
+        <div class="q-card" data-cat="skills" data-type="long" data-qid="q-cs-3"><div class="q-card-hdr"><span class="q-cat-chip q-cat-skills">Skills</span><div><div class="q-text">Walk us through how you typically run a quarterly business review with a client.</div><div class="q-type">Long answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-cs-3','Walk us through how you typically run a quarterly business review with a client.','skills')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-cs-3')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-cs-3')">Delete</button></div></div>
+        <div class="q-card" data-cat="skills" data-type="short" data-qid="q-cs-4"><div class="q-card-hdr"><span class="q-cat-chip q-cat-skills">Skills</span><div><div class="q-text">What metrics do you track to measure the health of your customer portfolio?</div><div class="q-type">Short answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-cs-4','What metrics do you track to measure the health of your customer portfolio?','skills')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-cs-4')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-cs-4')">Delete</button></div></div>
+        <div class="q-card" data-cat="roles" data-type="yes_no" data-qid="q-r-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-roles">Roles</span><div><div class="q-text">Have you worked in a US-facing or international client role before?</div><div class="q-type">Yes / No</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-r-1','Have you worked in a US-facing or international client role before?','roles')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-r-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-r-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="roles" data-type="short" data-qid="q-r-2"><div class="q-card-hdr"><span class="q-cat-chip q-cat-roles">Roles</span><div><div class="q-text">How do you typically handle escalations from a frustrated client?</div><div class="q-type">Short answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-r-2','How do you typically handle escalations from a frustrated client?','roles')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-r-2')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-r-2')">Delete</button></div></div>
+        <div class="q-card" data-cat="roles" data-type="long" data-qid="q-r-3"><div class="q-card-hdr"><span class="q-cat-chip q-cat-roles">Roles</span><div><div class="q-text">Tell us about a specific deal you helped expand from an existing account. What was your role?</div><div class="q-type">Long answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-r-3','Tell us about a specific deal you helped expand from an existing account.','roles')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-r-3')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-r-3')">Delete</button></div></div>
+        <div class="q-card in-questionnaire" data-cat="personal" data-type="yes_no" data-qid="q-p-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-personal">Personal</span><div><div class="q-text">Are you available to work on US Eastern or Central time zone hours (EST/CST)?</div><div class="q-type">Yes / No</div></div></div><div class="q-actions"><button class="q-add-btn added" onclick="addQuestionToOpening(this,'q-p-1','Are you available to work on US Eastern or Central time zone hours (EST/CST)?','personal')">✓ Added</button><button class="q-edit-btn" onclick="editQuestion(this,'q-p-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-p-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="personal" data-type="yes_no" data-qid="q-p-2"><div class="q-card-hdr"><span class="q-cat-chip q-cat-personal">Personal</span><div><div class="q-text">Do you have a valid US work visa or are you eligible to work in the United States?</div><div class="q-type">Yes / No</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-p-2','Do you have a valid US work visa or are you eligible to work in the United States?','personal')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-p-2')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-p-2')">Delete</button></div></div>
+        <div class="q-card" data-cat="personal" data-type="yes_no" data-qid="q-p-3"><div class="q-card-hdr"><span class="q-cat-chip q-cat-personal">Personal</span><div><div class="q-text">Do you have a reliable internet connection and a quiet workspace for video calls?</div><div class="q-type">Yes / No</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-p-3','Do you have a reliable internet connection and a quiet workspace for video calls?','personal')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-p-3')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-p-3')">Delete</button></div></div>
+        <div class="q-card" data-cat="tools" data-type="yes_no" data-qid="q-hs-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-tools">Tools</span><div><div class="q-text">Have you used HubSpot CRM in a professional setting?</div><div class="q-type">Yes / No</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-hs-1','Have you used HubSpot CRM in a professional setting?','tools')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-hs-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-hs-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="tools" data-type="short" data-qid="q-gong-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-tools">Tools</span><div><div class="q-text">Which communication or productivity tools have you used in remote roles? (e.g. Slack, Zoom, Gong, Notion)</div><div class="q-type">Short answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-gong-1','Which communication or productivity tools have you used in remote roles?','tools')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-gong-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-gong-1')">Delete</button></div></div>
+        <div class="q-card" data-cat="custom" data-type="long" data-qid="q-c-1"><div class="q-card-hdr"><span class="q-cat-chip q-cat-custom">Custom</span><div><div class="q-text">What makes you excited about working with US SaaS companies from Colombia?</div><div class="q-type">Long answer</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'q-c-1','What makes you excited about working with US SaaS companies from Colombia?','custom')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'q-c-1')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'q-c-1')">Delete</button></div></div>
+        <div id="qb-empty" style="display:none;padding:40px;text-align:center;font-size:13px;color:var(--g4);">No questions match your search.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════
+       SKILLS MANAGER
+  ══════════════════════════════ -->
+  <div class="page" id="page-skills">
+    <div class="ph">
+      <div><div class="ph-title">Skills</div><div class="ph-sub">Standardized skill list for candidate applications. Everyone uses the same names — no duplicates or spelling variations.</div></div>
+      <button class="btn btn-p btn-sm" onclick="openModal('new-skill-modal')">+ Add skill</button>
+    </div>
+    <div class="toolbar" style="margin-bottom:16px;">
+      <div class="sbox"><span class="si">🔍</span><input type="text" id="skill-search" placeholder="Search skills..." oninput="filterSkills()"></div>
+      <select class="fsel" id="skill-cat-filter" onchange="filterSkills()"><option value="">All categories</option><option>CRM &amp; Sales</option><option>Customer Success</option><option>Marketing</option><option>Technical</option><option>Soft Skills</option><option>Industry</option></select>
+    </div>
+    <div id="skills-by-category"></div>
+  </div>
+
   <div class="page" id="page-assessments">
     <div class="ph">
       <div><div class="ph-title">Assessments</div><div class="ph-sub">Review AI-generated questions before launching to candidates.</div></div>
@@ -2705,10 +2863,10 @@ Project coordination & time management</textarea>
 
 
 /* ══ PAGES ══ */
-const PAGES=['dashboard','orgs','org-detail','pipeline','candidates','openings','opening-detail','opening-applicants','assessments','hired','blog','team','audit'];
+const PAGES=['dashboard','orgs','org-detail','pipeline','candidates','openings','opening-detail','opening-applicants','assessments','question-bank','skills','hired','blog','team','audit'];
 const PAGE_LABELS={
   dashboard:'Dashboard',orgs:'Organizations','org-detail':'Organization','pipeline':'Pipelines',candidates:'Candidates',
-  openings:'Openings','opening-detail':'Opening','opening-applicants':'Applicants',assessments:'Assessments',hired:'Hired',
+  openings:'Openings','opening-detail':'Opening','opening-applicants':'Applicants',assessments:'Assessments','question-bank':'Question Bank','skills':'Skills',hired:'Hired',
   blog:'Blog',team:'Team settings',audit:'Audit Log'
 };
 function showPage(id){
@@ -4800,6 +4958,476 @@ window.filterApplicants = function() {
   const empty = document.getElementById('applicants-empty');
   if (empty) empty.style.display = visible === 0 ? 'block' : 'none';
 };
+</script>
+
+<!-- ══ NEW QUESTION MODAL ══ -->
+<div class="modal-bg" id="new-question-modal" onclick="if(event.target===this)closeModal('new-question-modal')">
+  <div class="modal">
+    <div class="modal-hdr"><div class="modal-title" id="nq-modal-title">New question</div><button class="modal-close" onclick="closeModal('new-question-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Question text *</label><textarea id="nq-text" rows="3" placeholder="Enter the question candidates will see..."></textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Category *</label>
+          <select id="nq-cat">
+            <option value="skills">Skills</option><option value="roles">Roles</option><option value="personal">Personal</option><option value="tools">Tools</option><option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="field"><label>Answer type *</label>
+          <select id="nq-type">
+            <option value="yes_no">Yes / No</option><option value="short">Short answer</option><option value="long">Long answer</option><option value="multiple">Multiple choice</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="nq-choices-wrap" style="display:none;">
+        <label>Answer choices (one per line)</label>
+        <textarea id="nq-choices" rows="4" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+      </div>
+      <div class="field">
+        <label>Tags (optional, comma-separated)</label>
+        <input type="text" id="nq-tags" placeholder="e.g. salesforce, crm, b2b">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-question-modal')">Cancel</button>
+      <button class="btn btn-p" onclick="saveQuestion()">Save question</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NEW CATEGORY MODAL ══ -->
+<div class="modal-bg" id="new-category-modal" onclick="if(event.target===this)closeModal('new-category-modal')">
+  <div class="modal sm">
+    <div class="modal-hdr"><div class="modal-title">New category</div><button class="modal-close" onclick="closeModal('new-category-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Category name *</label><input type="text" id="new-cat-name" placeholder="e.g. Leadership, Technical, etc."></div>
+      <div class="field"><label>Color</label>
+        <select id="new-cat-color">
+          <option value="purple">Purple</option><option value="blue">Blue</option><option value="green">Green</option><option value="amber">Amber</option><option value="red">Red</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-category-modal')">Cancel</button>
+      <button class="btn btn-p" onclick="saveCategory()">Create category</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NEW SKILL MODAL ══ -->
+<div class="modal-bg" id="new-skill-modal" onclick="if(event.target===this)closeModal('new-skill-modal')">
+  <div class="modal sm">
+    <div class="modal-hdr"><div class="modal-title">Add skill</div><button class="modal-close" onclick="closeModal('new-skill-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Skill name *</label><input type="text" id="ns-name" placeholder="e.g. Customer Success Management"></div>
+      <div class="field"><label>Category *</label>
+        <select id="ns-cat">
+          <option>CRM &amp; Sales</option><option>Customer Success</option><option>Marketing</option><option>Technical</option><option>Soft Skills</option><option>Industry</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--g5);margin-top:4px;line-height:1.6;">This exact name will be shown to candidates. Use consistent capitalization and spelling — it can't be changed once candidates have selected it.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('new-skill-modal')">Cancel</button>
+      <button class="btn btn-p" onclick="saveSkill()">Add skill</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PICK QUESTIONS MODAL (from opening detail) ══ -->
+<div class="modal-bg" id="pick-questions-modal" onclick="if(event.target===this)closeModal('pick-questions-modal')">
+  <div class="modal lg" style="max-width:760px;">
+    <div class="modal-hdr">
+      <div>
+        <div class="modal-title">Add questions to this opening</div>
+        <div style="font-size:11px;color:var(--g5);margin-top:2px;">Select from the question bank. Already-added questions are highlighted.</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('pick-questions-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:500px;overflow-y:auto;">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="sbox" style="flex:1;min-width:180px;"><span class="si">🔍</span><input type="text" id="pick-q-search" placeholder="Search questions..." oninput="filterPickQuestions()"></div>
+        <select class="fsel" id="pick-q-cat" onchange="filterPickQuestions()"><option value="">All categories</option><option value="skills">Skills</option><option value="roles">Roles</option><option value="personal">Personal</option><option value="tools">Tools</option><option value="custom">Custom</option></select>
+      </div>
+      <div id="pick-questions-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('pick-questions-modal')">Close</button>
+      <button class="btn btn-p" onclick="closeModal('pick-questions-modal');toast('Questions saved to opening.','ok')">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   QUESTION BANK
+══════════════════════════════════════════════ */
+
+// In-memory store — syncs to Firestore in production
+window._questions = [
+  { id:'q-sf-1',  cat:'tools',    type:'short',  text:'Have you worked with Salesforce? If so, for how long and in what capacity?', added:true },
+  { id:'q-cs-1',  cat:'skills',   type:'long',   text:'Describe a time you retained a client who was considering canceling. What was your approach?', added:false },
+  { id:'q-cs-2',  cat:'skills',   type:'short',  text:'How many client accounts have you managed simultaneously at peak? What was your process for prioritization?', added:false },
+  { id:'q-cs-3',  cat:'skills',   type:'long',   text:'Walk us through how you typically run a quarterly business review with a client.', added:false },
+  { id:'q-cs-4',  cat:'skills',   type:'short',  text:'What metrics do you track to measure the health of your customer portfolio?', added:false },
+  { id:'q-r-1',   cat:'roles',    type:'yes_no', text:'Have you worked in a US-facing or international client role before?', added:false },
+  { id:'q-r-2',   cat:'roles',    type:'short',  text:'How do you typically handle escalations from a frustrated client?', added:false },
+  { id:'q-r-3',   cat:'roles',    type:'long',   text:'Tell us about a specific deal you helped expand from an existing account. What was your role?', added:false },
+  { id:'q-p-1',   cat:'personal', type:'yes_no', text:'Are you available to work on US Eastern or Central time zone hours (EST/CST)?', added:true },
+  { id:'q-p-2',   cat:'personal', type:'yes_no', text:'Do you have a valid US work visa or are you eligible to work in the United States?', added:false },
+  { id:'q-p-3',   cat:'personal', type:'yes_no', text:'Do you have a reliable internet connection and a quiet workspace for video calls?', added:false },
+  { id:'q-hs-1',  cat:'tools',    type:'yes_no', text:'Have you used HubSpot CRM in a professional setting?', added:false },
+  { id:'q-gong-1',cat:'tools',    type:'short',  text:'Which communication or productivity tools have you used in remote roles? (e.g. Slack, Zoom, Gong, Notion)', added:false },
+  { id:'q-c-1',   cat:'custom',   type:'long',   text:'What makes you excited about working with US SaaS companies from Colombia?', added:false },
+];
+
+// Questions currently in this opening's questionnaire
+window._questionnaire = [
+  { id:'q-sf-1', text:'Have you worked with Salesforce? If so, for how long and in what capacity?', cat:'tools' },
+  { id:'q-cs-1', text:'Describe a time you retained a client who was considering canceling. What was your approach?', cat:'skills' },
+  { id:'q-p-1',  text:'Are you available to work on US Eastern or Central time zone hours (EST/CST)?', cat:'personal' },
+];
+
+window.selectQBCat = function(el, cat) {
+  document.querySelectorAll('.qb-cat-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('qb-cat-filter').value = cat;
+  filterQuestions();
+};
+
+window.filterQuestions = function() {
+  const q    = (document.getElementById('qb-search')?.value || '').toLowerCase();
+  const cat  = document.getElementById('qb-cat-filter')?.value || '';
+  const type = document.getElementById('qb-type-filter')?.value || '';
+  let vis = 0;
+  document.querySelectorAll('#qb-questions-list .q-card').forEach(card => {
+    const cCat  = card.dataset.cat  || '';
+    const cType = card.dataset.type || '';
+    const cText = card.querySelector('.q-text')?.textContent.toLowerCase() || '';
+    const show  = (!q || cText.includes(q)) && (!cat || cCat === cat) && (!type || cType === type);
+    card.style.display = show ? '' : 'none';
+    if (show) vis++;
+  });
+  const empty = document.getElementById('qb-empty');
+  if (empty) empty.style.display = vis === 0 ? 'block' : 'none';
+};
+
+window.addQuestionToOpening = function(btn, qid, text, cat) {
+  const already = _questionnaire.find(q => q.id === qid);
+  if (already) { toast('Already in this opening.', 'ok'); return; }
+  _questionnaire.push({ id: qid, text, cat });
+  // Update button state
+  btn.className = 'q-add-btn added';
+  btn.textContent = '✓ Added';
+  // Add to questionnaire list on opening detail
+  const list = document.getElementById('questionnaire-list');
+  const empty = document.getElementById('questionnaire-empty');
+  if (list) {
+    const catClass = 'q-cat-' + cat;
+    const row = document.createElement('div');
+    row.className = 'qb-q-row';
+    row.draggable = true;
+    row.dataset.qid = qid;
+    row.innerHTML = `<span class="qb-drag-handle">⠿</span><span class="qb-q-text">${text}</span><span class="qb-q-cat ${catClass}">${cat.charAt(0).toUpperCase()+cat.slice(1)}</span><button class="qb-q-remove" onclick="removeFromQuestionnaire(this)" title="Remove">✕</button>`;
+    initQRowDrag(row);
+    list.appendChild(row);
+    if (empty) empty.style.display = 'none';
+  }
+  updateQCount();
+  markDirty();
+  toast('Question added to opening.', 'ok');
+};
+
+window.removeFromQuestionnaire = function(btn) {
+  const row = btn.closest('.qb-q-row');
+  const qid = row?.dataset.qid;
+  if (qid) {
+    _questionnaire = _questionnaire.filter(q => q.id !== qid);
+    // Unmark in question bank
+    const bankBtn = document.querySelector(`#qb-questions-list .q-card[data-qid="${qid}"] .q-add-btn`);
+    if (bankBtn) { bankBtn.className = 'q-add-btn'; bankBtn.textContent = '+ Add to opening'; }
+    // Unmark in pick modal
+    const pickBtn = document.querySelector(`#pick-questions-list .q-card[data-qid="${qid}"] .q-add-btn`);
+    if (pickBtn) { pickBtn.className = 'q-add-btn'; pickBtn.textContent = '+ Add'; }
+  }
+  row?.remove();
+  updateQCount();
+  markDirty();
+};
+
+function updateQCount() {
+  const count = document.getElementById('questionnaire-list')?.children.length || 0;
+  const el = document.getElementById('q-count');
+  if (el) el.textContent = count;
+  const empty = document.getElementById('questionnaire-empty');
+  if (empty) empty.style.display = count === 0 ? 'block' : 'none';
+}
+
+window.deleteQuestion = function(btn, qid) {
+  if (!confirm('Delete this question from the bank? It will also be removed from any openings using it.')) return;
+  _questions = _questions.filter(q => q.id !== qid);
+  btn.closest('.q-card')?.remove();
+  removeFromQuestionnaire({ closest: () => document.querySelector(`.qb-q-row[data-qid="${qid}"]`) });
+  toast('Question deleted from bank.', 'ok');
+  // In production: delete from Firestore questions collection
+};
+
+window.editQuestion = function(btn, qid) {
+  const q = _questions.find(q => q.id === qid);
+  if (!q) return;
+  document.getElementById('nq-modal-title').textContent = 'Edit question';
+  document.getElementById('nq-text').value = q.text;
+  document.getElementById('nq-cat').value  = q.cat;
+  document.getElementById('nq-type').value = q.type;
+  document.getElementById('new-question-modal').dataset.editId = qid;
+  openModal('new-question-modal');
+};
+
+window.saveQuestion = function() {
+  const text = document.getElementById('nq-text').value.trim();
+  const cat  = document.getElementById('nq-cat').value;
+  const type = document.getElementById('nq-type').value;
+  if (!text) { toast('Question text is required.','bad'); return; }
+  const editId = document.getElementById('new-question-modal').dataset.editId;
+  if (editId) {
+    // Edit existing
+    const q = _questions.find(q => q.id === editId);
+    if (q) { q.text = text; q.cat = cat; q.type = type; }
+    const card = document.querySelector(`#qb-questions-list .q-card[data-qid="${editId}"]`);
+    if (card) { card.querySelector('.q-text').textContent = text; card.dataset.cat = cat; card.dataset.type = type; }
+    delete document.getElementById('new-question-modal').dataset.editId;
+    toast('Question updated.', 'ok');
+  } else {
+    // New question
+    const newId = 'q-' + Date.now();
+    _questions.push({ id:newId, cat, type, text, added:false });
+    renderNewQuestionCard(newId, cat, type, text);
+    toast('Question added to bank.', 'ok');
+    // In production: addDoc to Firestore questions collection
+  }
+  closeModal('new-question-modal');
+  document.getElementById('nq-text').value = '';
+};
+
+function renderNewQuestionCard(id, cat, type, text) {
+  const list = document.getElementById('qb-questions-list');
+  const empty = document.getElementById('qb-empty');
+  if (!list) return;
+  const catClass = 'q-cat-' + cat;
+  const typeLabels = { yes_no:'Yes / No', short:'Short answer', long:'Long answer', multiple:'Multiple choice' };
+  const card = document.createElement('div');
+  card.className = 'q-card';
+  card.dataset.cat  = cat;
+  card.dataset.type = type;
+  card.dataset.qid  = id;
+  card.innerHTML = `<div class="q-card-hdr"><span class="q-cat-chip ${catClass}">${cat.charAt(0).toUpperCase()+cat.slice(1)}</span><div><div class="q-text">${text}</div><div class="q-type">${typeLabels[type]||type}</div></div></div><div class="q-actions"><button class="q-add-btn" onclick="addQuestionToOpening(this,'${id}','${text.replace(/'/g,"\\'")}','${cat}')">+ Add to opening</button><button class="q-edit-btn" onclick="editQuestion(this,'${id}')">Edit</button><button class="q-del-btn" onclick="deleteQuestion(this,'${id}')">Delete</button></div>`;
+  list.insertBefore(card, empty);
+}
+
+window.saveCategory = function() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  if (!name) { toast('Category name required.','bad'); return; }
+  // Add to sidebar
+  const sidebar = document.querySelector('.qb-cats');
+  const addBtn  = sidebar?.querySelector('div:last-child');
+  const item = document.createElement('div');
+  item.className = 'qb-cat-item';
+  item.dataset.cat = name.toLowerCase();
+  item.innerHTML = `✏️ ${name} <span class="qb-cat-count">0</span>`;
+  item.onclick = function() { selectQBCat(this, name.toLowerCase()); };
+  sidebar?.insertBefore(item, addBtn);
+  // Add to category selects
+  ['nq-cat','qb-cat-filter','pick-q-cat'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (sel) { const opt = document.createElement('option'); opt.value = name.toLowerCase(); opt.textContent = name; sel.appendChild(opt); }
+  });
+  closeModal('new-category-modal');
+  document.getElementById('new-cat-name').value = '';
+  toast('Category created.', 'ok');
+};
+
+/* ── Pick questions modal (from opening detail) ── */
+window.openPickQuestionsModal = function() {
+  const list = document.getElementById('pick-questions-list');
+  if (!list) return;
+  list.innerHTML = '';
+  _questions.forEach(q => {
+    const isAdded = _questionnaire.some(qr => qr.id === q.id);
+    const catClass = 'q-cat-' + q.cat;
+    const card = document.createElement('div');
+    card.className = 'q-card' + (isAdded ? ' in-questionnaire' : '');
+    card.dataset.cat = q.cat; card.dataset.type = q.type; card.dataset.qid = q.id;
+    card.innerHTML = `<div class="q-card-hdr"><span class="q-cat-chip ${catClass}">${q.cat.charAt(0).toUpperCase()+q.cat.slice(1)}</span><div><div class="q-text">${q.text}</div><div class="q-type">${q.type.replace('_',' ')}</div></div></div><div class="q-actions"><button class="q-add-btn${isAdded?' added':''}" onclick="addQuestionToOpening(this,'${q.id}','${q.text.replace(/'/g,"\\'")}','${q.cat}')">${isAdded?'✓ Added':'+ Add'}</button></div>`;
+    list.appendChild(card);
+  });
+  openModal('pick-questions-modal');
+};
+
+// Override openModal for pick-questions-modal to populate it
+const _origOpenModal = window.openModal;
+window.openModal = function(id) {
+  if (id === 'pick-questions-modal') { openPickQuestionsModal(); return; }
+  if (id === 'new-question-modal') {
+    document.getElementById('nq-modal-title').textContent = 'New question';
+    document.getElementById('nq-text').value = '';
+    delete document.getElementById('new-question-modal').dataset.editId;
+    document.getElementById('nq-type').addEventListener('change', function() {
+      document.getElementById('nq-choices-wrap').style.display = this.value === 'multiple' ? 'block' : 'none';
+    }, { once: false });
+  }
+  if (_origOpenModal) _origOpenModal(id);
+};
+
+window.filterPickQuestions = function() {
+  const q   = (document.getElementById('pick-q-search')?.value || '').toLowerCase();
+  const cat = document.getElementById('pick-q-cat')?.value || '';
+  document.querySelectorAll('#pick-questions-list .q-card').forEach(card => {
+    const match = (!q || card.querySelector('.q-text')?.textContent.toLowerCase().includes(q))
+               && (!cat || card.dataset.cat === cat);
+    card.style.display = match ? '' : 'none';
+  });
+};
+
+/* ── Questionnaire drag-to-reorder ── */
+let _dragQRow = null;
+
+function initQRowDrag(row) {
+  row.addEventListener('dragstart', function(e) {
+    _dragQRow = row;
+    row.style.opacity = '.4';
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  row.addEventListener('dragend', function() {
+    row.style.opacity = '1';
+    _dragQRow = null;
+  });
+  row.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    if (!_dragQRow || _dragQRow === row) return;
+    const list = document.getElementById('questionnaire-list');
+    const rows = [...list.querySelectorAll('.qb-q-row')];
+    const idx  = rows.indexOf(row);
+    const dragIdx = rows.indexOf(_dragQRow);
+    if (dragIdx < idx) list.insertBefore(_dragQRow, row.nextSibling);
+    else list.insertBefore(_dragQRow, row);
+    markDirty();
+  });
+}
+
+// Init drag on existing rows
+document.querySelectorAll('#questionnaire-list .qb-q-row').forEach(initQRowDrag);
+
+/* ══════════════════════════════════════════════
+   SKILLS MANAGER
+══════════════════════════════════════════════ */
+
+window._skills = [
+  // CRM & Sales
+  { name:'Salesforce', cat:'CRM & Sales' }, { name:'HubSpot', cat:'CRM & Sales' },
+  { name:'Pipedrive', cat:'CRM & Sales' }, { name:'Zoho CRM', cat:'CRM & Sales' },
+  { name:'Sales Operations', cat:'CRM & Sales' }, { name:'Pipeline Management', cat:'CRM & Sales' },
+  { name:'Lead Generation', cat:'CRM & Sales' }, { name:'Account Management', cat:'CRM & Sales' },
+  // Customer Success
+  { name:'Customer Success Management', cat:'Customer Success' },
+  { name:'Customer Retention', cat:'Customer Success' }, { name:'Onboarding', cat:'Customer Success' },
+  { name:'Churn Prevention', cat:'Customer Success' }, { name:'Renewal Management', cat:'Customer Success' },
+  { name:'QBR / Business Reviews', cat:'Customer Success' }, { name:'NPS Management', cat:'Customer Success' },
+  // Marketing
+  { name:'Email Marketing', cat:'Marketing' }, { name:'Content Marketing', cat:'Marketing' },
+  { name:'SEO / SEM', cat:'Marketing' }, { name:'Marketing Automation', cat:'Marketing' },
+  { name:'Campaign Management', cat:'Marketing' }, { name:'Social Media Management', cat:'Marketing' },
+  // Technical
+  { name:'Data Analysis', cat:'Technical' }, { name:'Excel / Google Sheets', cat:'Technical' },
+  { name:'SQL', cat:'Technical' }, { name:'Python', cat:'Technical' }, { name:'API Integrations', cat:'Technical' },
+  { name:'Jira / Project Tools', cat:'Technical' }, { name:'Gong', cat:'Technical' },
+  { name:'Slack', cat:'Technical' }, { name:'Notion', cat:'Technical' },
+  // Soft Skills
+  { name:'Written Communication', cat:'Soft Skills' }, { name:'Verbal Communication', cat:'Soft Skills' },
+  { name:'Time Management', cat:'Soft Skills' }, { name:'Problem Solving', cat:'Soft Skills' },
+  { name:'Cross-functional Collaboration', cat:'Soft Skills' }, { name:'Presentation Skills', cat:'Soft Skills' },
+  // Industry
+  { name:'SaaS', cat:'Industry' }, { name:'B2B Sales', cat:'Industry' }, { name:'FinTech', cat:'Industry' },
+  { name:'HealthTech', cat:'Industry' }, { name:'EdTech', cat:'Industry' }, { name:'E-commerce', cat:'Industry' },
+];
+
+function renderSkills() {
+  const q   = (document.getElementById('skill-search')?.value || '').toLowerCase();
+  const cat = document.getElementById('skill-cat-filter')?.value || '';
+  const container = document.getElementById('skills-by-category');
+  if (!container) return;
+
+  const filtered = _skills.filter(s =>
+    (!q || s.name.toLowerCase().includes(q)) &&
+    (!cat || s.cat === cat)
+  );
+
+  // Group by category
+  const grouped = {};
+  filtered.forEach(s => {
+    if (!grouped[s.cat]) grouped[s.cat] = [];
+    grouped[s.cat].push(s);
+  });
+
+  container.innerHTML = '';
+  if (Object.keys(grouped).length === 0) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--g4);">No skills match your search.</div>';
+    return;
+  }
+
+  Object.entries(grouped).forEach(([cat, skills]) => {
+    const section = document.createElement('div');
+    section.style.marginBottom = '24px';
+    section.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">${cat} <span style="font-size:10px;font-weight:500;color:var(--g4);">(${skills.length})</span></div>`;
+    const grid = document.createElement('div');
+    grid.className = 'skills-grid';
+    skills.forEach(skill => {
+      const card = document.createElement('div');
+      card.className = 'skill-mgr-card';
+      card.dataset.skillName = skill.name;
+      card.innerHTML = `<div><div class="skill-mgr-name">${skill.name}</div></div><button class="skill-del-btn" onclick="deleteSkill('${skill.name.replace(/'/g,"\\'")}',this)" title="Remove skill">✕</button>`;
+      grid.appendChild(card);
+    });
+    section.appendChild(grid);
+    container.appendChild(section);
+  });
+}
+
+window.filterSkills = renderSkills;
+
+window.saveSkill = function() {
+  const name = document.getElementById('ns-name').value.trim();
+  const cat  = document.getElementById('ns-cat').value;
+  if (!name) { toast('Skill name required.','bad'); return; }
+  if (_skills.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+    toast('Skill already exists.','bad'); return;
+  }
+  _skills.push({ name, cat });
+  renderSkills();
+  closeModal('new-skill-modal');
+  document.getElementById('ns-name').value = '';
+  toast('Skill added.', 'ok');
+  // In production: addDoc to Firestore skills collection
+};
+
+window.deleteSkill = function(name, btn) {
+  if (!confirm('Remove "' + name + '" from the skills list? This won\'t affect candidates who already selected it.')) return;
+  _skills = _skills.filter(s => s.name !== name);
+  btn.closest('.skill-mgr-card')?.remove();
+  toast('Skill removed.', 'ok');
+  // In production: delete from Firestore skills collection
+};
+
+// Render skills when that page is shown
+const _origNavTo = window.navTo || function(){};
+window.navTo = function(id, label) {
+  _origNavTo(id, label);
+  if (id === 'skills') setTimeout(renderSkills, 50);
+};
+
+// Init skills page on first load
+document.addEventListener('DOMContentLoaded', function() {
+  renderSkills();
+  document.querySelectorAll('#questionnaire-list .qb-q-row').forEach(initQRowDrag);
+});
 </script>
 
 </body>

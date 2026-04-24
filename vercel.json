@@ -3,6 +3,10 @@
   "trailingSlash": false,
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/login.html"
+    },
+    {
       "source": "/openings/:path*",
       "destination": "/dashboard.html"
     },
@@ -44,15 +48,6 @@
     }
   ],
   "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
-    },
     {
       "source": "/firebase-config.js",
       "headers": [

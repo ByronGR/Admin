@@ -2659,8 +2659,11 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
     try {
       const d = JSON.parse(stored);
       if (d.title)     title     = d.title;
-      // Normalize: if stored as 'draft' but published=true, show as 'active'
-      if (d.status) status = (d.status === 'draft' && d.published) ? 'active' : d.status;
+      // Normalize status: published openings never show as Draft
+      if (d.status) {
+        const s = d.status.toLowerCase();
+        status = (s === 'draft' && d.published) ? 'active' : d.status;
+      }
       if (typeof d.published === 'boolean') published = d.published;
       if (d.recruiter) recruiter = d.recruiter;
     } catch(e) {}
@@ -3151,8 +3154,25 @@ window.toggleRowPublished = async function(btn, code) {
   const on = btn.classList.contains('on');
   const label = btn.nextElementSibling;
   if (label) {
-    label.textContent = on ? 'Published' : 'Draft';
+    label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
+  }
+
+  // Update the status badge in the same row
+  const row = btn.closest('.ot-row');
+  if (row) {
+    row.dataset.published = on ? '1' : '0';
+    // If unpublishing, update status badge to show 'Private'
+    const statusCell = row.children[3];
+    if (statusCell && !on) {
+      statusCell.innerHTML = '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>';
+    } else if (statusCell && on) {
+      const st = row.dataset.status || 'active';
+      const colors = {active:['rgba(16,185,129,0.12)','#059669'],draft:['rgba(107,114,128,0.1)','#6B7280'],'on hold':['rgba(245,158,11,0.12)','#D97706']};
+      const [bg,color] = colors[st] || colors.active;
+      const label2 = st.charAt(0).toUpperCase()+st.slice(1);
+      statusCell.innerHTML = '<span style="background:'+bg+';color:'+color+';font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">'+label2+'</span>';
+    }
   }
 
   // Save to localStorage immediately
@@ -3162,13 +3182,14 @@ window.toggleRowPublished = async function(btn, code) {
   existing.code = existing.code || code;
   localStorage.setItem(key, JSON.stringify(existing));
 
-  // Write to Firebase
+  // Write to Firebase — published field controls jobs visibility
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-  } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
-
-  toast((on ? 'Published' : 'Set to Draft') + ' — saved.', 'ok');
+    toast((on ? 'Published — now visible on jobs.nearwork.co' : 'Set to Private — removed from jobs page') + '.', 'ok');
+  } catch(e) {
+    toast((on ? 'Published' : 'Set to Private') + ' — saved locally.', 'ok');
+  }
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────

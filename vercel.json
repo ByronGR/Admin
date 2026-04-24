@@ -3,14 +3,6 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/dashboard/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
       "source": "/openings/:path*",
       "destination": "/dashboard.html"
     },
@@ -27,13 +19,38 @@
       "destination": "/dashboard.html"
     },
     {
-      "source": "/org/:path*",
+      "source": "/questions/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/skills/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/team",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/audit",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/assessments",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/hired",
       "destination": "/dashboard.html"
     }
   ],
   "redirects": [
     {
       "source": "/",
+      "destination": "/login",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard",
       "destination": "/login",
       "permanent": false
     }

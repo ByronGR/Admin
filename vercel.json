@@ -3,10 +3,6 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/login.html"
-    },
-    {
       "source": "/openings",
       "destination": "/dashboard.html"
     },
@@ -40,10 +36,6 @@
     },
     {
       "source": "/questions",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/questions/:path*",
       "destination": "/dashboard.html"
     },
     {

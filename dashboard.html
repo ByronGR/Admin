@@ -3508,9 +3508,14 @@ window.saveOpening = async function() {
   let savedToFirebase = false;
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
-    await setDoc(doc(db, 'openings', code), { ...data, savedAt: serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, 'openings', code), {
+      ...data,
+      updatedAt: serverTimestamp(),
+      // Only set createdAt if this is a new opening
+      ...(!data.createdAt_set && { createdAt: serverTimestamp(), createdAt_set: true }),
+    }, { merge: true });
     savedToFirebase = true;
-  } catch(e) { /* Firebase not configured in this file — expected */ }
+  } catch(e) { console.error('Firebase save error:', e.message); }
 
   localStorage.setItem('nw_opening_' + code, JSON.stringify(data));
   toast(savedToFirebase ? 'Opening saved to Firebase ✓' : 'Opening saved locally ✓', 'ok');
@@ -4230,7 +4235,8 @@ window.inviteTeamMember = async function() {
   errEl.style.display = 'none';
 
   if (!email) { errEl.textContent = 'Email is required.'; errEl.style.display = 'block'; return; }
-  if (!email.endsWith('@nearwork.co')) { errEl.textContent = 'Only @nearwork.co email addresses are allowed.'; errEl.style.display = 'block'; return; }
+  // Allow any email for admin users — domain restriction is optional
+  // if (!email.endsWith('@nearwork.co')) { errEl.textContent = 'Only @nearwork.co email addresses are allowed.'; errEl.style.display = 'block'; return; }
 
   const btn = document.getElementById('tm-invite-btn');
   btn.disabled = true;
@@ -5544,7 +5550,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <select id="no-exp"><option>Junior (0–2 yrs)</option><option selected>Mid (2–5 yrs)</option><option>Senior (5+ yrs)</option></select>
         </div>
         <div style="padding:11px 14px;background:var(--pp);border-radius:9px;font-size:11px;color:var(--g6);border:1px solid rgba(108,60,225,0.12);line-height:1.65;">
-          💡 You'll fill out the full job description, responsibilities, skills, and qualifications on the next screen after saving. <strong>The opening stays in Draft until you add at least 1 question in Step 2.</strong>
+          💡 You'll fill out the full job description, responsibilities, skills, and qualifications on the next screen after saving. You can add questions now or later from inside the opening.
         </div>
       </div>
       <div class="modal-footer">
@@ -5692,10 +5698,11 @@ window.wizardSaveAndOpen = async function() {
   const salMin    = document.getElementById('no-sal-min').value;
   const salMax    = document.getElementById('no-sal-max').value;
 
+  // Questions are optional at creation — warn but don't block
   if (_newOpeningQuestions.length === 0) {
-    document.getElementById('no-zero-warning').style.display = 'block';
-    toast('Add at least 1 question before saving.','bad');
-    return;
+    const warn = document.getElementById('no-zero-warning');
+    if (warn) warn.style.display = 'block';
+    // Don't return — allow saving without questions
   }
 
   const code = _wizardCode;
@@ -5711,12 +5718,25 @@ window.wizardSaveAndOpen = async function() {
     updatedAt: new Date().toISOString(),
   };
 
-  // Save to localStorage + Firebase
+  // Save to localStorage
   localStorage.setItem('nw_opening_' + code, JSON.stringify(data));
+
+  // Save to Firebase — use serverTimestamp for createdAt so Firestore queries work
+  let savedToFirebase = false;
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
-    await setDoc(doc(db, 'openings', code), { ...data, savedAt: serverTimestamp() }, { merge: true });
-  } catch(e) {}
+    await setDoc(doc(db, 'openings', code), {
+      ...data,
+      createdAt: serverTimestamp(),  // Firestore Timestamp — required for queries
+      updatedAt: serverTimestamp(),
+      savedAt:   serverTimestamp(),
+    }, { merge: false });  // merge:false = complete write, not partial
+    savedToFirebase = true;
+    toast('Opening saved to Firebase ✓', 'ok');
+  } catch(e) {
+    console.error('Firebase save failed:', e.message);
+    toast('Saved locally — Firebase error: ' + e.message, 'bad');
+  }
 
   closeModal('new-opening-wizard');
 

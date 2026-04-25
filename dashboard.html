@@ -603,26 +603,24 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // Route to correct page after auth
+  // Route to correct page after auth completes
   (function() {
-    const path = window.location.pathname;
+    var path = window.location.pathname;
     if (path.includes('/openings/open-')) {
-      const codeLower = path.split('/openings/')[1];
-      if (codeLower) {
-        const codeUpper = codeLower.toUpperCase();
-        const raw = localStorage.getItem('nw_opening_' + codeUpper);
-        if (raw) { try { const d = JSON.parse(raw); const st = (d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(()=>openOpeningDetail(d.code||codeUpper,d.title||'Opening',st,!!d.published,d.recruiter||'Byron Giraldo'),50); return; } catch(e){} }
-        setTimeout(()=>navTo('openings','Openings'),50); return;
-      }
+      var codeLower = path.split('/openings/')[1]; if (!codeLower) return;
+      var codeUpper = codeLower.toUpperCase();
+      var raw = localStorage.getItem('nw_opening_' + codeUpper);
+      if (raw) { try { var d=JSON.parse(raw); var st=(d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(function(){openOpeningDetail(d.code||codeUpper,d.title||'Opening',st,!!d.published,d.recruiter||'Byron Giraldo');},80); return; } catch(e){} }
+      setTimeout(function(){navTo('openings','Openings');},80); return;
     }
-    if (path.includes('/openings'))   { setTimeout(()=>navTo('openings','Openings'),50); return; }
-    if (path.includes('/orgs')||path.includes('/org/')) { setTimeout(()=>navTo('orgs','Organizations'),50); return; }
-    if (path.includes('/candidates')) { setTimeout(()=>navTo('candidates','Candidates'),50); return; }
-    if (path.includes('/pipeline'))   { setTimeout(()=>navTo('pipeline','Pipelines'),50); return; }
-    if (path.includes('/questions'))  { setTimeout(()=>navTo('question-bank','Question Bank'),50); return; }
-    if (path.includes('/skills'))     { setTimeout(()=>navTo('skills','Skills'),50); return; }
-    if (path.includes('/team'))       { setTimeout(()=>{ navTo('team','Team'); loadTeamFromFirestore(); },50); return; }
-    if (path.includes('/audit'))      { setTimeout(()=>navTo('audit','Audit Log'),50); return; }
+    if (path.includes('/openings'))   { setTimeout(function(){navTo('openings','Openings');},80); return; }
+    if (path.includes('/orgs')||path.includes('/org/')) { setTimeout(function(){navTo('orgs','Organizations');},80); return; }
+    if (path.includes('/candidates')) { setTimeout(function(){navTo('candidates','Candidates');},80); return; }
+    if (path.includes('/pipeline'))   { setTimeout(function(){navTo('pipeline','Pipelines');},80); return; }
+    if (path.includes('/questions'))  { setTimeout(function(){navTo('question-bank','Question Bank');},80); return; }
+    if (path.includes('/skills'))     { setTimeout(function(){navTo('skills','Skills');},80); return; }
+    if (path.includes('/team'))       { setTimeout(function(){navTo('team','Team');},80); return; }
+    if (path.includes('/audit'))      { setTimeout(function(){navTo('audit','Audit Log');},80); return; }
   })();
   // Update nav avatar initials
   if (profile.name) {
@@ -2124,7 +2122,7 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div></div>div>
+    <div class="team-grid" id="team-grid">    </div>
   </div>
 
   <!-- ══════════════════════════════
@@ -3086,8 +3084,8 @@ function upsertOpeningRow(code, data) {
   const codeLower = code.toLowerCase();
   let row = list.querySelector('.ot-row[data-code="' + codeLower + '"]');
   const title    = data.title || code;
-  const _raw = data['sb-status'] || data.status || 'active';
-  const status = (_raw === 'draft' && data.published) ? 'active' : _raw;
+  const _rawst = data['sb-status'] || data.status || 'active';
+  const status = (_rawst === 'draft' && data.published) ? 'active' : _rawst;
   const recruiter = data.recruiter || 'Byron Giraldo';
   const published = data.published;
   const statusBadgeMap = {
@@ -3162,7 +3160,7 @@ window.toggleRowPublished = async function(btn, code) {
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-    toast(on ? '✓ Published — live on jobs page' : '✓ Unpublished — hidden from jobs page', 'ok');
+    toast(on ? '✓ Published — live on jobs page' : '✓ Set to Private — hidden from jobs page', 'ok');
   } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
@@ -4303,17 +4301,17 @@ function loadPipelineInline(url) {
 
 <script>
 async function loadTeamFromFirestore() {
-  const grid = document.getElementById('team-grid');
+  var grid = document.getElementById('team-grid');
   if (!grid) return;
   grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>';
   try {
-    const mod = await import('./firebase-config.js');
-    const snap = await mod.getDocs(mod.collection(mod.db, 'users'));
-    const members = snap.docs.map(d => ({id:d.id,...d.data()}));
+    var mod = await import('./firebase-config.js');
+    var snap = await mod.getDocs(mod.collection(mod.db, 'users'));
+    var members = snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
     if (!members.length) { grid.innerHTML='<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">No team members found.</div>'; return; }
-    const rg={super_admin:'linear-gradient(135deg,var(--purple),var(--pl))',admin:'linear-gradient(135deg,#3D1FA8,#6C3CE1)',sr_recruiter:'linear-gradient(135deg,#10B981,#059669)',recruiter:'linear-gradient(135deg,#10B981,#059669)'};
-    const rl={super_admin:'Super Admin',admin:'Admin',sr_recruiter:'Sr. Recruiter',recruiter:'Recruiter'};
-    const rb={super_admin:'b-dark',admin:'b-purple',sr_recruiter:'b-green',recruiter:'b-green'};
+    var rg={super_admin:'linear-gradient(135deg,#6C3CE1,#3D1FA8)',admin:'linear-gradient(135deg,#3D1FA8,#6C3CE1)',sr_recruiter:'linear-gradient(135deg,#10B981,#059669)',recruiter:'linear-gradient(135deg,#10B981,#059669)'};
+    var rl={super_admin:'Super Admin',admin:'Admin',sr_recruiter:'Sr. Recruiter',recruiter:'Recruiter'};
+    var rb={super_admin:'b-dark',admin:'b-purple',sr_recruiter:'b-green',recruiter:'b-green'};
     grid.innerHTML = members.map(function(m) {
       var first=m.firstName||(m.name||'').split(' ')[0]||'?';
       var last=m.lastName||(m.name||'').split(' ').slice(1).join(' ')||'';
@@ -4327,7 +4325,7 @@ async function loadTeamFromFirestore() {
     }).join('');
   } catch(e) { grid.innerHTML='<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Error: '+e.message+'</div>'; }
 }
-const _origNavTo=window.navTo||navTo;
-window.navTo=function(id,label){ _origNavTo(id,label); if(id==='team') loadTeamFromFirestore(); };
+var _origNavTo2 = window.navTo || navTo;
+window.navTo = function(id, label) { _origNavTo2(id, label); if (id==='team') loadTeamFromFirestore(); };
 </script>
 </body>

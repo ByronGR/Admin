@@ -216,4 +216,23 @@
     if (id === 'team') window.loadTeamFromFirestore();
   };
  
+ 
+  // ── 7. Fix ALL toggle buttons via event delegation ───────────────────────
+  // Dynamically created rows (from wizard) have wrong inline onclick.
+  // This catches ALL toggle clicks and routes them through toggleRowPublished.
+  document.addEventListener('click', function(e) {
+    var btn = e.target;
+    if (!btn.classList.contains('toggle')) return;
+    // Only handle if it's inside a pub-toggle inside an ot-row
+    var row = btn.closest('.ot-row');
+    if (!row) return;
+    var code = row.dataset.code;
+    if (!code) return;
+    // Remove the inline onclick to prevent double-firing
+    btn.onclick = null;
+    // Call our fixed version
+    window.toggleRowPublished(btn, code.toUpperCase());
+    e.stopPropagation();
+  }, true); // capture phase — runs before inline onclick
+ 
 })();

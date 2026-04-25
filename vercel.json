@@ -7,75 +7,15 @@
       "destination": "/login.html"
     },
     {
-      "source": "/",
-      "destination": "/login.html"
+      "source": "/firebase-config.js",
+      "destination": "/firebase-config.js"
     },
     {
-      "source": "/openings/:path*",
-      "destination": "/dashboard.html"
+      "source": "/patch.js",
+      "destination": "/patch.js"
     },
     {
-      "source": "/openings",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/orgs/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/orgs",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/candidates/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/candidates",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/pipeline/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/pipeline",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/questions",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/skills",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/team",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/audit",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/assessments",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/hired",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/blog",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/dashboard/:path*",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/dashboard",
+      "source": "/(.*)",
       "destination": "/dashboard.html"
     }
   ]

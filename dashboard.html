@@ -603,24 +603,6 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // Route to correct page after auth
-  (function(){
-    var p=window.location.pathname;
-    if(p.includes('/openings/open-')){
-      var c=p.split('/openings/')[1].toUpperCase();
-      var r=localStorage.getItem('nw_opening_'+c);
-      if(r){try{var d=JSON.parse(r);setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,(d.status==='draft'&&d.published)?'active':d.status||'active',!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}
-      setTimeout(function(){navTo('openings','Openings');},80);return;
-    }
-    if(p.includes('/openings')){setTimeout(function(){navTo('openings','Openings');},80);return;}
-    if(p.includes('/orgs')||p.includes('/org')){setTimeout(function(){navTo('orgs','Organizations');},80);return;}
-    if(p.includes('/candidates')){setTimeout(function(){navTo('candidates','Candidates');},80);return;}
-    if(p.includes('/pipeline')){setTimeout(function(){navTo('pipeline','Pipelines');},80);return;}
-    if(p.includes('/questions')){setTimeout(function(){navTo('question-bank','Question Bank');},80);return;}
-    if(p.includes('/skills')){setTimeout(function(){navTo('skills','Skills');},80);return;}
-    if(p.includes('/team')){setTimeout(function(){navTo('team','Team');},80);return;}
-    if(p.includes('/audit')){setTimeout(function(){navTo('audit','Audit Log');},80);return;}
-  })();
   // Update nav avatar initials
   if (profile.name) {
     const initials = profile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
@@ -1564,10 +1546,10 @@ onAuthStateChanged(auth, async user => {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
       <button class="btn btn-ghost btn-sm" onclick="leaveOpeningPage()">← Back to openings</button>
       <div style="display:flex;gap:8px;align-items:center;">
-        <span id="od-draft-chip" style="display:none;font-size:10px;font-weight:700;color:var(--amber);background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);padding:3px 10px;border-radius:99px;">● Unsaved draft</span>
+        <span id="od-draft-chip" style="display:none;font-size:11px;font-weight:600;color:var(--amber);background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);padding:4px 12px;border-radius:99px;">● Unsaved changes</span>
+        <button id="od-visibility-btn" onclick="toggleOpeningVisibility()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .2s;border:1.5px solid var(--g3);background:#fff;color:var(--g6);"><span id="od-vis-icon">👁</span><span id="od-vis-label">Set private</span></button>
         <button class="btn btn-ghost btn-sm" id="od-edit-btn" onclick="toggleOpeningEdit()">✏️ Edit</button>
-        <button class="btn btn-ghost btn-sm" id="od-visibility-btn" onclick="toggleOpeningVisibility()">👁 Set private</button>
-        <button class="btn btn-p btn-sm" id="od-save-btn" style="display:none;" onclick="saveOpening()">Save opening</button>
+        <button class="btn btn-p btn-sm" id="od-save-btn" style="display:none;" onclick="saveOpening()">💾 Save changes</button>
       </div>
     </div>
 
@@ -2728,7 +2710,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   }
 
   document.querySelectorAll('.opening-edit-btn').forEach(b => b.style.display = 'none');
-  document.getElementById('od-edit-btn').textContent = '✏️ Edit';
+  document.getElementById('od-edit-btn').textContent = '✏️ Edit opening';
   document.getElementById('od-draft-chip').style.display = 'none';
   document.getElementById('od-save-btn').style.display = 'none';
   setSidebarEditMode(false);
@@ -2765,7 +2747,7 @@ window.openNewOpening = function() {
   document.getElementById('od-save-btn').style.display = 'inline-flex';
 
   _openingEditMode = true;
-  document.getElementById('od-edit-btn').textContent = '✓ Done editing';
+  document.getElementById('od-edit-btn').textContent = '✕ Cancel editing';
   document.querySelectorAll('.opening-edit-btn').forEach(b => b.style.display = 'inline-block');
   setSidebarEditMode(true);
   ['title','skills-chips','meta'].forEach(id => {
@@ -2779,7 +2761,7 @@ window.openNewOpening = function() {
 
 window.toggleOpeningEdit = function() {
   _openingEditMode = !_openingEditMode;
-  document.getElementById('od-edit-btn').textContent = _openingEditMode ? '✓ Done editing' : '✏️ Edit';
+  document.getElementById('od-edit-btn').textContent = _openingEditMode ? '✕ Cancel editing' : '✏️ Edit opening';
   document.querySelectorAll('.opening-edit-btn').forEach(b => { b.style.display = _openingEditMode ? 'inline-block' : 'none'; });
   setSidebarEditMode(_openingEditMode);
   ['title','skills-chips','meta'].forEach(id => {
@@ -2880,9 +2862,18 @@ window.leaveOpeningPage = async function() {
 window.toggleOpeningVisibility = function() { togglePubVisibility(); };
 
 window.togglePubVisibility = async function() {
+  // Update the top bar visibility button label
+  const visBtn  = document.getElementById('od-visibility-btn');
+  const visIcon  = document.getElementById('od-vis-icon');
+  const visLabel = document.getElementById('od-vis-label');
   const btn = document.getElementById('osb-pub-toggle');
   const lbl = document.getElementById('osb-pub-label');
   if (!btn) return;
+  // Sync top bar button after toggle
+  const _isOn = btn.classList.contains('on');
+  if (visIcon)  visIcon.textContent  = !_isOn ? '👁' : '🌐';
+  if (visLabel) visLabel.textContent = !_isOn ? 'Set private' : 'Publish opening';
+  if (visBtn) { visBtn.style.borderColor = !_isOn ? 'var(--green)' : 'var(--g3)'; visBtn.style.color = !_isOn ? 'var(--green)' : 'var(--g6)'; }
   btn.classList.toggle('on');
   const on = btn.classList.contains('on');
   lbl.textContent = on ? 'Published' : 'Private';
@@ -4321,5 +4312,4 @@ function loadPipelineInline(url) {
   </div>
 </div>
 
-<script src="/patch.js"></script>
 </body>

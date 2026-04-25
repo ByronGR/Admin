@@ -7,10 +7,6 @@
       "destination": "/login"
     },
     {
-      "source": "/firebase-config.js",
-      "destination": "/firebase-config.js"
-    },
-    {
       "source": "/patch.js",
       "destination": "/patch.js"
     },

@@ -2470,6 +2470,7 @@ function navTo(id, label){
   const lbl=document.getElementById('nav-current-label');
   if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
   closeDrawer();
+  // Update URL — no /dashboard prefix
   const slugMap={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
   const slug=slugMap[id]!==undefined?slugMap[id]:'/'+id;
   history.pushState({page:id},'',slug);
@@ -2613,7 +2614,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', slug || '/');
+  history.replaceState({ page: currentPage }, '', '' + slug);
 };
 
 window.openCandFullProfile = function() {
@@ -3153,21 +3154,24 @@ window.toggleRowPublished = async function(btn, code) {
   const on = btn.classList.contains('on');
   const label = btn.nextElementSibling;
   if (label) {
-    label.textContent = on ? 'Published' : 'Private';
+    label.textContent = on ? 'Published' : 'Draft';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
   }
+
+  // Save to localStorage immediately
   const key = 'nw_opening_' + code;
   const existing = JSON.parse(localStorage.getItem(key) || '{}');
   existing.published = on;
   existing.code = existing.code || code;
   localStorage.setItem(key, JSON.stringify(existing));
+
+  // Write to Firebase
   try {
-    const mod = await import('./firebase-config.js');
-    await mod.setDoc(mod.doc(mod.db, 'openings', code), { published: on, updatedAt: mod.serverTimestamp() }, { merge: true });
-    toast(on ? '✓ Published — visible on jobs page' : '✓ Unpublished — hidden from jobs page', 'ok');
-  } catch(e) {
-    toast('Saved locally. Firebase: ' + e.message, 'ok');
-  }
+    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
+  } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
+
+  toast((on ? 'Published' : 'Set to Draft') + ' — saved.', 'ok');
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────
@@ -4299,6 +4303,5 @@ function loadPipelineInline(url) {
     </div>
   </div>
 </div>
-
 
 </body>

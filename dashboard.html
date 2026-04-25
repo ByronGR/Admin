@@ -3282,7 +3282,7 @@ window.toggleRowPublished = async function(btn, code) {
     setTimeout(() => navTo('openings', 'Openings'), 80);
     return;
   }
-  if (path.includes('/org/')) {
+  if (path.includes('/orgs') || path.includes('/org/')) {
     setTimeout(() => navTo('orgs', 'Organizations'), 80);
     return;
   }
@@ -3294,8 +3294,36 @@ window.toggleRowPublished = async function(btn, code) {
     setTimeout(() => navTo('pipeline', 'Pipelines'), 80);
     return;
   }
+  if (path.includes('/questions')) {
+    setTimeout(() => navTo('question-bank', 'Question Bank'), 80);
+    return;
+  }
+  if (path.includes('/skills')) {
+    setTimeout(() => navTo('skills', 'Skills'), 80);
+    return;
+  }
+  if (path.includes('/team')) {
+    setTimeout(() => navTo('team', 'Team'), 80);
+    return;
+  }
+  if (path.includes('/audit')) {
+    setTimeout(() => navTo('audit', 'Audit Log'), 80);
+    return;
+  }
+  if (path.includes('/assessments')) {
+    setTimeout(() => navTo('assessments', 'Assessments'), 80);
+    return;
+  }
+  if (path.includes('/hired')) {
+    setTimeout(() => navTo('hired', 'Hired'), 80);
+    return;
+  }
+  if (path.includes('/blog')) {
+    setTimeout(() => navTo('blog', 'Blog'), 80);
+    return;
+  }
 
-  // Default: dashboard — ensure clean state pushed
+  // Default: stay on dashboard
   history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 

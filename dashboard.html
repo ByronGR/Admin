@@ -2853,7 +2853,7 @@ window.leaveOpeningPage = async function() {
       };
       localStorage.setItem('nw_opening_' + code, JSON.stringify(draftData));
       try {
-        const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+        const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
         await setDoc(doc(db, 'openings', code), { ...draftData, savedAt: serverTimestamp() }, { merge: true });
       } catch(e) {}
       // Make sure the row appears in the list
@@ -2911,7 +2911,7 @@ window.togglePubVisibility = async function() {
     } catch(e) {}
     // Write to Firebase immediately without waiting for full save
     try {
-      const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+      const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
       await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
     } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
   }
@@ -2981,7 +2981,7 @@ window.archiveOpening = async function(code) {
     const newData = { status: 'on hold', archivedAt: null };
     localStorage.setItem('nw_opening_' + code, JSON.stringify({ ...(JSON.parse(localStorage.getItem('nw_opening_' + code) || '{}')), ...newData }));
     try {
-      const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+      const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
       await setDoc(doc(db, 'openings', code), { ...newData, updatedAt: serverTimestamp() }, { merge: true });
     } catch(e) {}
     // Update the button text in the row
@@ -3005,7 +3005,7 @@ window.archiveOpening = async function(code) {
   const ex  = JSON.parse(localStorage.getItem(key) || '{}');
   localStorage.setItem(key, JSON.stringify({ ...ex, status: 'archived', archivedAt: new Date().toISOString() }));
   try {
-    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'openings', code), { status: 'archived', archivedAt: serverTimestamp() }, { merge: true });
     toast('Opening archived in Firebase. Click "Restore" to undo.', 'ok');
   } catch(e) {
@@ -3075,7 +3075,7 @@ window.saveOpening = async function() {
   // Try Firebase, fall back to localStorage
   let savedToFirebase = false;
   try {
-    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'openings', code), { ...data, savedAt: serverTimestamp() }, { merge: true });
     savedToFirebase = true;
   } catch(e) { /* Firebase not configured in this file — expected */ }
@@ -3172,7 +3172,7 @@ window.toggleRowPublished = async function(btn, code) {
 
   // Write to Firebase
   try {
-    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, status: on ? 'active' : 'draft', updatedAt: serverTimestamp() }, { merge: true });
     toast(on ? '✓ Published — visible on jobs page' : '✓ Set to Private', 'ok');
   } catch(e) { toast('Saved locally. Firebase error: ' + e.message, 'ok'); }
@@ -3424,7 +3424,7 @@ function filterOrgs() {
 
 function signOut(){
   toast('Signing out...','');
-  import('./firebase-config.js').then(({auth, signOut: firebaseSignOut}) => {
+  import('/firebase-config.js').then(({auth, signOut: firebaseSignOut}) => {
     firebaseSignOut(auth).then(() => { window.location.href = '/login'; });
   });
 }
@@ -3735,7 +3735,7 @@ window.openModal = function(id) {
 window.suspendOrg = async function(orgId, slug, name) {
   if (!confirm(\`Suspend \${name}? Their client users will be blocked from logging in.\`)) return;
   try {
-    const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
+    const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
     const badge = document.getElementById('status-' + slug);
     if (badge) { badge.textContent = 'Suspended'; badge.className = 'badge b-red'; }
@@ -3749,7 +3749,7 @@ window.suspendOrg = async function(orgId, slug, name) {
 
 window.reactivateOrg = async function(orgId, slug, name) {
   try {
-    const { db, doc, setDoc } = await import('./firebase-config.js');
+    const { db, doc, setDoc } = await import('/firebase-config.js');
     await setDoc(doc(db, 'organizations', orgId), { status: 'active', suspendedAt: null }, { merge: true });
     const badge = document.getElementById('status-' + slug);
     if (badge) { badge.textContent = 'Active'; badge.className = 'badge b-green'; }
@@ -3778,7 +3778,7 @@ window.inviteTeamMember = async function() {
   btn.innerHTML = '<span class="spin" style="border-top-color:#fff;"></span>Sending...';
 
   try {
-    const { auth, db, createUserWithEmailAndPassword, sendPasswordResetEmail, saveUserProfile, serverTimestamp } = await import('./firebase-config.js');
+    const { auth, db, createUserWithEmailAndPassword, sendPasswordResetEmail, saveUserProfile, serverTimestamp } = await import('/firebase-config.js');
     const tempPw = 'Nw!' + Math.random().toString(36).slice(2, 10);
     const cred = await createUserWithEmailAndPassword(auth, email, tempPw);
     await saveUserProfile(cred.user.uid, {
@@ -4201,7 +4201,7 @@ window.saveEditOrg = function() {
 
   // If a logo file was selected, upload to Firebase Storage
   if (_editOrgLogoFile && _editOrgKey) {
-    import('./firebase-config.js').then(({ storage }) => {
+    import('/firebase-config.js').then(({ storage }) => {
       import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js').then(({ ref, uploadBytes, getDownloadURL }) => {
         const storageRef = ref(storage, 'org-logos/' + _editOrgKey + '.' + _editOrgLogoFile.name.split('.').pop());
         uploadBytes(storageRef, _editOrgLogoFile).then(snapshot => {

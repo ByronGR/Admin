@@ -605,16 +605,7 @@ onAuthStateChanged(auth, async user => {
   document.getElementById('auth-guard').remove();
   (function(){
     var p=window.location.pathname;
-    if(p.indexOf('/orgs/')>-1){
-      var slug=p.split('/orgs/')[1].split('/')[0];
-      if(slug){
-        var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};
-        var od=om[slug];
-        if(!od){try{var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null');if(lo&&lo.slug===slug)od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status];}catch(e){}}
-        if(od){setTimeout(function(){openOrgDetail.apply(null,od);},80);return;}
-        setTimeout(function(){navTo('orgs','Organizations');},80);return;
-      }
-    }
+    if(p.indexOf('/orgs/')>-1){var slug=p.split('/orgs/')[1].split('/')[0];if(slug){var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};var od=om[slug];if(!od){try{var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null');if(lo&&lo.slug===slug)od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status];}catch(e){}}if(od){setTimeout(function(){openOrgDetail.apply(null,od);},80);return;}setTimeout(function(){navTo('orgs','Organizations');},80);return;}}
     if(p.indexOf('/openings/open-')>-1){var c=p.split('/openings/')[1].toUpperCase();var r=localStorage.getItem('nw_opening_'+c);if(r){try{var d=JSON.parse(r);var st=(d.status==='draft'&&d.published)?'active':(d.status||'active');setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}setTimeout(function(){navTo('openings','Openings');},80);return;}
     var routes=[['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
     for(var i=0;i<routes.length;i++){if(p.indexOf(routes[i][0])>-1){(function(pg,lb){setTimeout(function(){navTo(pg,lb);},80);})(routes[i][1],routes[i][2]);return;}}
@@ -1489,15 +1480,65 @@ onAuthStateChanged(auth, async user => {
     <div class="openings-table" id="openings-list">
       <div class="ot-hdr"><div>Position</div><div>Code</div><div>Recruiter</div><div>Status</div><div>Published</div><div>Actions</div></div>
 
-      
+      <div class="ot-row" data-title="customer success manager" data-code="open-csm-4x8b" data-status="active" data-recruiter="byron giraldo" onclick="openOpeningDetail('OPEN-CSM-4X8B','Customer Success Manager','active',true,'Byron Giraldo')">
+        <div><div class="ot-role">Customer Success Manager</div><div class="ot-code copyable" data-copy="OPEN-CSM-4X8B" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">OPEN-CSM-4X8B</div></div>
+        <div class="ot-code">OPEN-CSM-4X8B</div>
+        <div style="font-size:12px;">Byron Giraldo</div>
+        <div><span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span></div>
+        <div onclick="event.stopPropagation()"><div class="pub-toggle"><button class="toggle on" onclick="toggleRowPublished(this,'OPEN-CSM-4X8B')" ></button><span style="color:var(--green);font-size:11px;">Published</span></div></div>
+        <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+          <button class="btn btn-p btn-sm" onclick="openOpeningDetail('OPEN-CSM-4X8B','Customer Success Manager','active',true,'Byron Giraldo')">View</button>
+          <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail('OPEN-CSM-4X8B','Customer Success Manager','active',true,'Byron Giraldo',true)">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveOpening('OPEN-CSM-4X8B')" title="Archive (soft delete)">Archive</button></div>
+      </div>
 
-      
+      <div class="ot-row" data-title="sdr sales development rep" data-code="open-sdr-9k2m" data-status="active" data-recruiter="byron giraldo" onclick="openOpeningDetail('OPEN-SDR-9K2M','SDR / Sales Development Rep','active',true,'Byron Giraldo')">
+        <div><div class="ot-role">SDR / Sales Development Rep</div><div class="ot-code copyable" data-copy="OPEN-SDR-9K2M" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">OPEN-SDR-9K2M</div></div>
+        <div class="ot-code">OPEN-SDR-9K2M</div>
+        <div style="font-size:12px;">Byron Giraldo</div>
+        <div><span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span></div>
+        <div onclick="event.stopPropagation()"><div class="pub-toggle"><button class="toggle on" onclick="toggleRowPublished(this,'OPEN-SDR-9K2M')" ></button><span style="color:var(--green);font-size:11px;">Published</span></div></div>
+        <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+          <button class="btn btn-p btn-sm" onclick="openOpeningDetail('OPEN-SDR-9K2M','SDR / Sales Development Rep','active',true,'Byron Giraldo')">View</button>
+          <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail('OPEN-SDR-9K2M','SDR / Sales Development Rep','active',true,'Byron Giraldo',true)">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveOpening('OPEN-SDR-9K2M')" title="Archive (soft delete)">Archive</button></div>
+      </div>
 
-      
+      <div class="ot-row" data-title="technical support specialist" data-code="open-sup-3b7r" data-status="on hold" data-recruiter="nany salcedo" onclick="openOpeningDetail('OPEN-SUP-3B7R','Technical Support Specialist','on hold',false,'Nany Salcedo')">
+        <div><div class="ot-role">Technical Support Specialist</div><div class="ot-code copyable" data-copy="OPEN-SUP-3B7R" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">OPEN-SUP-3B7R</div></div>
+        <div class="ot-code">OPEN-SUP-3B7R</div>
+        <div style="font-size:12px;">Nany Salcedo</div>
+        <div><span style="background:rgba(245,158,11,0.12);color:#D97706;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">On hold</span></div>
+        <div onclick="event.stopPropagation()"><div class="pub-toggle"><button class="toggle" onclick="toggleRowPublished(this,'OPEN-SUP-3B7R')" ></button><span style="color:var(--g4);font-size:11px;">Draft</span></div></div>
+        <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+          <button class="btn btn-p btn-sm" onclick="openOpeningDetail('OPEN-SUP-3B7R','Technical Support Specialist','on hold',false,'Nany Salcedo')">View</button>
+          <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail('OPEN-SUP-3B7R','Technical Support Specialist','on hold',false,'Nany Salcedo',true)">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveOpening('OPEN-SUP-3B7R')" title="Archive (soft delete)">Archive</button></div>
+      </div>
 
-      
+      <div class="ot-row" data-title="operations manager" data-code="open-ops-5p2w" data-status="active" data-recruiter="andres garcia" onclick="openOpeningDetail('OPEN-OPS-5P2W','Operations Manager','active',true,'Andres García')">
+        <div><div class="ot-role">Operations Manager</div><div class="ot-code copyable" data-copy="OPEN-OPS-5P2W" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">OPEN-OPS-5P2W</div></div>
+        <div class="ot-code">OPEN-OPS-5P2W</div>
+        <div style="font-size:12px;">Andres García</div>
+        <div><span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span></div>
+        <div onclick="event.stopPropagation()"><div class="pub-toggle"><button class="toggle on" onclick="toggleRowPublished(this,'OPEN-OPS-5P2W')" ></button><span style="color:var(--green);font-size:11px;">Published</span></div></div>
+        <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+          <button class="btn btn-p btn-sm" onclick="openOpeningDetail('OPEN-OPS-5P2W','Operations Manager','active',true,'Andres García')">View</button>
+          <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail('OPEN-OPS-5P2W','Operations Manager','active',true,'Andres García',true)">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveOpening('OPEN-OPS-5P2W')" title="Archive (soft delete)">Archive</button></div>
+      </div>
 
-      
+      <div class="ot-row" data-title="marketing ops specialist" data-code="open-mkt-7q4n" data-status="on hold" data-recruiter="byron giraldo" onclick="openOpeningDetail('OPEN-MKT-7Q4N','Marketing Ops Specialist','on hold',false,'Byron Giraldo')">
+        <div><div class="ot-role">Marketing Ops Specialist</div><div class="ot-code copyable" data-copy="OPEN-MKT-7Q4N" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">OPEN-MKT-7Q4N</div></div>
+        <div class="ot-code">OPEN-MKT-7Q4N</div>
+        <div style="font-size:12px;">Byron Giraldo</div>
+        <div><span style="background:rgba(245,158,11,0.12);color:#D97706;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">On hold</span></div>
+        <div onclick="event.stopPropagation()"><div class="pub-toggle"><button class="toggle" onclick="toggleRowPublished(this,'OPEN-MKT-7Q4N')" ></button><span style="color:var(--g4);font-size:11px;">Draft</span></div></div>
+        <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+          <button class="btn btn-p btn-sm" onclick="openOpeningDetail('OPEN-MKT-7Q4N','Marketing Ops Specialist','on hold',false,'Byron Giraldo')">View</button>
+          <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail('OPEN-MKT-7Q4N','Marketing Ops Specialist','on hold',false,'Byron Giraldo',true)">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="archiveOpening('OPEN-MKT-7Q4N')" title="Archive (soft delete)">Archive</button></div>
+      </div>
 
       <div id="openings-empty" style="display:none;padding:32px;text-align:center;font-size:13px;color:var(--g4);">No openings match your filters.</div>
     </div>
@@ -2069,7 +2110,8 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>
+    <div class="team-grid">
+      <div class="team-card">
         <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,var(--purple),var(--pl));">BG</div><div><div class="tc-name">Byron Giraldo</div><div class="tc-role">Super Admin · CEO</div></div></div>
         <div class="tc-stats">
           <div class="tcs"><div class="tcs-n">4</div><div class="tcs-l">Active openings</div></div>
@@ -2928,18 +2970,6 @@ window.copyCode = function(el) {
 window._isSuperAdmin = true; // Will be set to false for non-super-admin users after auth
 
 // ── Archive / Unarchive (soft-delete, super admin can restore) ──────────────
-window.deleteOpening = async function(code) {
-  if (!confirm('Permanently delete ' + code + '? This cannot be undone.')) return;
-  const row = document.querySelector('.ot-row[data-code="' + code.toLowerCase() + '"]');
-  if (row) row.remove();
-  localStorage.removeItem('nw_opening_' + code);
-  try {
-    const { db, doc, deleteDoc } = await import('/firebase-config.js');
-    await deleteDoc(doc(db, 'openings', code));
-    toast('Opening ' + code + ' deleted.', 'ok');
-  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
-};
-
 window.archiveOpening = async function(code) {
   const row = document.querySelector('.ot-row[data-code="' + code.toLowerCase() + '"]');
   const isArchived = row?.dataset.status === 'archived';
@@ -3132,10 +3162,8 @@ window.toggleRowPublished = async function(btn, code) {
   if (label) {
     label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
-    const row = btn.closest('.ot-row');
-    if (row && row.children[3]) {
-      row.children[3].innerHTML = on ? '<span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>' : '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>';
-    }
+    const _row = btn.closest('.ot-row');
+    if (_row && _row.children[3]) { _row.children[3].innerHTML = on ? '<span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>' : '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>'; }
   }
 
   // Save to localStorage immediately
@@ -3450,20 +3478,6 @@ window.goOrgStep = function(step) {
 
 
 /* ── Open org detail page ── */
-window.deleteOrg = async function(orgId, name) {
-  if (!window._isSuperAdmin) { toast('Only super admins can delete organizations.', 'bad'); return; }
-  if (!confirm('Permanently delete ' + name + '? This cannot be undone.')) return;
-  try {
-    const { db, doc, deleteDoc } = await import('/firebase-config.js');
-    await deleteDoc(doc(db, 'organizations', orgId));
-    const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g,'-');
-    const row = document.getElementById('org-' + slug.replace(/org-/,'').replace(/-[^-]+$/,''));
-    if (row) row.remove();
-    toast(name + ' deleted.', 'ok');
-    navTo('orgs','Organizations');
-  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
-};
-
 window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   // Populate header
   document.getElementById('od-logo').textContent = initials;
@@ -3754,7 +3768,6 @@ window.inviteTeamMember = async function() {
   }
 };
 
-</script>
 
 <!-- Add user to org modal -->
 <div class="modal-bg" id="add-org-user-modal" onclick="if(event.target===this)closeModal('add-org-user-modal')">
@@ -3800,6 +3813,7 @@ window.inviteTeamMember = async function() {
     </div>
   </div>
 </div>
+</script>
 
 <!-- Drag & Drop confirmation overlay -->
 <div class="drag-confirm" id="drag-confirm">

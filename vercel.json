@@ -1,3 +1,6 @@
+
+Copy
+
 {
   "cleanUrls": true,
   "trailingSlash": false,
@@ -7,8 +10,8 @@
       "destination": "/login.html"
     },
     {
-      "source": "/dashboard/:path*",
-      "destination": "/dashboard.html"
+      "source": "/",
+      "destination": "/login.html"
     },
     {
       "source": "/openings/:path*",
@@ -68,6 +71,14 @@
     },
     {
       "source": "/blog",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard",
       "destination": "/dashboard.html"
     }
   ]

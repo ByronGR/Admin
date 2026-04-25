@@ -1,6 +1,6 @@
 (function() {
  
-  // ── Fix event delegation for ALL toggle buttons ──────────────────────────
+  // ── 1. Toggle event delegation ────────────────────────────────────────────
   document.addEventListener('click', function(e) {
     var btn = e.target;
     if (!btn.classList.contains('toggle')) return;
@@ -13,44 +13,66 @@
     e.stopPropagation();
   }, true);
  
-  // ── Fix status badges from localStorage on load ───────────────────────────
-  function fixRows() {
-    for (var i = 0; i < localStorage.length; i++) {
-      var key = localStorage.key(i);
-      if (!key || key.indexOf('nw_opening_') !== 0) continue;
-      try {
-        var d = JSON.parse(localStorage.getItem(key));
-        if (!d || !d.code) continue;
-        var row = document.querySelector('.ot-row[data-code="' + d.code.toLowerCase() + '"]');
-        if (!row) continue;
-        var pub = !!d.published;
-        var st  = d.status || 'draft';
-        // Fix toggle
-        var tb = row.querySelector('.toggle');
-        var tl = tb && tb.nextElementSibling;
-        if (tb) { if (pub) tb.classList.add('on'); else tb.classList.remove('on'); }
-        if (tl) { tl.textContent = pub ? 'Published' : 'Private'; tl.style.color = pub ? 'var(--green)' : 'var(--g4)'; }
-        // Fix status badge
-        var sc = row.children[3];
-        if (sc) {
-          var ds = (st === 'draft' && pub) ? 'active' : st;
-          var bm = {
-            'active':   ['Active',   'rgba(16,185,129,0.12)', '#059669'],
-            'on hold':  ['On hold',  'rgba(245,158,11,0.12)', '#D97706'],
-            'draft':    ['Draft',    'rgba(107,114,128,0.1)', '#6B7280'],
-            'private':  ['Private',  'rgba(107,114,128,0.1)', '#6B7280'],
-            'archived': ['Archived', 'rgba(107,114,128,0.08)','#9CA3AF'],
-          };
-          var b = bm[ds] || bm['draft'];
-          sc.innerHTML = '<span style="background:'+b[1]+';color:'+b[2]+';font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">'+b[0]+'</span>';
-        }
-      } catch(e) {}
-    }
-  }
-  setTimeout(fixRows, 500);
-  setTimeout(fixRows, 1500);
+  // ── 2. Load status from Firebase for each opening row ────────────────────
+  async function loadOpeningStatuses() {
+    try {
+      var mod = await import('./firebase-config.js');
+      var rows = document.querySelectorAll('.ot-row[data-code]');
+      rows.forEach(async function(row) {
+        var code = row.dataset.code.toUpperCase();
+        try {
+          var snap = await mod.getDoc(mod.doc(mod.db, 'openings', code));
+          if (!snap.exists()) return;
+          var data = snap.data();
+          var status = data.status || 'draft';
+          var published = !!data.published;
  
-  // ── Team loader from Firestore ────────────────────────────────────────────
+          // Update toggle
+          var tb = row.querySelector('.toggle');
+          var tl = tb && tb.nextElementSibling;
+          if (tb) { if (published) tb.classList.add('on'); else tb.classList.remove('on'); }
+          if (tl) { tl.textContent = published ? 'Published' : 'Private'; tl.style.color = published ? 'var(--green)' : 'var(--g4)'; }
+ 
+          // Update status badge
+          var sc = row.children[3];
+          if (sc) {
+            var ds = (status === 'draft' && published) ? 'active' : status;
+            var bm = {
+              'active':   ['Active',   'rgba(16,185,129,0.12)', '#059669'],
+              'on hold':  ['On hold',  'rgba(245,158,11,0.12)', '#D97706'],
+              'draft':    ['Draft',    'rgba(107,114,128,0.1)', '#6B7280'],
+              'private':  ['Private',  'rgba(107,114,128,0.1)', '#6B7280'],
+              'archived': ['Archived', 'rgba(107,114,128,0.08)','#9CA3AF'],
+            };
+            var b = bm[ds] || bm['draft'];
+            sc.innerHTML = '<span style="background:'+b[1]+';color:'+b[2]+';font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">'+b[0]+'</span>';
+          }
+ 
+          // Update localStorage to match Firebase
+          var key = 'nw_opening_' + code;
+          var existing = JSON.parse(localStorage.getItem(key) || '{}');
+          existing.published = published;
+          existing.status = status;
+          existing.code = existing.code || code;
+          localStorage.setItem(key, JSON.stringify(existing));
+ 
+        } catch(e) {}
+      });
+    } catch(e) {}
+  }
+ 
+  // Run after page loads
+  setTimeout(loadOpeningStatuses, 800);
+ 
+  // Also run when openings page is shown
+  var _origNavTo = window.navTo;
+  window.navTo = function(id, label) {
+    _origNavTo(id, label);
+    if (id === 'openings') setTimeout(loadOpeningStatuses, 400);
+    if (id === 'team') window.loadTeamFromFirestore();
+  };
+ 
+  // ── 3. Team loader — only @nearwork.co users ──────────────────────────────
   window.loadTeamFromFirestore = async function() {
     var grid = document.getElementById('team-grid');
     if (!grid) return;
@@ -58,7 +80,16 @@
     try {
       var mod = await import('./firebase-config.js');
       var snap = await mod.getDocs(mod.collection(mod.db, 'users'));
-      var members = snap.docs.map(function(d) { return Object.assign({id:d.id}, d.data()); });
+      var members = snap.docs
+        .map(function(d) { return Object.assign({id:d.id}, d.data()); })
+        .filter(function(m) {
+          // Only show nearwork.co staff — exclude candidates and client users
+          var email = m.email || '';
+          var role = m.role || '';
+          var adminRoles = ['admin','super_admin','sr_recruiter','recruiter'];
+          return adminRoles.indexOf(role) > -1 || email.indexOf('@nearwork.co') > -1;
+        });
+ 
       if (!members.length) {
         grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">No team members found.</div>';
         return;
@@ -80,15 +111,8 @@
           + '<div class="tc-actions"><button class="btn btn-ghost btn-sm">Edit access</button></div></div>';
       }).join('');
     } catch(e) {
-      grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Error loading team: '+e.message+'</div>';
+      grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Error: '+e.message+'</div>';
     }
-  };
- 
-  // Load team when navigating to team page
-  var _origNavTo = window.navTo;
-  window.navTo = function(id, label) {
-    _origNavTo(id, label);
-    if (id === 'team') window.loadTeamFromFirestore();
   };
  
 })();

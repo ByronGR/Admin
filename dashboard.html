@@ -606,7 +606,7 @@ onAuthStateChanged(auth, async user => {
   (function(){
     var p=window.location.pathname;
     if(p.startsWith('/dashboard'))p=p.slice(10)||'/';
-    if(p.match(/\/orgs\/[a-z0-9-]+/)){
+    if(p.indexOf('/orgs/') > -1 && p.split('/orgs/')[1]){
       var sl=p.split('/orgs/')[1].split('/')[0];
       var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};
       var od=om[sl];

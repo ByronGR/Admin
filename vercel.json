@@ -4,15 +4,47 @@
   "rewrites": [
     {
       "source": "/login",
-      "destination": "/login"
+      "destination": "/login.html"
     },
     {
-      "source": "/dashboard/(.*)",
-      "destination": "/dashboard"
+      "source": "/firebase-config.js",
+      "destination": "/firebase-config.js"
+    },
+    {
+      "source": "/patch.js",
+      "destination": "/patch.js"
     },
     {
       "source": "/(.*)",
-      "destination": "/dashboard"
+      "destination": "/dashboard.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/firebase-config.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
+    },
+    {
+      "source": "/patch.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
     }
   ]
 }

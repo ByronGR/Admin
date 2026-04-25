@@ -2471,7 +2471,7 @@ function navTo(id, label){
   if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
   closeDrawer();
   // Update URL
-  const _m={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
+  const _m={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired',blog:'/blog'};
   history.pushState({page:id},'',_m[id]!==undefined?_m[id]:'/'+id);
 }
 function toggleDrawer(){
@@ -3273,24 +3273,19 @@ window.toggleRowPublished = async function(btn, code) {
     }
   }
 
-  if (path.includes('/openings')) {
-    setTimeout(() => navTo('openings', 'Openings'), 80);
-    return;
-  }
-  if (path.includes('/org/')) {
-    setTimeout(() => navTo('orgs', 'Organizations'), 80);
-    return;
-  }
-  if (path.includes('/candidates')) {
-    setTimeout(() => navTo('candidates', 'Candidates'), 80);
-    return;
-  }
-  if (path.includes('/pipeline')) {
-    setTimeout(() => navTo('pipeline', 'Pipelines'), 80);
-    return;
-  }
+  if (path.includes('/openings')) { setTimeout(() => navTo('openings', 'Openings'), 80); return; }
+  if (path.includes('/orgs') || path.includes('/org/')) { setTimeout(() => navTo('orgs', 'Organizations'), 80); return; }
+  if (path.includes('/candidates')) { setTimeout(() => navTo('candidates', 'Candidates'), 80); return; }
+  if (path.includes('/pipeline')) { setTimeout(() => navTo('pipeline', 'Pipelines'), 80); return; }
+  if (path.includes('/questions')) { setTimeout(() => navTo('question-bank', 'Question Bank'), 80); return; }
+  if (path.includes('/skills')) { setTimeout(() => navTo('skills', 'Skills'), 80); return; }
+  if (path.includes('/team')) { setTimeout(() => navTo('team', 'Team'), 80); return; }
+  if (path.includes('/audit')) { setTimeout(() => navTo('audit', 'Audit Log'), 80); return; }
+  if (path.includes('/assessments')) { setTimeout(() => navTo('assessments', 'Assessments'), 80); return; }
+  if (path.includes('/hired')) { setTimeout(() => navTo('hired', 'Hired'), 80); return; }
+  if (path.includes('/blog')) { setTimeout(() => navTo('blog', 'Blog'), 80); return; }
 
-  // Default: dashboard — ensure clean state pushed
+  // Default: stay on dashboard
   history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 

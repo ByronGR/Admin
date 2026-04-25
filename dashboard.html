@@ -603,26 +603,36 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
+  // Route to correct page based on URL
   (function(){
-    var p=window.location.pathname;
-    if(p.startsWith('/dashboard'))p=p.slice(10)||'/';
-    if(p.indexOf('/orgs/') > -1 && p.split('/orgs/')[1]){
-      var sl=p.split('/orgs/')[1].split('/')[0];
-      var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};
-      var od=om[sl];
-      if(!od){try{var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null');if(lo&&lo.slug===sl)od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status];}catch(e){}}
-      if(od)setTimeout(function(){openOrgDetail.apply(null,od);},80);
-      else setTimeout(function(){navTo('orgs','Organizations');},80);
-      return;
+    var p = window.location.pathname;
+    if (p.indexOf('/orgs/') > -1) {
+      var slug = p.split('/orgs/')[1].split('/')[0];
+      if (slug) {
+        var om = {
+          'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
+          'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
+          'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']
+        };
+        var od = om[slug];
+        if (!od) { try { var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null'); if(lo&&lo.slug===slug) od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status]; } catch(e){} }
+        if (od) { setTimeout(function(){ openOrgDetail.apply(null,od); }, 80); return; }
+        setTimeout(function(){ navTo('orgs','Organizations'); }, 80); return;
+      }
     }
-    if(p.includes('/openings/open-')){
-      var c=p.split('/openings/')[1].toUpperCase();
-      var r=localStorage.getItem('nw_opening_'+c);
-      if(r){try{var d=JSON.parse(r);var st=(d.status==='draft'&&d.published)?'active':(d.status||'active');setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}
-      setTimeout(function(){navTo('openings','Openings');},80);return;
+    if (p.indexOf('/openings/open-') > -1) {
+      var c = p.split('/openings/')[1].toUpperCase();
+      var r = localStorage.getItem('nw_opening_'+c);
+      if (r) { try { var d=JSON.parse(r); var st=(d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(function(){ openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo'); },80); return; } catch(e){} }
+      setTimeout(function(){ navTo('openings','Openings'); },80); return;
     }
-    var routes=[['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
-    for(var i=0;i<routes.length;i++){if(p.includes(routes[i][0])){(function(pg,lb){setTimeout(function(){navTo(pg,lb);},80);})(routes[i][1],routes[i][2]);return;}}
+    var routes = [['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
+    for (var i=0;i<routes.length;i++) {
+      if (p.indexOf(routes[i][0]) > -1) {
+        (function(pg,lb){ setTimeout(function(){ navTo(pg,lb); },80); })(routes[i][1],routes[i][2]);
+        return;
+      }
+    }
   })();
   // Update nav avatar initials
   if (profile.name) {
@@ -2124,34 +2134,9 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid">
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,var(--purple),var(--pl));">BG</div><div><div class="tc-name">Byron Giraldo</div><div class="tc-role">Super Admin · CEO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">4</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">3</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-dark">Super Admin</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" style="opacity:.4;cursor:not-allowed;">Edit (you)</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#10B981,#059669);">NS</div><div><div class="tc-name">Nany Salcedo</div><div class="tc-role">Recruiter · COO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-purple">Recruiter</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#F59E0B,#D97706);">AG</div><div><div class="tc-name">Andres García</div><div class="tc-role">Recruiter · CQO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-amber">Limited access</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
+    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div></div>
+
+  
     </div>
   </div>
 
@@ -3174,7 +3159,7 @@ window.toggleRowPublished = async function(btn, code) {
   const on = btn.classList.contains('on');
   const label = btn.nextElementSibling;
   if (label) {
-    label.textContent = on ? 'Published' : 'Draft';
+    label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
   }
 
@@ -3188,10 +3173,9 @@ window.toggleRowPublished = async function(btn, code) {
   // Write to Firebase
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
-    await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-  } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
-
-  toast((on ? 'Published' : 'Set to Draft') + ' — saved.', 'ok');
+    await setDoc(doc(db, 'openings', code), { published: on, status: on ? 'active' : 'draft', updatedAt: serverTimestamp() }, { merge: true });
+    toast(on ? '✓ Published — visible on jobs page' : '✓ Set to Private', 'ok');
+  } catch(e) { toast('Saved locally. Firebase error: ' + e.message, 'ok'); }
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────
@@ -3519,7 +3503,7 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   // Push URL — override the one navTo just pushed so it includes the org slug
   const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
   history.replaceState({ page: 'org-detail', orgId, name }, '', '/orgs/' + slug);
-  try { localStorage.setItem('nw_last_org', JSON.stringify({ orgId, name, domain, initials, plan, status, slug })); } catch(e) {}
+  try { localStorage.setItem('nw_last_org', JSON.stringify({orgId,name,domain,initials,plan,status,slug})); } catch(e) {}
 };
 
 /* ── Org detail tab switcher ── */
@@ -4325,4 +4309,5 @@ function loadPipelineInline(url) {
   </div>
 </div>
 
+<script src="/patch.js"></script>
 </body>

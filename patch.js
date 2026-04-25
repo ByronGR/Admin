@@ -16,7 +16,7 @@
   // ── 2. Load ALL opening data from Firebase and sync rows ──────────────────
   async function syncOpeningsFromFirebase() {
     try {
-      var mod = await import('./firebase-config.js');
+      var mod = await import('/firebase-config.js');
       var rows = document.querySelectorAll('.ot-row[data-code]');
       if (!rows.length) return;
  
@@ -99,7 +99,7 @@
     if (!grid) return;
     grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>';
     try {
-      var mod = await import('./firebase-config.js');
+      var mod = await import('/firebase-config.js');
       var snap = await mod.getDocs(mod.collection(mod.db, 'users'));
       var adminRoles = ['admin','super_admin','sr_recruiter','recruiter'];
       var members = snap.docs

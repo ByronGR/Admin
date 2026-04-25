@@ -17,9 +17,11 @@
   async function loadOpeningStatuses() {
     try {
       var mod = await import('./firebase-config.js');
+      // Also try to get all published openings at once for efficiency
       var rows = document.querySelectorAll('.ot-row[data-code]');
       rows.forEach(async function(row) {
-        var code = row.dataset.code.toUpperCase();
+        var code = row.dataset.code ? row.dataset.code.toUpperCase() : '';
+        if (!code) return;
         try {
           var snap = await mod.getDoc(mod.doc(mod.db, 'openings', code));
           if (!snap.exists()) return;

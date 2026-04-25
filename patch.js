@@ -1,6 +1,6 @@
 // Nearwork Admin — Runtime Patch v3
 (function() {
-
+ 
   // ── 1. Fix toggleRowPublished ────────────────────────────────────────────
   window.toggleRowPublished = async function(btn, code) {
     btn.classList.toggle('on');
@@ -24,7 +24,7 @@
       toast(on ? '✓ Published — visible on jobs page' : '✓ Private — hidden from jobs page', 'ok');
     } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
   };
-
+ 
   // ── 2. Event delegation — fix ALL toggle buttons including dynamic rows ──
   document.addEventListener('click', function(e) {
     var btn = e.target;
@@ -37,7 +37,7 @@
     window.toggleRowPublished(btn, code.toUpperCase());
     e.stopPropagation();
   }, true);
-
+ 
   // ── 3. Fix openOrgDetail URL + store org data for refresh ──────────────
   var _origOpenOrgDetail = window.openOrgDetail;
   if (_origOpenOrgDetail) {
@@ -52,20 +52,21 @@
       orgMap[slug] = [orgId, name, domain, initials, plan, status];
     };
   }
-
+ 
   // ── 4. Route after auth completes (MutationObserver) ────────────────────
   var orgMap = {
     'org-cs01': ['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
     'org-at02': ['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
     'org-nd03': ['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold'],
   };
-
+ 
   var observer = new MutationObserver(function() {
     if (!document.getElementById('auth-guard')) {
       observer.disconnect();
       var p = window.location.pathname;
+      console.log('[NW] Auth complete, routing for path:', p);
       if (p.startsWith('/dashboard')) p = p.slice(10) || '/';
-
+ 
       // Specific opening
       if (p.includes('/openings/open-')) {
         var c = p.split('/openings/')[1].toUpperCase();
@@ -73,29 +74,38 @@
         if (raw) { try { var d=JSON.parse(raw); var st=(d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(function(){ openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo'); },80); return; } catch(e){} }
         setTimeout(function(){ navTo('openings','Openings'); },80); return;
       }
-
+ 
       // Specific org — go directly to org detail, skip orgs list entirely
       if (p.match(/^\/orgs\/[a-z0-9-]+/)) {
         var slug2 = p.split('/orgs/')[1].split('/')[0];
+        console.log('[NW] Org slug detected:', slug2);
         var orgData = orgMap[slug2];
+        console.log('[NW] orgMap lookup:', orgData ? 'found' : 'not found');
         // Also check localStorage for orgs opened during this session
         if (!orgData) {
           try {
             var lastOrg = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
+            console.log('[NW] localStorage nw_last_org:', lastOrg);
             if (lastOrg && lastOrg.slug === slug2) {
               orgData = [lastOrg.orgId, lastOrg.name, lastOrg.domain, lastOrg.initials, lastOrg.plan, lastOrg.status];
+              console.log('[NW] Using localStorage org data');
             }
-          } catch(e) {}
+          } catch(e) { console.log('[NW] localStorage error:', e); }
         }
         if (orgData) {
+          console.log('[NW] Opening org detail with:', orgData[0]);
           showPage('orgs');
-          setTimeout(function(){ openOrgDetail.apply(null, orgData); }, 100);
+          setTimeout(function(){ 
+            console.log('[NW] Calling openOrgDetail now');
+            openOrgDetail.apply(null, orgData); 
+          }, 100);
           return;
         }
+        console.log('[NW] No org data found, going to orgs list');
         setTimeout(function(){ navTo('orgs','Organizations'); }, 80);
         return;
       }
-
+ 
       var routes = [
         ['/openings',   'openings',     'Openings'],
         // /orgs without slug — show list; /orgs/slug handled above
@@ -119,7 +129,7 @@
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
-
+ 
   // ── 5. Fix status badges from localStorage ───────────────────────────────
   function fixRows() {
     for (var i=0; i<localStorage.length; i++) {
@@ -144,7 +154,7 @@
     }
   }
   setTimeout(fixRows,300); setTimeout(fixRows,1000);
-
+ 
   // ── 6. Fix upsertOpeningRow status normalization ──────────────────────────
   var _origUpsert = window.upsertOpeningRow;
   if (_origUpsert) {
@@ -154,7 +164,7 @@
       _origUpsert(code, d);
     };
   }
-
+ 
   // ── 7. Edit pipeline stages modal ────────────────────────────────────────
   // Create the modal and inject it
   var editPipelineModal = document.createElement('div');
@@ -177,7 +187,7 @@
       </div>
     </div>`;
   document.body.appendChild(editPipelineModal);
-
+ 
   var DEFAULT_STAGES = [
     { id:'applied',       name:'Applied',         locked:true  },
     { id:'profile-review',name:'Profile Review',  locked:false },
@@ -188,7 +198,7 @@
     { id:'hired',         name:'Hired',            locked:true  },
     { id:'denied',        name:'Denied',           locked:true  },
   ];
-
+ 
   // Override openModal to populate stage list
   var _origOpenModal = window.openModal;
   window.openModal = function(id) {
@@ -222,7 +232,7 @@
     }
     _origOpenModal(id);
   };
-
+ 
   window.savePipelineStages = function() {
     var rows = document.querySelectorAll('#edit-stages-list .stage-row');
     var stages = Array.from(rows).map(function(r) {
@@ -234,7 +244,7 @@
     closeModal('edit-pipeline-modal');
     toast('Pipeline stages saved ✓','ok');
   };
-
+ 
   // ── 8. Team page loader ───────────────────────────────────────────────────
   window.loadTeamFromFirestore = async function() {
     var grid = document.getElementById('team-grid');
@@ -256,11 +266,11 @@
       }).join('');
     } catch(e) { grid.innerHTML='<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Error: '+e.message+'</div>'; }
   };
-
+ 
   // Wire team load into navTo
   var _nt = window.navTo;
   window.navTo = function(id, label) { _nt(id, label); if (id==='team') window.loadTeamFromFirestore(); };
-
+ 
   // ── 9. Visibility button sync on opening detail ───────────────────────────
   var _origOpenDetail = window.openOpeningDetail;
   if (_origOpenDetail) {
@@ -274,5 +284,5 @@
       },50);
     };
   }
-
+ 
 })();

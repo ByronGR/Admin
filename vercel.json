@@ -7,11 +7,11 @@
       "destination": "/login.html"
     },
     {
-      "source": "/dashboard/(.*)",
+      "source": "/dashboard/:path*",
       "destination": "/dashboard.html"
     },
     {
-      "source": "/openings/(.*)",
+      "source": "/openings/:path*",
       "destination": "/dashboard.html"
     },
     {
@@ -19,7 +19,7 @@
       "destination": "/dashboard.html"
     },
     {
-      "source": "/orgs/(.*)",
+      "source": "/orgs/:path*",
       "destination": "/dashboard.html"
     },
     {
@@ -27,7 +27,15 @@
       "destination": "/dashboard.html"
     },
     {
+      "source": "/candidates/:path*",
+      "destination": "/dashboard.html"
+    },
+    {
       "source": "/candidates",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/pipeline/:path*",
       "destination": "/dashboard.html"
     },
     {

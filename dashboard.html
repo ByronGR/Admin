@@ -3519,7 +3519,7 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   // Stat strip plan
   document.getElementById('od-stat-plan').textContent = plan;
   // Reset to pipeline tab
-  odTab(document.querySelector('.od-tab'), 'od-panel-pipeline');
+  odTab(document.querySelector('.od-tabs .od-tab'), 'od-panel-pipeline');
   // Navigate to org-detail page
   navTo('org-detail', name);
   document.getElementById('nav-current-label').textContent = name;

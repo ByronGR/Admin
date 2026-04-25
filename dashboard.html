@@ -603,68 +603,26 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // ── Route to correct page based on URL ──
-  (function() {
-    var p = window.location.pathname;
-    if (p.startsWith('/dashboard')) p = p.slice(10) || '/';
-
-    // Specific opening
-    if (p.includes('/openings/open-')) {
-      var c = p.split('/openings/')[1].toUpperCase();
-      var raw = localStorage.getItem('nw_opening_' + c);
-      if (raw) {
-        try {
-          var d = JSON.parse(raw);
-          var st = (d.status === 'draft' && d.published) ? 'active' : (d.status || 'active');
-          setTimeout(function() { openOpeningDetail(d.code||c, d.title||c, st, !!d.published, d.recruiter||'Byron Giraldo'); }, 80);
-          return;
-        } catch(e) {}
-      }
-      setTimeout(function() { navTo('openings','Openings'); }, 80);
+  (function(){
+    var p=window.location.pathname;
+    if(p.startsWith('/dashboard'))p=p.slice(10)||'/';
+    if(p.match(/\/orgs\/[a-z0-9-]+/)){
+      var sl=p.split('/orgs/')[1].split('/')[0];
+      var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};
+      var od=om[sl];
+      if(!od){try{var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null');if(lo&&lo.slug===sl)od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status];}catch(e){}}
+      if(od)setTimeout(function(){openOrgDetail.apply(null,od);},80);
+      else setTimeout(function(){navTo('orgs','Organizations');},80);
       return;
     }
-
-    // Specific org
-    if (p.match(/\/orgs\/[a-z0-9-]+/)) {
-      var slug = p.split('/orgs/')[1].split('/')[0];
-      var orgMap = {
-        'org-cs01': ['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
-        'org-at02': ['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
-        'org-nd03': ['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold'],
-      };
-      var orgData = orgMap[slug];
-      if (!orgData) {
-        try {
-          var lo = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
-          if (lo && lo.slug === slug) orgData = [lo.orgId, lo.name, lo.domain, lo.initials, lo.plan, lo.status];
-        } catch(e) {}
-      }
-      if (orgData) { setTimeout(function() { openOrgDetail.apply(null, orgData); }, 80); }
-      else { setTimeout(function() { navTo('orgs','Organizations'); }, 80); }
-      return;
+    if(p.includes('/openings/open-')){
+      var c=p.split('/openings/')[1].toUpperCase();
+      var r=localStorage.getItem('nw_opening_'+c);
+      if(r){try{var d=JSON.parse(r);var st=(d.status==='draft'&&d.published)?'active':(d.status||'active');setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}
+      setTimeout(function(){navTo('openings','Openings');},80);return;
     }
-
-    // All other pages
-    var routes = [
-      ['/openings',    function(){ navTo('openings','Openings'); }],
-      ['/orgs',        function(){ navTo('orgs','Organizations'); }],
-      ['/candidates',  function(){ navTo('candidates','Candidates'); }],
-      ['/pipeline',    function(){ navTo('pipeline','Pipelines'); }],
-      ['/questions',   function(){ navTo('question-bank','Question Bank'); }],
-      ['/skills',      function(){ navTo('skills','Skills'); }],
-      ['/team',        function(){ navTo('team','Team'); }],
-      ['/audit',       function(){ navTo('audit','Audit Log'); }],
-      ['/assessments', function(){ navTo('assessments','Assessments'); }],
-      ['/hired',       function(){ navTo('hired','Hired'); }],
-      ['/blog',        function(){ navTo('blog','Blog'); }],
-    ];
-    for (var i = 0; i < routes.length; i++) {
-      if (p.includes(routes[i][0])) {
-        setTimeout(routes[i][1], 80);
-        return;
-      }
-    }
-    // Default: stay on dashboard
+    var routes=[['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
+    for(var i=0;i<routes.length;i++){if(p.includes(routes[i][0])){(function(pg,lb){setTimeout(function(){navTo(pg,lb);},80);})(routes[i][1],routes[i][2]);return;}}
   })();
   // Update nav avatar initials
   if (profile.name) {
@@ -3558,7 +3516,8 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   // Navigate to org-detail page
   navTo('org-detail', name);
   document.getElementById('nav-current-label').textContent = name;
-  var slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  // Push URL — override the one navTo just pushed so it includes the org slug
+  const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
   history.replaceState({ page: 'org-detail', orgId, name }, '', '/orgs/' + slug);
   try { localStorage.setItem('nw_last_org', JSON.stringify({ orgId, name, domain, initials, plan, status, slug })); } catch(e) {}
 };

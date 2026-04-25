@@ -235,4 +235,24 @@
     e.stopPropagation();
   }, true); // capture phase — runs before inline onclick
  
+ 
+  // ── 8. Sync visibility button label when opening detail loads ────────────
+  var _origOpenDetail = window.openOpeningDetail;
+  if (_origOpenDetail) {
+    window.openOpeningDetail = function(code, title, status, published, recruiter, editMode) {
+      _origOpenDetail(code, title, status, published, recruiter, editMode);
+      setTimeout(function() {
+        var vIcon  = document.getElementById('od-vis-icon');
+        var vLabel = document.getElementById('od-vis-label');
+        var vBtn   = document.getElementById('od-visibility-btn');
+        if (vIcon)  vIcon.textContent  = published ? '👁' : '🌐';
+        if (vLabel) vLabel.textContent = published ? 'Set private' : 'Publish opening';
+        if (vBtn) {
+          vBtn.style.borderColor = published ? 'var(--green)' : 'var(--g3)';
+          vBtn.style.color       = published ? 'var(--green)' : 'var(--g6)';
+        }
+      }, 50);
+    };
+  }
+ 
 })();

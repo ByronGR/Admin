@@ -2103,34 +2103,8 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid">
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,var(--purple),var(--pl));">BG</div><div><div class="tc-name">Byron Giraldo</div><div class="tc-role">Super Admin · CEO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">4</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">3</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-dark">Super Admin</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" style="opacity:.4;cursor:not-allowed;">Edit (you)</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#10B981,#059669);">NS</div><div><div class="tc-name">Nany Salcedo</div><div class="tc-role">Recruiter · COO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-purple">Recruiter</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#F59E0B,#D97706);">AG</div><div><div class="tc-name">Andres García</div><div class="tc-role">Recruiter · CQO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-amber">Limited access</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
+    <div class="team-grid" id="team-grid">
+      <div style="padding:32px;text-align:center;color:var(--g4);font-size:13px);grid-column:1/-1;">Loading team...</div>
     </div>
   </div>
 
@@ -2470,10 +2444,10 @@ function navTo(id, label){
   const lbl=document.getElementById('nav-current-label');
   if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
   closeDrawer();
-  // Update URL — no /dashboard prefix
-  const slugMap={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
-  const slug=slugMap[id]!==undefined?slugMap[id]:'/'+id;
-  history.pushState({page:id},'',slug);
+  const _sm={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
+  history.pushState({page:id},'',_sm[id]!==undefined?_sm[id]:'/'+id);
+  // Load dynamic data when navigating to certain pages
+  if (id === 'team') loadTeamFromFirestore();
 }
 function toggleDrawer(){
   document.getElementById('drawer').classList.toggle('open');
@@ -2614,7 +2588,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', '' + slug);
+  history.replaceState({ page: currentPage }, '', slug || '/');
 };
 
 window.openCandFullProfile = function() {
@@ -3169,9 +3143,8 @@ window.toggleRowPublished = async function(btn, code) {
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-  } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
-
-  toast((on ? 'Published' : 'Set to Draft') + ' — saved.', 'ok');
+    toast(on ? '✓ Published' : '✓ Unpublished', 'ok');
+  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────
@@ -4303,5 +4276,44 @@ function loadPipelineInline(url) {
     </div>
   </div>
 </div>
-
+<script>
+async function loadTeamFromFirestore() {
+  const grid = document.getElementById('team-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>';
+  try {
+    const mod = await import('./firebase-config.js');
+    const snap = await mod.getDocs(mod.collection(mod.db, 'users'));
+    const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!members.length) {
+      grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">No team members found.</div>';
+      return;
+    }
+    const roleColors = { super_admin:'linear-gradient(135deg,var(--purple),var(--pl))', admin:'linear-gradient(135deg,#3D1FA8,#6C3CE1)', sr_recruiter:'linear-gradient(135deg,#10B981,#059669)', recruiter:'linear-gradient(135deg,#10B981,#059669)', client_admin:'linear-gradient(135deg,#F59E0B,#D97706)' };
+    const roleLabels = { super_admin:'Super Admin', admin:'Admin', sr_recruiter:'Sr. Recruiter', recruiter:'Recruiter', client_admin:'Client Admin' };
+    const badgeColors = { super_admin:'b-dark', admin:'b-purple', sr_recruiter:'b-green', recruiter:'b-green', recruiter_limited:'b-amber' };
+    grid.innerHTML = members.map(m => {
+      const first = m.firstName || (m.name||'').split(' ')[0] || '?';
+      const last  = m.lastName  || (m.name||'').split(' ').slice(1).join(' ') || '';
+      const name  = (first + ' ' + last).trim() || m.email || m.id;
+      const initials = ((first[0]||'') + (last[0]||'')).toUpperCase() || '??';
+      const role  = m.role || 'recruiter';
+      const grad  = roleColors[role] || 'linear-gradient(135deg,#6B7280,#9CA3AF)';
+      const rlbl  = roleLabels[role] || role;
+      const badge = badgeColors[role] || 'b-amber';
+      const email = m.email || '';
+      return `<div class="team-card">
+        <div class="tc-top"><div class="tc-av" style="background:${grad};">${initials}</div><div><div class="tc-name">${name}</div><div class="tc-role">${rlbl}</div></div></div>
+        <div style="font-size:11px;color:var(--g5);margin-bottom:10px;word-break:break-all;">${email}</div>
+        <div style="margin-bottom:10px;"><span class="badge ${badge}">${rlbl}</span></div>
+        <div class="tc-actions"><button class="btn btn-ghost btn-sm">Edit access</button></div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = `<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Could not load team: ${e.message}</div>`;
+  }
+}
+// Load on page init if already on team page
+if (window.location.pathname.startsWith('/team')) loadTeamFromFirestore();
+</script>
 </body>

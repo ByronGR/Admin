@@ -603,36 +603,21 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // Route to correct page based on URL
   (function(){
-    var p = window.location.pathname;
-    if (p.indexOf('/orgs/') > -1) {
-      var slug = p.split('/orgs/')[1].split('/')[0];
-      if (slug) {
-        var om = {
-          'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
-          'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
-          'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']
-        };
-        var od = om[slug];
-        if (!od) { try { var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null'); if(lo&&lo.slug===slug) od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status]; } catch(e){} }
-        if (od) { setTimeout(function(){ openOrgDetail.apply(null,od); }, 80); return; }
-        setTimeout(function(){ navTo('orgs','Organizations'); }, 80); return;
+    var p=window.location.pathname;
+    if(p.indexOf('/orgs/')>-1){
+      var slug=p.split('/orgs/')[1].split('/')[0];
+      if(slug){
+        var om={'org-cs01':['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],'org-at02':['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],'org-nd03':['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold']};
+        var od=om[slug];
+        if(!od){try{var lo=JSON.parse(localStorage.getItem('nw_last_org')||'null');if(lo&&lo.slug===slug)od=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status];}catch(e){}}
+        if(od){setTimeout(function(){openOrgDetail.apply(null,od);},80);return;}
+        setTimeout(function(){navTo('orgs','Organizations');},80);return;
       }
     }
-    if (p.indexOf('/openings/open-') > -1) {
-      var c = p.split('/openings/')[1].toUpperCase();
-      var r = localStorage.getItem('nw_opening_'+c);
-      if (r) { try { var d=JSON.parse(r); var st=(d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(function(){ openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo'); },80); return; } catch(e){} }
-      setTimeout(function(){ navTo('openings','Openings'); },80); return;
-    }
-    var routes = [['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
-    for (var i=0;i<routes.length;i++) {
-      if (p.indexOf(routes[i][0]) > -1) {
-        (function(pg,lb){ setTimeout(function(){ navTo(pg,lb); },80); })(routes[i][1],routes[i][2]);
-        return;
-      }
-    }
+    if(p.indexOf('/openings/open-')>-1){var c=p.split('/openings/')[1].toUpperCase();var r=localStorage.getItem('nw_opening_'+c);if(r){try{var d=JSON.parse(r);var st=(d.status==='draft'&&d.published)?'active':(d.status||'active');setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,st,!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}setTimeout(function(){navTo('openings','Openings');},80);return;}
+    var routes=[['/openings','openings','Openings'],['/orgs','orgs','Organizations'],['/candidates','candidates','Candidates'],['/pipeline','pipeline','Pipelines'],['/questions','question-bank','Question Bank'],['/skills','skills','Skills'],['/team','team','Team'],['/audit','audit','Audit Log'],['/assessments','assessments','Assessments'],['/hired','hired','Hired'],['/blog','blog','Blog']];
+    for(var i=0;i<routes.length;i++){if(p.indexOf(routes[i][0])>-1){(function(pg,lb){setTimeout(function(){navTo(pg,lb);},80);})(routes[i][1],routes[i][2]);return;}}
   })();
   // Update nav avatar initials
   if (profile.name) {
@@ -960,7 +945,6 @@ onAuthStateChanged(auth, async user => {
           <button class="btn btn-ghost btn-sm" onclick="openEditOrg('crestline','Crestline SaaS','crestline.io','Essential',5,'Active')">Edit org</button>
           <button class="btn btn-p btn-sm" id="od-view-btn" onclick="impersonate('Crestline SaaS')">👁 View as client</button>
           <button class="btn btn-danger btn-sm" id="od-suspend-btn" onclick="suspendOrg('ORG-CS01','crestline','Crestline SaaS')">Suspend</button>
-          <button class="btn btn-danger btn-sm" id="od-delete-btn" style="background:#7f1d1d;border-color:#7f1d1d;" onclick="deleteOrg(_currentOrg?.orgId||'ORG-CS01', _currentOrg?.name||'this org')">🗑 Delete</button>
         </div>
       </div>
     </div>
@@ -1506,8 +1490,18 @@ onAuthStateChanged(auth, async user => {
       <div class="ot-hdr"><div>Position</div><div>Code</div><div>Recruiter</div><div>Status</div><div>Published</div><div>Actions</div></div>
 
       
-    </div><!-- end openings-list -->
-  </div><!-- end page-openings -->
+
+      
+
+      
+
+      
+
+      
+
+      <div id="openings-empty" style="display:none;padding:32px;text-align:center;font-size:13px;color:var(--g4);">No openings match your filters.</div>
+    </div>
+  </div>
 
   <!-- ══════════════════════════════
        OPENING DETAIL / EDIT
@@ -2075,9 +2069,33 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div></div>
-
-  
+    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>
+        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,var(--purple),var(--pl));">BG</div><div><div class="tc-name">Byron Giraldo</div><div class="tc-role">Super Admin · CEO</div></div></div>
+        <div class="tc-stats">
+          <div class="tcs"><div class="tcs-n">4</div><div class="tcs-l">Active openings</div></div>
+          <div class="tcs"><div class="tcs-n">3</div><div class="tcs-l">Orgs assigned</div></div>
+        </div>
+        <div style="margin-bottom:10px;"><span class="badge b-dark">Super Admin</span></div>
+        <div class="tc-actions"><button class="btn btn-ghost btn-sm" style="opacity:.4;cursor:not-allowed;">Edit (you)</button></div>
+      </div>
+      <div class="team-card">
+        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#10B981,#059669);">NS</div><div><div class="tc-name">Nany Salcedo</div><div class="tc-role">Recruiter · COO</div></div></div>
+        <div class="tc-stats">
+          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Active openings</div></div>
+          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Orgs assigned</div></div>
+        </div>
+        <div style="margin-bottom:10px;"><span class="badge b-purple">Recruiter</span></div>
+        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
+      </div>
+      <div class="team-card">
+        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#F59E0B,#D97706);">AG</div><div><div class="tc-name">Andres García</div><div class="tc-role">Recruiter · CQO</div></div></div>
+        <div class="tc-stats">
+          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Active openings</div></div>
+          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Orgs assigned</div></div>
+        </div>
+        <div style="margin-bottom:10px;"><span class="badge b-amber">Limited access</span></div>
+        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
+      </div>
     </div>
   </div>
 
@@ -2911,20 +2929,15 @@ window._isSuperAdmin = true; // Will be set to false for non-super-admin users a
 
 // ── Archive / Unarchive (soft-delete, super admin can restore) ──────────────
 window.deleteOpening = async function(code) {
-  if (!confirm('Permanently delete ' + code + '?\n\nThis cannot be undone. The opening and all related data will be removed from Firebase.')) return;
-  // Remove from DOM
+  if (!confirm('Permanently delete ' + code + '? This cannot be undone.')) return;
   const row = document.querySelector('.ot-row[data-code="' + code.toLowerCase() + '"]');
   if (row) row.remove();
-  // Remove from localStorage
   localStorage.removeItem('nw_opening_' + code);
-  // Delete from Firebase
   try {
     const { db, doc, deleteDoc } = await import('/firebase-config.js');
     await deleteDoc(doc(db, 'openings', code));
-    toast('Opening ' + code + ' permanently deleted.', 'ok');
-  } catch(e) {
-    toast('Deleted locally. Firebase error: ' + e.message, 'ok');
-  }
+    toast('Opening ' + code + ' deleted.', 'ok');
+  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
 window.archiveOpening = async function(code) {
@@ -3119,18 +3132,9 @@ window.toggleRowPublished = async function(btn, code) {
   if (label) {
     label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
-  }
-
-  // Update status badge immediately in the row
-  const row = btn.closest('.ot-row');
-  if (row) {
-    const sc = row.children[3];
-    if (sc) {
-      if (on) {
-        sc.innerHTML = '<span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>';
-      } else {
-        sc.innerHTML = '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>';
-      }
+    const row = btn.closest('.ot-row');
+    if (row && row.children[3]) {
+      row.children[3].innerHTML = on ? '<span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>' : '<span style="background:rgba(107,114,128,0.1);color:#6B7280;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Private</span>';
     }
   }
 
@@ -3138,7 +3142,6 @@ window.toggleRowPublished = async function(btn, code) {
   const key = 'nw_opening_' + code;
   const existing = JSON.parse(localStorage.getItem(key) || '{}');
   existing.published = on;
-  existing.status = on ? 'active' : 'draft';
   existing.code = existing.code || code;
   localStorage.setItem(key, JSON.stringify(existing));
 
@@ -3146,8 +3149,8 @@ window.toggleRowPublished = async function(btn, code) {
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, status: on ? 'active' : 'draft', updatedAt: serverTimestamp() }, { merge: true });
-    toast(on ? '✓ Published — visible on jobs page' : '✓ Set to Private', 'ok');
-  } catch(e) { toast('Saved locally. Firebase error: ' + e.message, 'ok'); }
+    toast(on ? '✓ Published' : '✓ Unpublished', 'ok');
+  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────
@@ -3254,14 +3257,8 @@ window.toggleRowPublished = async function(btn, code) {
     setTimeout(() => navTo('openings', 'Openings'), 80);
     return;
   }
-  // /orgs/slug — handled entirely by post-auth routing, skip here
-  if (path.indexOf('/orgs/') > -1) {
-    return; // post-auth routing will handle this
-  }
-  if (path === '/orgs') {
-    setTimeout(() => navTo('orgs', 'Organizations'), 80);
-    return;
-  }
+  if (path.indexOf('/orgs/')>-1) { return; }
+  if (path.includes('/orgs')) { setTimeout(() => navTo('orgs','Organizations'), 80); return; }
   if (path.includes('/candidates')) {
     setTimeout(() => navTo('candidates', 'Candidates'), 80);
     return;
@@ -3270,36 +3267,8 @@ window.toggleRowPublished = async function(btn, code) {
     setTimeout(() => navTo('pipeline', 'Pipelines'), 80);
     return;
   }
-  if (path.includes('/questions')) {
-    setTimeout(() => navTo('question-bank', 'Question Bank'), 80);
-    return;
-  }
-  if (path.includes('/skills')) {
-    setTimeout(() => navTo('skills', 'Skills'), 80);
-    return;
-  }
-  if (path.includes('/team')) {
-    setTimeout(() => navTo('team', 'Team'), 80);
-    return;
-  }
-  if (path.includes('/audit')) {
-    setTimeout(() => navTo('audit', 'Audit Log'), 80);
-    return;
-  }
-  if (path.includes('/assessments')) {
-    setTimeout(() => navTo('assessments', 'Assessments'), 80);
-    return;
-  }
-  if (path.includes('/hired')) {
-    setTimeout(() => navTo('hired', 'Hired'), 80);
-    return;
-  }
-  if (path.includes('/blog')) {
-    setTimeout(() => navTo('blog', 'Blog'), 80);
-    return;
-  }
 
-  // Default: stay on dashboard
+  // Default: dashboard — ensure clean state pushed
   history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 
@@ -3482,22 +3451,17 @@ window.goOrgStep = function(step) {
 
 /* ── Open org detail page ── */
 window.deleteOrg = async function(orgId, name) {
-  if (!window._isSuperAdmin) { toast('Only super admins can permanently delete organizations.', 'bad'); return; }
-  if (!confirm('Permanently delete ' + name + ' (' + orgId + ')?\n\nThis cannot be undone. The org and all related data will be removed from Firebase.')) return;
-  if (!confirm('Are you sure? Type "DELETE" to confirm — this is irreversible.')) return;
-  // Remove from DOM
-  const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  const row = document.getElementById('org-' + slug.replace('org-','').replace(/-[a-z0-9]+$/,''));
-  if (row) row.remove();
-  // Delete from Firebase
+  if (!window._isSuperAdmin) { toast('Only super admins can delete organizations.', 'bad'); return; }
+  if (!confirm('Permanently delete ' + name + '? This cannot be undone.')) return;
   try {
     const { db, doc, deleteDoc } = await import('/firebase-config.js');
     await deleteDoc(doc(db, 'organizations', orgId));
-    toast(name + ' permanently deleted.', 'ok');
-    navTo('orgs', 'Organizations');
-  } catch(e) {
-    toast('Firebase error: ' + e.message, 'ok');
-  }
+    const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g,'-');
+    const row = document.getElementById('org-' + slug.replace(/org-/,'').replace(/-[^-]+$/,''));
+    if (row) row.remove();
+    toast(name + ' deleted.', 'ok');
+    navTo('orgs','Organizations');
+  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
 window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {

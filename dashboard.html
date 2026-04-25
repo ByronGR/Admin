@@ -603,7 +603,7 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
-  // Now route to the correct page based on URL
+  // Route to correct page after auth
   (function() {
     const path = window.location.pathname;
     if (path.includes('/openings/open-')) {
@@ -611,27 +611,18 @@ onAuthStateChanged(auth, async user => {
       if (codeLower) {
         const codeUpper = codeLower.toUpperCase();
         const raw = localStorage.getItem('nw_opening_' + codeUpper);
-        if (raw) {
-          try {
-            const d = JSON.parse(raw);
-            const st = (d.status === 'draft' && d.published) ? 'active' : (d.status || 'active');
-            setTimeout(() => openOpeningDetail(d.code || codeUpper, d.title || 'Opening', st, !!d.published, d.recruiter || 'Byron Giraldo'), 50);
-            return;
-          } catch(e) {}
-        }
-        setTimeout(() => navTo('openings', 'Openings'), 50);
-        return;
+        if (raw) { try { const d = JSON.parse(raw); const st = (d.status==='draft'&&d.published)?'active':(d.status||'active'); setTimeout(()=>openOpeningDetail(d.code||codeUpper,d.title||'Opening',st,!!d.published,d.recruiter||'Byron Giraldo'),50); return; } catch(e){} }
+        setTimeout(()=>navTo('openings','Openings'),50); return;
       }
     }
-    if (path.includes('/openings'))   { setTimeout(() => navTo('openings',    'Openings'),       50); return; }
-    if (path.includes('/orgs') || path.includes('/org/')) { setTimeout(() => navTo('orgs', 'Organizations'), 50); return; }
-    if (path.includes('/candidates')) { setTimeout(() => navTo('candidates',  'Candidates'),     50); return; }
-    if (path.includes('/pipeline'))   { setTimeout(() => navTo('pipeline',    'Pipelines'),      50); return; }
-    if (path.includes('/questions'))  { setTimeout(() => navTo('question-bank','Question Bank'), 50); return; }
-    if (path.includes('/skills'))     { setTimeout(() => navTo('skills',      'Skills'),         50); return; }
-    if (path.includes('/team'))       { setTimeout(() => { navTo('team','Team'); loadTeamFromFirestore(); }, 50); return; }
-    if (path.includes('/audit'))      { setTimeout(() => navTo('audit',       'Audit Log'),      50); return; }
-    // default: stay on dashboard
+    if (path.includes('/openings'))   { setTimeout(()=>navTo('openings','Openings'),50); return; }
+    if (path.includes('/orgs')||path.includes('/org/')) { setTimeout(()=>navTo('orgs','Organizations'),50); return; }
+    if (path.includes('/candidates')) { setTimeout(()=>navTo('candidates','Candidates'),50); return; }
+    if (path.includes('/pipeline'))   { setTimeout(()=>navTo('pipeline','Pipelines'),50); return; }
+    if (path.includes('/questions'))  { setTimeout(()=>navTo('question-bank','Question Bank'),50); return; }
+    if (path.includes('/skills'))     { setTimeout(()=>navTo('skills','Skills'),50); return; }
+    if (path.includes('/team'))       { setTimeout(()=>{ navTo('team','Team'); loadTeamFromFirestore(); },50); return; }
+    if (path.includes('/audit'))      { setTimeout(()=>navTo('audit','Audit Log'),50); return; }
   })();
   // Update nav avatar initials
   if (profile.name) {
@@ -2133,35 +2124,7 @@ Project coordination & time management</textarea>
       <div><div class="ph-title">Team</div><div class="ph-sub">Nearwork employees and their access levels.</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('new-team-modal')">+ Add team member</button>
     </div>
-    <div class="team-grid">
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,var(--purple),var(--pl));">BG</div><div><div class="tc-name">Byron Giraldo</div><div class="tc-role">Super Admin · CEO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">4</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">3</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-dark">Super Admin</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" style="opacity:.4;cursor:not-allowed;">Edit (you)</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#10B981,#059669);">NS</div><div><div class="tc-name">Nany Salcedo</div><div class="tc-role">Recruiter · COO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">1</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-purple">Recruiter</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
-      <div class="team-card">
-        <div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,#F59E0B,#D97706);">AG</div><div><div class="tc-name">Andres García</div><div class="tc-role">Recruiter · CQO</div></div></div>
-        <div class="tc-stats">
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Active openings</div></div>
-          <div class="tcs"><div class="tcs-n">0</div><div class="tcs-l">Orgs assigned</div></div>
-        </div>
-        <div style="margin-bottom:10px;"><span class="badge b-amber">Limited access</span></div>
-        <div class="tc-actions"><button class="btn btn-ghost btn-sm" onclick="openModal('edit-team-modal')">Edit access</button><button class="btn btn-danger btn-sm" onclick="toast('Team member deactivated.','ok')">Deactivate</button></div>
-      </div>
-    </div>
+    <div class="team-grid" id="team-grid"><div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div></div>div>
   </div>
 
   <!-- ══════════════════════════════
@@ -2501,8 +2464,8 @@ function navTo(id, label){
   if(lbl) lbl.textContent=label||PAGE_LABELS[id]||id;
   closeDrawer();
   // Update URL
-  const slug=id==='dashboard'?'':'/'+id;
-  history.pushState({page:id},'','/dashboard'+slug);
+  const _m={dashboard:'/',orgs:'/orgs','org-detail':'/orgs',pipeline:'/pipeline',candidates:'/candidates',openings:'/openings','opening-detail':'/openings','opening-applicants':'/openings','question-bank':'/questions',skills:'/skills',team:'/team',audit:'/audit',assessments:'/assessments',hired:'/hired'};
+  history.pushState({page:id},'',_m[id]!==undefined?_m[id]:'/'+id);
 }
 function toggleDrawer(){
   document.getElementById('drawer').classList.toggle('open');
@@ -2643,7 +2606,7 @@ window.closeCandBrief = function() {
   // Restore the current page URL without navigating
   const currentPage = document.querySelector('.dtab.on')?.id?.replace('dtab-','') || 'dashboard';
   const slug = currentPage === 'dashboard' ? '' : '/' + currentPage;
-  history.replaceState({ page: currentPage }, '', '/dashboard' + slug);
+  history.replaceState({ page: currentPage }, '', slug || '/');
 };
 
 window.openCandFullProfile = function() {
@@ -2754,7 +2717,7 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   if (editMode) setTimeout(toggleOpeningEdit, 50);
 
   navTo('opening-detail', title);
-  history.replaceState({ page:'opening-detail', code }, '', '/dashboard/openings/' + code.toLowerCase());
+  history.replaceState({ page:'opening-detail', code }, '', '/openings/' + code.toLowerCase());
 };
 
 window.openNewOpening = function() {
@@ -2786,7 +2749,7 @@ window.openNewOpening = function() {
   });
   ['about','responsibilities','skills','qualifications'].forEach(s => editSection(s));
   navTo('opening-detail', 'New Opening');
-  history.replaceState({ page:'opening-detail', code:newCode }, '', '/dashboard/openings/' + newCode.toLowerCase());
+  history.replaceState({ page:'opening-detail', code:newCode }, '', '/openings/' + newCode.toLowerCase());
 };
 
 window.toggleOpeningEdit = function() {
@@ -3123,7 +3086,8 @@ function upsertOpeningRow(code, data) {
   const codeLower = code.toLowerCase();
   let row = list.querySelector('.ot-row[data-code="' + codeLower + '"]');
   const title    = data.title || code;
-  const status   = data['sb-status'] || data.status || 'active';
+  const _raw = data['sb-status'] || data.status || 'active';
+  const status = (_raw === 'draft' && data.published) ? 'active' : _raw;
   const recruiter = data.recruiter || 'Byron Giraldo';
   const published = data.published;
   const statusBadgeMap = {
@@ -3183,7 +3147,7 @@ window.toggleRowPublished = async function(btn, code) {
   const on = btn.classList.contains('on');
   const label = btn.nextElementSibling;
   if (label) {
-    label.textContent = on ? 'Published' : 'Draft';
+    label.textContent = on ? 'Published' : 'Private';
     label.style.color  = on ? 'var(--green)' : 'var(--g4)';
   }
 
@@ -3198,9 +3162,8 @@ window.toggleRowPublished = async function(btn, code) {
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'openings', code), { published: on, updatedAt: serverTimestamp() }, { merge: true });
-  } catch(e) { /* Firebase not wired yet — localStorage handled above */ }
-
-  toast((on ? 'Published' : 'Set to Draft') + ' — saved.', 'ok');
+    toast(on ? '✓ Published — live on jobs page' : '✓ Unpublished — hidden from jobs page', 'ok');
+  } catch(e) { toast('Firebase error: ' + e.message, 'ok'); }
 };
 
 // ── On load: restore toggle state for all rows from localStorage ─────────────
@@ -3230,8 +3193,13 @@ window.toggleRowPublished = async function(btn, code) {
             else                btn.classList.remove('on');
           }
           if (label) {
-            label.textContent = data.published ? 'Published' : 'Draft';
+            label.textContent = data.published ? 'Published' : 'Private';
             label.style.color  = data.published ? 'var(--green)' : 'var(--g4)';
+          }
+          // Fix status badge: draft+published = active
+          if (data.status === 'draft' && data.published) {
+            const statusCell = row.children[3];
+            if (statusCell) statusCell.innerHTML = '<span style="background:rgba(16,185,129,0.12);color:#059669;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>';
           }
         }
         // Restore title if it changed
@@ -3321,7 +3289,7 @@ window.toggleRowPublished = async function(btn, code) {
   }
 
   // Default: dashboard — ensure clean state pushed
-  history.replaceState({ page: 'dashboard' }, '', path);
+  history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 
 window.editSection = function(section) {
@@ -3527,7 +3495,7 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   document.getElementById('nav-current-label').textContent = name;
   // Push URL — override the one navTo just pushed so it includes the org slug
   const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  history.replaceState({ page: 'org-detail', orgId, name }, '', '/dashboard/org/' + slug);
+  history.replaceState({ page: 'org-detail', orgId, name }, '', '/orgs/' + slug);
 };
 
 /* ── Org detail tab switcher ── */
@@ -3725,7 +3693,7 @@ window.openModal = function(id) {
 <script type="module">
 /* ── Org suspend / reactivate (writes to Firestore) ── */
 window.suspendOrg = async function(orgId, slug, name) {
-  if (!confirm(\`Suspend \${name}? Their client users will be blocked from logging in.\`)) return;
+  if (!confirm(`Suspend \${name}? Their client users will be blocked from logging in.`)) return;
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('./firebase-config.js');
     await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
@@ -3735,7 +3703,7 @@ window.suspendOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '0.6';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Reactivate'; btn.className = 'btn btn-g btn-sm'; btn.onclick = () => reactivateOrg(orgId, slug, name); }
-    toast(\`\${name} suspended. Client logins blocked.\`, 'ok');
+    toast(`\${name} suspended. Client logins blocked.`, 'ok');
   } catch(e) { toast('Failed to suspend org: ' + e.message, 'bad'); }
 };
 
@@ -3749,7 +3717,7 @@ window.reactivateOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '1';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Suspend'; btn.className = 'btn btn-danger btn-sm'; btn.onclick = () => suspendOrg(orgId, slug, name); }
-    toast(\`\${name} reactivated.\`, 'ok');
+    toast(`\${name} reactivated.`, 'ok');
   } catch(e) { toast('Failed to reactivate: ' + e.message, 'bad'); }
 };
 
@@ -3763,7 +3731,6 @@ window.inviteTeamMember = async function() {
   errEl.style.display = 'none';
 
   if (!email) { errEl.textContent = 'Email is required.'; errEl.style.display = 'block'; return; }
-  if (!email.endsWith('@nearwork.co')) { errEl.textContent = 'Only @nearwork.co email addresses are allowed.'; errEl.style.display = 'block'; return; }
 
   const btn = document.getElementById('tm-invite-btn');
   btn.disabled = true;
@@ -3780,7 +3747,7 @@ window.inviteTeamMember = async function() {
     });
     await sendPasswordResetEmail(auth, email);
     closeModal('new-team-modal');
-    toast(\`Invite sent to \${email}.\`, 'ok');
+    toast(`Invite sent to \${email}.`, 'ok');
   } catch(e) {
     const msg = e.code === 'auth/email-already-in-use' ? 'This email already has an account.' : e.message;
     errEl.textContent = msg;
@@ -3790,6 +3757,7 @@ window.inviteTeamMember = async function() {
   }
 };
 
+</script>
 
 <!-- Add user to org modal -->
 <div class="modal-bg" id="add-org-user-modal" onclick="if(event.target===this)closeModal('add-org-user-modal')">
@@ -4333,4 +4301,33 @@ function loadPipelineInline(url) {
   </div>
 </div>
 
+<script>
+async function loadTeamFromFirestore() {
+  const grid = document.getElementById('team-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">Loading team...</div>';
+  try {
+    const mod = await import('./firebase-config.js');
+    const snap = await mod.getDocs(mod.collection(mod.db, 'users'));
+    const members = snap.docs.map(d => ({id:d.id,...d.data()}));
+    if (!members.length) { grid.innerHTML='<div style="padding:32px;text-align:center;color:var(--g4);font-size:13px;grid-column:1/-1;">No team members found.</div>'; return; }
+    const rg={super_admin:'linear-gradient(135deg,var(--purple),var(--pl))',admin:'linear-gradient(135deg,#3D1FA8,#6C3CE1)',sr_recruiter:'linear-gradient(135deg,#10B981,#059669)',recruiter:'linear-gradient(135deg,#10B981,#059669)'};
+    const rl={super_admin:'Super Admin',admin:'Admin',sr_recruiter:'Sr. Recruiter',recruiter:'Recruiter'};
+    const rb={super_admin:'b-dark',admin:'b-purple',sr_recruiter:'b-green',recruiter:'b-green'};
+    grid.innerHTML = members.map(function(m) {
+      var first=m.firstName||(m.name||'').split(' ')[0]||'?';
+      var last=m.lastName||(m.name||'').split(' ').slice(1).join(' ')||'';
+      var name=(first+' '+last).trim()||m.email||m.id;
+      var ini=((first[0]||'')+(last[0]||'')).toUpperCase();
+      var role=m.role||'recruiter';
+      var grad=rg[role]||'linear-gradient(135deg,#6B7280,#9CA3AF)';
+      var label=rl[role]||role;
+      var badge=rb[role]||'b-amber';
+      return '<div class="team-card"><div class="tc-top"><div class="tc-av" style="background:'+grad+'">'+ini+'</div><div><div class="tc-name">'+name+'</div><div class="tc-role">'+label+'</div></div></div><div style="font-size:11px;color:var(--g5);margin-bottom:10px;">'+(m.email||'')+'</div><div style="margin-bottom:10px;"><span class="badge '+badge+'">'+label+'</span></div><div class="tc-actions"><button class="btn btn-ghost btn-sm">Edit access</button></div></div>';
+    }).join('');
+  } catch(e) { grid.innerHTML='<div style="padding:32px;text-align:center;color:var(--red);font-size:13px;grid-column:1/-1;">Error: '+e.message+'</div>'; }
+}
+const _origNavTo=window.navTo||navTo;
+window.navTo=function(id,label){ _origNavTo(id,label); if(id==='team') loadTeamFromFirestore(); };
+</script>
 </body>

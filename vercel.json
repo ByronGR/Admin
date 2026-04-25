@@ -4,19 +4,15 @@
   "rewrites": [
     {
       "source": "/login",
-      "destination": "/login.html"
-    },
-    {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
+      "destination": "/login"
     },
     {
       "source": "/dashboard/(.*)",
-      "destination": "/dashboard.html"
+      "destination": "/dashboard"
     },
     {
       "source": "/(.*)",
-      "destination": "/dashboard.html"
+      "destination": "/dashboard"
     }
   ]
 }

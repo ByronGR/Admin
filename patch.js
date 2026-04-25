@@ -1,5 +1,8 @@
 (function() {
  
+  // Track recently toggled codes to prevent sync overwrite
+  var _recentlyToggled = {};
+ 
   // ── 1. Toggle event delegation ────────────────────────────────────────────
   document.addEventListener('click', function(e) {
     var btn = e.target;
@@ -9,6 +12,7 @@
     var code = row.dataset.code;
     if (!code) return;
     btn.onclick = null;
+    _recentlyToggled[code.toUpperCase()] = Date.now();
     toggleRowPublished(btn, code.toUpperCase());
     e.stopPropagation();
   }, true);
@@ -39,6 +43,9 @@
             fbStatus    = (ls.status || 'draft').toLowerCase();
             fbPublished = !!ls.published;
           }
+ 
+          // Skip if recently toggled (prevent overwriting user action)
+          if (_recentlyToggled[code] && (Date.now() - _recentlyToggled[code]) < 5000) return;
  
           // Sync localStorage to match Firebase
           var existing = JSON.parse(localStorage.getItem('nw_opening_' + code) || '{}');

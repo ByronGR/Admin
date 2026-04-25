@@ -577,7 +577,7 @@ body{font-family:'Poppins',sans-serif;background:var(--g1);color:var(--black);mi
 <body>
 <!-- ══ AUTH GUARD — blocks non-admins before page renders ══ -->
 <script type="module">
-import { auth, onAuthStateChanged, getUserProfile, isAdminRole } from './firebase-config.js';
+import { auth, onAuthStateChanged, getUserProfile, isAdminRole } from '/firebase-config.js';
 
 // Show a loading overlay instantly — hides the dashboard until auth is confirmed
 document.body.insertAdjacentHTML('afterbegin', `
@@ -3418,7 +3418,7 @@ import {
   sendPasswordResetEmail,
   serverTimestamp,
   doc, setDoc, collection
-} from './firebase-config.js';
+} from '/firebase-config.js';
 
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 

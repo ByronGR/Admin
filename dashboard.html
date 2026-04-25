@@ -602,7 +602,17 @@ onAuthStateChanged(auth, async user => {
   // Set super admin flag
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
-  document.getElementById('auth-guard').remove();
+ document.getElementById('auth-guard').remove();
+  (function(){
+    var p=window.location.pathname;
+    if(p.includes('/openings/open-')){var c=p.split('/openings/')[1].toUpperCase();var r=localStorage.getItem('nw_opening_'+c);if(r){try{var d=JSON.parse(r);setTimeout(function(){openOpeningDetail(d.code||c,d.title||c,(d.status==='draft'&&d.published)?'active':d.status||'active',!!d.published,d.recruiter||'Byron Giraldo');},80);return;}catch(e){}}setTimeout(function(){navTo('openings','Openings');},80);return;}
+    if(p.includes('/openings')){setTimeout(function(){navTo('openings','Openings');},80);return;}
+    if(p.includes('/orgs')||p.includes('/org')){setTimeout(function(){navTo('orgs','Organizations');},80);return;}
+    if(p.includes('/candidates')){setTimeout(function(){navTo('candidates','Candidates');},80);return;}
+    if(p.includes('/pipeline')){setTimeout(function(){navTo('pipeline','Pipelines');},80);return;}
+    if(p.includes('/team')){setTimeout(function(){navTo('team','Team');},80);return;}
+    if(p.includes('/audit')){setTimeout(function(){navTo('audit','Audit Log');},80);return;}
+  })();
   // Route to correct page after auth completes
   (function() {
     var path = window.location.pathname;
@@ -3083,7 +3093,8 @@ function upsertOpeningRow(code, data) {
   if (!list) return;
   const codeLower = code.toLowerCase();
   let row = list.querySelector('.ot-row[data-code="' + codeLower + '"]');
-  const title    = data.title || code;
+  const _rs = data['sb-status'] || data.status || 'active';
+  const status = (_rs === 'draft' && data.published) ? 'active' : _rs;
   const _rawst = data['sb-status'] || data.status || 'active';
   const status = (_rawst === 'draft' && data.published) ? 'active' : _rawst;
   const recruiter = data.recruiter || 'Byron Giraldo';

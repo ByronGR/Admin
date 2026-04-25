@@ -3282,8 +3282,11 @@ window.toggleRowPublished = async function(btn, code) {
     setTimeout(() => navTo('openings', 'Openings'), 80);
     return;
   }
-  // Only handle /orgs LIST — let post-auth routing handle /orgs/slug
-  if ((path === '/orgs' || path === '/orgs/') && !path.match(/\/orgs\/[a-z0-9-]+/)) {
+  // /orgs/slug — handled entirely by post-auth routing, skip here
+  if (path.indexOf('/orgs/') > -1) {
+    return; // post-auth routing will handle this
+  }
+  if (path === '/orgs') {
     setTimeout(() => navTo('orgs', 'Organizations'), 80);
     return;
   }

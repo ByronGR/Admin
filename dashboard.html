@@ -603,6 +603,69 @@ onAuthStateChanged(auth, async user => {
   window._isSuperAdmin = (profile.role === 'super_admin');
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
+  // ── Route to correct page based on URL ──
+  (function() {
+    var p = window.location.pathname;
+    if (p.startsWith('/dashboard')) p = p.slice(10) || '/';
+
+    // Specific opening
+    if (p.includes('/openings/open-')) {
+      var c = p.split('/openings/')[1].toUpperCase();
+      var raw = localStorage.getItem('nw_opening_' + c);
+      if (raw) {
+        try {
+          var d = JSON.parse(raw);
+          var st = (d.status === 'draft' && d.published) ? 'active' : (d.status || 'active');
+          setTimeout(function() { openOpeningDetail(d.code||c, d.title||c, st, !!d.published, d.recruiter||'Byron Giraldo'); }, 80);
+          return;
+        } catch(e) {}
+      }
+      setTimeout(function() { navTo('openings','Openings'); }, 80);
+      return;
+    }
+
+    // Specific org
+    if (p.match(/\/orgs\/[a-z0-9-]+/)) {
+      var slug = p.split('/orgs/')[1].split('/')[0];
+      var orgMap = {
+        'org-cs01': ['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
+        'org-at02': ['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
+        'org-nd03': ['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold'],
+      };
+      var orgData = orgMap[slug];
+      if (!orgData) {
+        try {
+          var lo = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
+          if (lo && lo.slug === slug) orgData = [lo.orgId, lo.name, lo.domain, lo.initials, lo.plan, lo.status];
+        } catch(e) {}
+      }
+      if (orgData) { setTimeout(function() { openOrgDetail.apply(null, orgData); }, 80); }
+      else { setTimeout(function() { navTo('orgs','Organizations'); }, 80); }
+      return;
+    }
+
+    // All other pages
+    var routes = [
+      ['/openings',    function(){ navTo('openings','Openings'); }],
+      ['/orgs',        function(){ navTo('orgs','Organizations'); }],
+      ['/candidates',  function(){ navTo('candidates','Candidates'); }],
+      ['/pipeline',    function(){ navTo('pipeline','Pipelines'); }],
+      ['/questions',   function(){ navTo('question-bank','Question Bank'); }],
+      ['/skills',      function(){ navTo('skills','Skills'); }],
+      ['/team',        function(){ navTo('team','Team'); }],
+      ['/audit',       function(){ navTo('audit','Audit Log'); }],
+      ['/assessments', function(){ navTo('assessments','Assessments'); }],
+      ['/hired',       function(){ navTo('hired','Hired'); }],
+      ['/blog',        function(){ navTo('blog','Blog'); }],
+    ];
+    for (var i = 0; i < routes.length; i++) {
+      if (p.includes(routes[i][0])) {
+        setTimeout(routes[i][1], 80);
+        return;
+      }
+    }
+    // Default: stay on dashboard
+  })();
   // Update nav avatar initials
   if (profile.name) {
     const initials = profile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
@@ -3273,37 +3336,24 @@ window.toggleRowPublished = async function(btn, code) {
     }
   }
 
-  if (path.includes('/openings/open-')) {
-    // handled above
-  } else if (path.includes('/openings')) {
-    setTimeout(() => navTo('openings','Openings'), 80); return;
-  }
-  // Org detail — restore specific org
-  if (path.match(/\/orgs\/[a-z0-9-]+/)) {
-    const slug = path.split('/orgs/')[1].split('/')[0];
-    const orgMap = {
-      'org-cs01': ['ORG-CS01','Crestline SaaS','crestline.io','CS','Essential','active'],
-      'org-at02': ['ORG-AT02','Axiom Tech','axiomtech.io','AT','Lite','active'],
-      'org-nd03': ['ORG-ND03','NovaDash','novadash.com','ND','Essential','hold'],
-    };
-    let orgData = orgMap[slug];
-    if (!orgData) {
-      try { const lo = JSON.parse(localStorage.getItem('nw_last_org')||'null'); if (lo && lo.slug===slug) orgData=[lo.orgId,lo.name,lo.domain,lo.initials,lo.plan,lo.status]; } catch(e){}
-    }
-    if (orgData) { setTimeout(() => openOrgDetail(...orgData), 80); }
-    else { setTimeout(() => navTo('orgs','Organizations'), 80); }
+  if (path.includes('/openings')) {
+    setTimeout(() => navTo('openings', 'Openings'), 80);
     return;
   }
-  if (path.includes('/orgs')) { setTimeout(() => navTo('orgs','Organizations'), 80); return; }
-  if (path.includes('/candidates')) { setTimeout(() => navTo('candidates','Candidates'), 80); return; }
-  if (path.includes('/pipeline')) { setTimeout(() => navTo('pipeline','Pipelines'), 80); return; }
-  if (path.includes('/questions')) { setTimeout(() => navTo('question-bank','Question Bank'), 80); return; }
-  if (path.includes('/skills')) { setTimeout(() => navTo('skills','Skills'), 80); return; }
-  if (path.includes('/team')) { setTimeout(() => navTo('team','Team'), 80); return; }
-  if (path.includes('/audit')) { setTimeout(() => navTo('audit','Audit Log'), 80); return; }
-  if (path.includes('/assessments')) { setTimeout(() => navTo('assessments','Assessments'), 80); return; }
-  if (path.includes('/hired')) { setTimeout(() => navTo('hired','Hired'), 80); return; }
-  if (path.includes('/blog')) { setTimeout(() => navTo('blog','Blog'), 80); return; }
+  if (path.includes('/org/')) {
+    setTimeout(() => navTo('orgs', 'Organizations'), 80);
+    return;
+  }
+  if (path.includes('/candidates')) {
+    setTimeout(() => navTo('candidates', 'Candidates'), 80);
+    return;
+  }
+  if (path.includes('/pipeline')) {
+    setTimeout(() => navTo('pipeline', 'Pipelines'), 80);
+    return;
+  }
+
+  // Default: dashboard — ensure clean state pushed
   history.replaceState({ page: 'dashboard' }, '', '/');
 })();
 
@@ -3493,23 +3543,23 @@ window.openOrgDetail = function(orgId, name, domain, initials, plan, status) {
   document.getElementById('od-orgid').textContent = orgId;
   const statusBadge = document.getElementById('od-status-badge');
   statusBadge.textContent = status === 'active' ? 'Active' : status === 'hold' ? 'On hold' : 'Suspended';
-  statusBadge.removeAttribute('style');
+  statusBadge.removeAttribute('style'); // clear any inline styles from other pages
   statusBadge.className = 'badge ' + (status === 'active' ? 'b-green' : status === 'hold' ? 'b-amber' : 'b-red');
+  // Populate info panel
   document.getElementById('oi-name').textContent = name;
   document.getElementById('oi-domain').textContent = domain;
   document.getElementById('oi-orgid').textContent = orgId;
   document.getElementById('oi-plan').textContent = plan;
   document.getElementById('oi-status').textContent = status === 'active' ? 'Active' : 'On hold / Suspended';
+  // Stat strip plan
   document.getElementById('od-stat-plan').textContent = plan;
-  // Safe tab reset — only grab od-tab inside od-tabs
-  const firstTab = document.querySelector('.od-tabs .od-tab');
-  if (firstTab) odTab(firstTab, 'od-panel-pipeline');
+  // Reset to pipeline tab
+  odTab(document.querySelector('.od-tab'), 'od-panel-pipeline');
+  // Navigate to org-detail page
   navTo('org-detail', name);
   document.getElementById('nav-current-label').textContent = name;
-  // Clean URL with org slug
-  const slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  var slug = orgId.toLowerCase().replace(/[^a-z0-9]/g, '-');
   history.replaceState({ page: 'org-detail', orgId, name }, '', '/orgs/' + slug);
-  // Save to localStorage so refresh can restore this org
   try { localStorage.setItem('nw_last_org', JSON.stringify({ orgId, name, domain, initials, plan, status, slug })); } catch(e) {}
 };
 

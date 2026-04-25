@@ -3747,7 +3747,7 @@ window.openModal = function(id) {
 <script type="module">
 /* ── Org suspend / reactivate (writes to Firestore) ── */
 window.suspendOrg = async function(orgId, slug, name) {
-  if (!confirm(\`Suspend \${name}? Their client users will be blocked from logging in.\`)) return;
+  if (!confirm(`Suspend \${name}? Their client users will be blocked from logging in.`)) return;
   try {
     const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
     await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
@@ -3757,7 +3757,7 @@ window.suspendOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '0.6';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Reactivate'; btn.className = 'btn btn-g btn-sm'; btn.onclick = () => reactivateOrg(orgId, slug, name); }
-    toast(\`\${name} suspended. Client logins blocked.\`, 'ok');
+    toast(`\${name} suspended. Client logins blocked.`, 'ok');
   } catch(e) { toast('Failed to suspend org: ' + e.message, 'bad'); }
 };
 
@@ -3771,7 +3771,7 @@ window.reactivateOrg = async function(orgId, slug, name) {
     if (card) card.style.opacity = '1';
     const btn = document.getElementById('suspend-btn-' + slug);
     if (btn) { btn.textContent = 'Suspend'; btn.className = 'btn btn-danger btn-sm'; btn.onclick = () => suspendOrg(orgId, slug, name); }
-    toast(\`\${name} reactivated.\`, 'ok');
+    toast(`\${name} reactivated.`, 'ok');
   } catch(e) { toast('Failed to reactivate: ' + e.message, 'bad'); }
 };
 
@@ -3802,7 +3802,7 @@ window.inviteTeamMember = async function() {
     });
     await sendPasswordResetEmail(auth, email);
     closeModal('new-team-modal');
-    toast(\`Invite sent to \${email}.\`, 'ok');
+    toast(`Invite sent to \${email}.`, 'ok');
   } catch(e) {
     const msg = e.code === 'auth/email-already-in-use' ? 'This email already has an account.' : e.message;
     errEl.textContent = msg;

@@ -682,6 +682,462 @@ body{font-family:'Poppins',sans-serif;background:var(--g1);color:var(--black);mi
   .ot-hdr,.ot-row{grid-template-columns:1fr 1fr 100px;}
   .ot-hdr>*:nth-child(n+4),.ot-row>*:nth-child(n+4){display:none;}
 }
+
+/* ═══════════════════════════════════════════════════
+   NEARWORK — PIPELINE & ATS REDESIGN
+   Brand: #6C3CE1 purple · #10B981 green · Poppins
+═══════════════════════════════════════════════════ */
+
+/* ── Pipeline Kanban board ── */
+.pl-scroll {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  padding-top: 4px;
+}
+.pl-scroll::-webkit-scrollbar { height: 5px; }
+.pl-scroll::-webkit-scrollbar-track { background: var(--g2); border-radius: 99px; }
+.pl-scroll::-webkit-scrollbar-thumb { background: var(--purple); border-radius: 99px; opacity: .4; }
+
+/* Stage columns */
+.pl-stage-col {
+  background: #F8F7FF;
+  border: 1.5px solid #EDE9FE;
+  border-radius: 14px;
+  padding: 14px;
+  min-width: 200px;
+  flex-shrink: 0;
+  transition: border-color .2s;
+}
+.pl-stage-col.stage-applied        { background: #F8FAFC; border-color: #E2E8F0; }
+.pl-stage-col.stage-profile-review { background: #F5F3FF; border-color: #DDD6FE; }
+.pl-stage-col.stage-assessment     { background: #EFF6FF; border-color: #BFDBFE; }
+.pl-stage-col.stage-background-check { background: #F0FDF4; border-color: #BBF7D0; }
+.pl-stage-col.stage-presented      { background: #FFFBEB; border-color: #FDE68A; }
+.pl-stage-col.stage-client-review  { background: #F5F3FF; border: 2px solid rgba(108,60,225,0.35); }
+.pl-stage-col.stage-hired          { background: #F0FDF4; border: 2px solid rgba(16,185,129,0.4); }
+.pl-stage-col.stage-denied         { background: #FEF2F2; border-color: #FECACA; }
+.pl-stage-col.drag-over            { background: rgba(108,60,225,0.07); border: 2px dashed var(--purple) !important; }
+
+/* Stage header */
+.pl-stage-hdr {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--g5);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pl-stage-col.stage-client-review .pl-stage-hdr { color: var(--purple); }
+.pl-stage-col.stage-hired .pl-stage-hdr          { color: var(--green); }
+.pl-stage-col.stage-denied .pl-stage-hdr         { color: var(--red); }
+
+.pl-stage-count {
+  background: rgba(108,60,225,0.12);
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.pl-stage-col.stage-applied .pl-stage-count   { background: var(--g2); color: var(--g5); }
+.pl-stage-col.stage-hired .pl-stage-count     { background: rgba(16,185,129,0.15); color: var(--green); }
+.pl-stage-col.stage-denied .pl-stage-count    { background: rgba(239,68,68,0.12); color: var(--red); }
+
+/* Candidate cards */
+.pl-cand-card {
+  background: #fff;
+  border: 1.5px solid #E9E7F8;
+  border-radius: 11px;
+  padding: 12px;
+  margin-bottom: 9px;
+  cursor: grab;
+  transition: all .18s;
+  position: relative;
+  box-shadow: 0 1px 4px rgba(108,60,225,0.06);
+}
+.pl-cand-card:hover {
+  border-color: var(--purple);
+  box-shadow: 0 4px 16px rgba(108,60,225,0.13);
+  transform: translateY(-2px);
+}
+.pl-cand-card.dragging { opacity: .35; transform: rotate(2deg) scale(.97); cursor: grabbing; }
+.pl-cand-card.highlight { border-color: var(--purple); background: #F5F3FF; }
+
+.pl-cand-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--black);
+  line-height: 1.3;
+  padding-right: 36px;
+  letter-spacing: -.2px;
+}
+.pl-cand-role {
+  font-size: 10px;
+  color: var(--g5);
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+/* NW Score badge on cards */
+.nw-score-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--purple);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(108,60,225,0.35);
+}
+.nw-score-badge.high { background: var(--green); box-shadow: 0 2px 6px rgba(16,185,129,0.35); }
+.nw-score-badge.mid  { background: var(--amber);  box-shadow: 0 2px 6px rgba(245,158,11,0.35); }
+.nw-score-badge.low  { background: #9CA3AF; box-shadow: none; }
+
+/* Add card button */
+.pl-add-card {
+  border: 1.5px dashed #DDD6FE;
+  border-radius: 10px;
+  padding: 9px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g4);
+  cursor: pointer;
+  transition: all .18s;
+  margin-top: 4px;
+}
+.pl-add-card:hover { border-color: var(--purple); color: var(--purple); background: #F5F3FF; }
+
+/* Pipeline board cards */
+.pl-board-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1.5px solid var(--g3);
+  overflow: hidden;
+  margin-bottom: 16px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.pl-board-card:hover { border-color: rgba(108,60,225,.25); box-shadow: 0 4px 20px rgba(108,60,225,.07); }
+.pl-board-card.collapsed .pl-board-body { display: none; }
+.pl-board-card.status-paused   { border-color: rgba(245,158,11,.3);  }
+.pl-board-card.status-on-hold  { border-color: rgba(245,158,11,.3);  }
+.pl-board-card.status-completed { border-color: rgba(16,185,129,.35); }
+.pl-board-card.status-cancelled { border-color: rgba(239,68,68,.2); opacity: .7; }
+
+.pl-board-hdr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--g2);
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+}
+.pl-board-hdr:hover { background: #FAFBFF; }
+.pl-board-collapsed .pl-board-hdr { border-bottom: none; }
+
+.pl-board-title { font-size: 14px; font-weight: 800; color: var(--black); flex: 1; letter-spacing: -.3px; }
+.pl-board-meta  { font-size: 10px; color: var(--g5); font-weight: 500; }
+.pl-board-actions { display: flex; gap: 8px; align-items: center; }
+.pl-collapse-icon { font-size: 11px; color: var(--g4); transition: transform .2s; flex-shrink: 0; }
+.pl-board-card.collapsed .pl-collapse-icon { transform: rotate(-90deg); }
+
+.pl-board-body { padding: 16px; background: #FAFBFC; }
+
+/* Status pills */
+.pl-status-sel {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 20px 5px 10px;
+  border-radius: 99px;
+  border: 1.5px solid;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  appearance: auto;
+  background: #fff;
+  outline: none;
+  min-width: 96px;
+  line-height: 1.2;
+}
+.pl-status-sel.s-active    { color: var(--green); border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.08); }
+.pl-status-sel.s-paused    { color: var(--amber); border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
+.pl-status-sel.s-on-hold   { color: var(--amber); border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
+.pl-status-sel.s-completed { color: var(--green); border-color: rgba(16,185,129,.5); background: rgba(16,185,129,.1); }
+.pl-status-sel.s-finished  { color: var(--green); border-color: rgba(16,185,129,.5); background: rgba(16,185,129,.1); }
+.pl-status-sel.s-cancelled { color: var(--red);   border-color: rgba(239,68,68,.3);  background: rgba(239,68,68,.07); }
+
+/* Pipeline info strip */
+.pl-info-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.pl-info-item {
+  background: #fff;
+  border: 1.5px solid var(--g2);
+  border-radius: 10px;
+  padding: 11px 14px;
+  transition: border-color .2s;
+}
+.pl-info-item:hover { border-color: rgba(108,60,225,.25); }
+.pl-info-label { font-size: 9px; color: var(--g4); font-weight: 800; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+.pl-info-value { font-size: 13px; color: var(--black); font-weight: 800; letter-spacing: -.3px; }
+
+/* Pipeline insights */
+.pipeline-insights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.pipeline-insight {
+  background: #fff;
+  border: 1.5px solid var(--g3);
+  border-radius: 12px;
+  padding: 14px;
+  transition: all .2s;
+}
+.pipeline-insight:hover { border-color: rgba(108,60,225,.3); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(108,60,225,.08); }
+.pipeline-insight.accent { border-color: rgba(108,60,225,.3); background: linear-gradient(160deg, #fff 60%, #F5F3FF); }
+.pipeline-insight-label { font-size: 9px; color: var(--g4); font-weight: 800; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+.pipeline-insight-value { font-size: 18px; font-weight: 900; color: var(--black); letter-spacing: -.5px; }
+.pipeline-insight.accent .pipeline-insight-value { color: var(--purple); }
+.pipeline-insight-sub { font-size: 10px; color: var(--g5); margin-top: 3px; line-height: 1.5; }
+
+/* ── ATS / Candidates redesign ── */
+.cand-table {
+  background: #fff;
+  border-radius: 14px;
+  border: 1.5px solid var(--g3);
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(15,23,42,.05);
+}
+.ct-hdr {
+  display: grid;
+  grid-template-columns: 1.7fr 1.15fr 1.6fr 1.4fr 1fr .9fr 120px;
+  padding: 12px 20px;
+  background: linear-gradient(to right, #FAFBFF, #F8F7FF);
+  border-bottom: 1.5px solid #EDE9FE;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--purple);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  gap: 12px;
+}
+.ct-row {
+  display: grid;
+  grid-template-columns: 1.7fr 1.15fr 1.6fr 1.4fr 1fr .9fr 120px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--g2);
+  font-size: 12px;
+  color: var(--g6);
+  align-items: center;
+  gap: 12px;
+  transition: background .15s;
+  cursor: pointer;
+}
+.ct-row:last-child { border-bottom: none; }
+.ct-row:hover { background: #FAFBFF; }
+
+.ct-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--purple), var(--pl));
+  box-shadow: 0 2px 6px rgba(108,60,225,.3);
+}
+.ct-name { font-size: 13px; font-weight: 700; color: var(--black); margin-bottom: 1px; letter-spacing: -.2px; }
+.ct-code { font-size: 9px; color: var(--g4); font-family: monospace; font-weight: 700; }
+
+/* Score pills */
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 24px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+}
+.sp-g { background: rgba(16,185,129,.12); color: var(--green); }
+.sp-a { background: rgba(245,158,11,.12); color: #B45309; }
+.sp-r { background: rgba(239,68,68,.1);  color: var(--red); }
+
+/* Skill tags */
+.skill-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--purple);
+  background: #F0EBFF;
+  border: 1px solid #DDD6FE;
+  border-radius: 99px;
+  padding: 3px 9px;
+  transition: all .15s;
+}
+.skill-tag:hover { background: var(--purple); color: #fff; }
+
+/* Smart match banner */
+.smart-match {
+  background: linear-gradient(135deg, #1a0533 0%, #2D1B69 50%, #4F28B8 100%);
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  position: relative;
+  overflow: hidden;
+}
+.smart-match::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 200px; height: 200px;
+  border-radius: 50%;
+  background: rgba(108,60,225,.25);
+  pointer-events: none;
+}
+.smart-match::after {
+  content: '';
+  position: absolute;
+  bottom: -40px; left: -20px;
+  width: 150px; height: 150px;
+  border-radius: 50%;
+  background: rgba(16,185,129,.15);
+  pointer-events: none;
+}
+.sm-title { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 5px; letter-spacing: -.3px; }
+.sm-sub   { font-size: 11px; color: rgba(255,255,255,.5); margin-bottom: 14px; }
+.sm-sel {
+  padding: 9px 28px 9px 12px;
+  border: 1.5px solid rgba(255,255,255,.15);
+  border-radius: 9px;
+  font-size: 12px;
+  font-family: 'Poppins', sans-serif;
+  color: #fff;
+  background: rgba(255,255,255,.1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 10px center;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  font-weight: 500;
+  transition: border-color .2s;
+  flex: 1;
+  min-width: 160px;
+}
+.sm-sel:focus { border-color: rgba(255,255,255,.4); }
+.btn-match {
+  background: var(--green);
+  color: #fff;
+  padding: 11px 24px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'Poppins', sans-serif;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+  box-shadow: 0 4px 16px rgba(16,185,129,.35);
+  position: relative;
+  z-index: 1;
+}
+.btn-match:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,.45); }
+
+/* ATS filter row */
+.ats-filter-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* Candidate brief panel */
+.cand-brief {
+  position: fixed;
+  right: 0; top: 0; bottom: 0;
+  width: 420px;
+  background: #fff;
+  z-index: 451;
+  transform: translateX(100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow: -12px 0 60px rgba(108,60,225,.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1.5px solid #EDE9FE;
+}
+.cand-brief.show { transform: translateX(0); }
+
+.cb-hdr {
+  padding: 20px;
+  border-bottom: 1px solid var(--g2);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-shrink: 0;
+  background: linear-gradient(160deg, #fff, #FAFBFF);
+}
+.cb-av {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--purple), var(--pl));
+  box-shadow: 0 4px 14px rgba(108,60,225,.35);
+}
+.cb-name { font-size: 16px; font-weight: 800; color: var(--black); letter-spacing: -.5px; margin-bottom: 3px; }
+.cb-role { font-size: 11px; color: var(--g5); font-weight: 500; }
+
+/* NW Score ring */
+.nw-score-ring {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  margin: 0 auto 16px;
+  background: conic-gradient(var(--purple) var(--pct, 72%), var(--g2) 0);
+  box-shadow: 0 0 0 6px #fff, 0 4px 20px rgba(108,60,225,.2);
+}
+.nw-score-num { font-size: 20px; font-weight: 900; color: var(--black); letter-spacing: -1px; line-height: 1; }
+.nw-score-lbl { font-size: 7px; font-weight: 800; color: var(--g4); text-transform: uppercase; letter-spacing: .1em; }
+
+/* Score bars */
+.score-bar-track { height: 6px; background: var(--g2); border-radius: 99px; overflow: hidden; }
+.score-bar-fill  { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--purple), var(--pl)); }
+
 </style>
 </head>
 <body>

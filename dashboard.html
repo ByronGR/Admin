@@ -1306,6 +1306,7 @@ onAuthStateChanged(auth, async user => {
       <button class="dnav-toggle" onclick="toggleNavGroup('dashboard')">Dashboard</button>
       <div class="dnav-items">
         <button class="dtab on" id="dtab-dashboard" onclick="navTo('dashboard','Dashboard')"><span class="dtab-icon">▦</span>Daily overview</button>
+        <button class="dtab" id="dtab-users" onclick="navTo('users','Users')"><span class="dtab-icon">👥</span>Users</button>
       </div>
     </div>
 
@@ -1326,7 +1327,6 @@ onAuthStateChanged(auth, async user => {
       <div class="dnav-items">
         <button class="dtab" id="dtab-orgs" onclick="navTo('orgs','Organizations')"><span class="dtab-icon">▣</span>Organizations</button>
         <button class="dtab" id="dtab-client-account-center" onclick="navTo('client-account-center','Client Account Center')"><span class="dtab-icon">▤</span>Client Account Center</button>
-        <button class="dtab" id="dtab-users" onclick="navTo('users','Users')"><span class="dtab-icon">👥</span>Users</button>
       </div>
     </div>
 
@@ -2708,7 +2708,7 @@ Project coordination & time management</textarea>
     <div class="modal-hdr"><div class="modal-title">Invite team member</div><button class="modal-close" onclick="closeModal('new-team-modal')">✕</button></div>
     <div class="modal-body">
       <div style="background:var(--pp);border:1px solid rgba(22,160,133,0.15);border-radius:9px;padding:11px 14px;margin-bottom:16px;font-size:11px;color:var(--g6);line-height:1.65;">
-        🔒 <strong style="color:var(--black);">@nearwork.co only.</strong> A Firebase account will be created and a password-reset email sent as the invitation. They set their own password on first login.
+        🔒 <strong style="color:var(--black);">@nearwork.co only.</strong> Staff invites use Firebase Auth. Client portal invites are sent separately through the organization Users tab.
       </div>
       <div class="field-row">
         <div class="field"><label>First name</label><input type="text" id="tm-fname" placeholder="Jane"></div>
@@ -2955,28 +2955,16 @@ window.renderAdminUsersPage = async function() {
   body.innerHTML = '<div style="padding:28px;text-align:center;color:var(--g5);">Loading users...</div>';
   try {
     const { db, collection, getDocs } = await import('/firebase-config.js');
-    const [userSnap, orgSnap] = await Promise.all([
-      getDocs(collection(db, 'users')),
-      getDocs(collection(db, 'organizations')).catch(() => ({ docs: [] }))
-    ]);
-    const inviteRows = [];
-    orgSnap.docs.forEach(orgDoc => {
-      const orgData = orgDoc.data();
-      Object.entries(orgData.invites || {}).forEach(([inviteId, invite]) => {
-        inviteRows.push({ id: inviteId, ...(invite || {}), orgId: orgData.orgId || orgDoc.id, orgName: orgData.name || invite.orgName || orgDoc.id, invitePending: true, source: 'Pending invite' });
-      });
-    });
+    const userSnap = await getDocs(collection(db, 'users'));
     const q = normalizeFilterText(document.getElementById('admin-users-search')?.value || '');
+    const staffRoles = new Set(['super_admin','admin','sr_recruiter','recruiter','account_manager','hr','employee','user']);
     const existingUsers = userSnap.docs.map(item => ({ id:item.id, ...item.data() }));
-    const usersByEmail = new Map(existingUsers.map(user => [String(user.email || '').toLowerCase(), user]).filter(([email]) => email));
-    const inviteEmails = new Set(inviteRows.map(invite => String(invite.email || '').toLowerCase()).filter(Boolean));
-    const mergedInviteRows = inviteRows.map(invite => {
-      const acceptedUser = usersByEmail.get(String(invite.email || '').toLowerCase());
-      return acceptedUser
-        ? { ...invite, ...acceptedUser, id: invite.id, acceptedUserId: acceptedUser.id, invitePending: false, inviteAccepted: true, source: invite.orgName || acceptedUser.source || 'Client invite' }
-        : invite;
-    });
-    const rows = existingUsers.filter(user => !inviteEmails.has(String(user.email || '').toLowerCase())).concat(mergedInviteRows)
+    const rows = existingUsers
+      .filter(user => {
+        const userEmail = String(user.email || '').toLowerCase();
+        const userRole = String(user.role || user.portalRole || '').toLowerCase();
+        return userEmail.endsWith('@nearwork.co') || staffRoles.has(userRole);
+      })
       .filter(user => {
         const haystack = normalizeFilterText([user.name, user.firstName, user.lastName, user.email, user.role, user.portalRole, user.source].filter(Boolean).join(' '));
         return !q || haystack.includes(q);
@@ -2986,7 +2974,7 @@ window.renderAdminUsersPage = async function() {
       body.innerHTML = '<div style="padding:28px;text-align:center;color:var(--g5);">No users found.</div>';
       return;
     }
-    const roles = ['super_admin','admin','sr_recruiter','recruiter','account_manager','hr','employee','user','client','admin_client','viewer_client','candidate'];
+    const roles = ['super_admin','admin','sr_recruiter','recruiter','account_manager','hr','employee','user'];
     body.innerHTML = rows.map(user => {
       const name = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Unknown user';
       const selectedRole = user.role || user.portalRole || 'user';
@@ -4338,6 +4326,11 @@ async function createOrRefreshOrgInvite(u, org) {
     onboarded: false
   };
   await setDoc(doc(db, 'organizations', org.orgId), { ['invites.' + userDocId]: { ...inviteDoc, userDocId, token: inviteToken } }, { merge:true });
+  try {
+    await setDoc(doc(db, 'orgInvites', userDocId), { ...inviteDoc, userDocId, token: inviteToken }, { merge:true });
+  } catch (mirrorErr) {
+    console.warn('[OrgInvite] Top-level invite mirror failed; org invite was still saved inside organization record.', mirrorErr);
+  }
   await sendOrgInvitationEmail({ ...inviteDoc, inviteToken, userDocId, orgName: org.orgName });
   return { email: inviteDoc.email, status:'ok', userDocId, inviteToken };
 }
@@ -6642,11 +6635,17 @@ async function loadOrgDetailData(orgId) {
   if (usersBody) usersBody.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--g4);">Loading…</div>';
   try {
     const { db, collection, getDocs, query, where, doc, getDoc } = await import('/firebase-config.js');
-    const [snap, orgSnap] = await Promise.all([
+    const [snap, orgSnap, inviteSnap] = await Promise.all([
       getDocs(query(collection(db, 'users'), where('orgId', '==', orgId))),
-      getDoc(doc(db, 'organizations', orgId)).catch(() => null)
+      getDoc(doc(db, 'organizations', orgId)).catch(() => null),
+      getDocs(query(collection(db, 'orgInvites'), where('orgId', '==', orgId))).catch(() => ({ docs: [] }))
     ]);
     const orgInvites = Object.entries(orgSnap?.exists?.() ? (orgSnap.data().invites || {}) : {}).map(([inviteId, invite]) => ({ id: inviteId, ...(invite || {}), invitePending:true }));
+    inviteSnap.docs.forEach(inviteDoc => {
+      const invite = { id: inviteDoc.id, ...inviteDoc.data(), invitePending:true };
+      const key = String(invite.email || '').toLowerCase();
+      if (!orgInvites.some(row => String(row.email || '').toLowerCase() === key)) orgInvites.push(invite);
+    });
     const byEmail = new Map();
     snap.docs.map(d => ({ id: d.id, ...d.data() })).forEach(user => {
       const key = String(user.email || user.id).toLowerCase();

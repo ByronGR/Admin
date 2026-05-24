@@ -3268,6 +3268,32 @@ function getDefaultSkillsForRole(roleName, department) {
   return [];
 }
 
+// Infer a department name from role title when Airtable doesn't provide one.
+const ROLE_DEPT_INFERENCE = [
+  { match: ['customer success','csm'],            dept: 'Customer Success' },
+  { match: ['sales development','sdr','bdr'],     dept: 'Sales' },
+  { match: ['account executive','account manager','ae'], dept: 'Sales' },
+  { match: ['sales'],                             dept: 'Sales' },
+  { match: ['marketing'],                         dept: 'Marketing' },
+  { match: ['recruiter','talent acquisition'],    dept: 'Talent Acquisition' },
+  { match: ['developer','engineer','software'],   dept: 'Engineering' },
+  { match: ['data analyst','analytics','data scientist'], dept: 'Data & Analytics' },
+  { match: ['operations','ops'],                  dept: 'Operations' },
+  { match: ['project manager','pm'],              dept: 'Project Management' },
+  { match: ['virtual assistant','va'],            dept: 'Administration' },
+  { match: ['support','helpdesk','service desk'], dept: 'Customer Support' },
+  { match: ['finance','controller','accountant'], dept: 'Finance' },
+  { match: ['hr','human resource','people ops'],  dept: 'Human Resources' },
+  { match: ['design','ux','ui'],                  dept: 'Design' },
+];
+function inferDepartmentFromRole(roleName) {
+  const lower = (roleName || '').toLowerCase();
+  for (const entry of ROLE_DEPT_INFERENCE) {
+    if (entry.match.some(m => lower.includes(m))) return entry.dept;
+  }
+  return '';
+}
+
 window.markDirty = function() {
   _openingDirty = true;
   const chip = document.getElementById('od-draft-chip');
@@ -3516,6 +3542,7 @@ window.renderOpeningRoleSelectors = function() {
   select.innerHTML = '<option value="">Select role…</option>' +
     OPENING_ROLE_LIBRARY.map((role, index) => ({ role, index }))
     .filter(item => !departmentSelect.value || (item.role.department || 'Uncategorized') === departmentSelect.value)
+    .sort((a, b) => a.role.role.localeCompare(b.role.role))
     .map(({ role, index }) => {
       const label = [role.role, role.department].filter(Boolean).join(' · ');
       return `<option value="${index}" ${role.role === currentTitle ? 'selected' : ''}>${label}</option>`;
@@ -3534,7 +3561,17 @@ window.applyOpeningRoleReference = function(index) {
   const titleInput = document.getElementById('inp-title');
   if (titleInput) titleInput.value = role.role;
   const departmentSelect = document.getElementById('inp-role-department');
-  if (departmentSelect && role.department) departmentSelect.value = role.department;
+  if (departmentSelect) {
+    const dept = role.department || inferDepartmentFromRole(role.role);
+    if (dept) {
+      // If the option doesn't exist yet (e.g. Airtable had no dept for this role), add it
+      if (!Array.from(departmentSelect.options).some(o => o.value === dept)) {
+        departmentSelect.add(new Option(dept, dept));
+      }
+      departmentSelect.value = dept;
+      _currentOpening.roleLibraryDepartment = dept;
+    }
+  }
   const senioritySelect = document.getElementById('inp-role-seniority');
   if (senioritySelect && parsed.level) {
     const seniority = parsed.level.split(' ')[0];
@@ -3566,13 +3603,11 @@ window.applyOpeningRoleReference = function(index) {
   _currentOpening.roleLibrarySeniority = senioritySelect?.value || parsed.level || '';
   _currentOpening.roleLibrarySalary = { min:Number(role.min || 0), avg:Number(role.avg || 0), max:Number(role.max || 0), currency:'USD' };
 
-  // Auto-fill skills chips from role name
-  const autoSkills = getDefaultSkillsForRole(role.role, role.department);
+  // Auto-fill skills chips from role name — always replace when a role is chosen
+  const autoSkills = getDefaultSkillsForRole(role.role, role.department || inferDepartmentFromRole(role.role));
   if (autoSkills.length) {
     const chipsInput = document.getElementById('inp-skills-chips');
-    if (chipsInput && !chipsInput.value.trim()) {
-      chipsInput.value = autoSkills.join(', ');
-    }
+    if (chipsInput) chipsInput.value = autoSkills.join(', ');
   }
 
   markDirty();

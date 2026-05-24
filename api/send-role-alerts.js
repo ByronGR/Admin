@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+const admin = require('firebase-admin');
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'nearwork-97e3c';
 
@@ -122,7 +122,7 @@ async function sendEmail({ to, firstNameValue, roleTitle, openingCode }) {
   return data;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });

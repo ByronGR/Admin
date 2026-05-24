@@ -1811,15 +1811,15 @@ onAuthStateChanged(auth, async user => {
             <h1 class="opening-title" id="od-title">Customer Success Manager</h1>
           </div>
           <div id="edit-title" style="display:none;margin-bottom:10px;">
-            <div style="display:grid;grid-template-columns:1fr 1.4fr .9fr;gap:8px;margin-bottom:8px;">
-              <select id="inp-role-department" class="od-sel" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff;" onchange="renderOpeningRoleSelectors()">
-                <option value="">Department / industry</option>
-              </select>
+            <div style="display:grid;grid-template-columns:1.6fr .9fr 1fr;gap:8px;margin-bottom:8px;">
               <select id="inp-role-library" class="od-sel" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff;" onchange="applyOpeningRoleReference(this.value)">
-                <option value="">Select role…</option>
+                <option value="">Select role from library…</option>
               </select>
               <select id="inp-role-seniority" class="od-sel" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff;" onchange="markDirty()">
                 <option value="">Seniority</option><option>Junior</option><option>Mid</option><option>Senior</option><option>Lead</option>
+              </select>
+              <select id="inp-role-department" class="od-sel" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);font-size:11px;" onchange="renderOpeningRoleSelectors()">
+                <option value="">All departments</option>
               </select>
             </div>
             <div id="opening-role-reference" style="display:none;margin-bottom:8px;font-size:11px;line-height:1.55;color:rgba(255,255,255,0.72);background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:9px;padding:8px 10px;"></div>
@@ -2005,20 +2005,7 @@ Project coordination & time management</textarea>
           </div>
         </div>
 
-        <!-- Question Bank -->
-        <div class="opening-section" id="ods-question-bank">
-          <div class="opening-section-hdr">
-            <div>
-              <div class="opening-section-title">Client screening questions</div>
-              <div id="opening-question-bank-sub" style="font-size:11px;color:var(--g5);margin-top:3px;">Questions the client or recruiter wants candidates to answer when applying.</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="opening-edit-btn" style="display:inline-block;" onclick="openOpeningQuestionSettings()">Question settings</button>
-              <button class="opening-edit-btn" style="display:inline-block;" onclick="addOpeningScreeningQuestion()">+ Blank question</button>
-            </div>
-          </div>
-          <div class="opening-question-grid" id="opening-question-bank-list"></div>
-        </div>
+        <!-- Screening questions removed — LinkedIn-style easy apply, no pre-screening -->
 
         <!-- About Nearwork — fixed -->
         <div class="opening-section opening-section-nearwork">
@@ -3250,6 +3237,37 @@ let _openingQuestionDragId = '';
 let OPENING_ROLE_LIBRARY = [];
 const SIDEBAR_FIELDS = []; // handled directly in setSidebarEditMode
 
+// Default skills per role — auto-filled when a role is selected from the library.
+// Keys are lowercased fragments matched against the role name.
+const ROLE_SKILLS_MAP = [
+  { match: ['customer success','csm'],           skills: ['CRM','Customer Retention','Onboarding','Account Management','English C1+','SaaS','Salesforce','HubSpot','Churn Reduction','Upselling'] },
+  { match: ['sales development','sdr','bdr'],    skills: ['Cold Outreach','Email Sequences','CRM','Lead Generation','English C1+','Objection Handling','LinkedIn Sales Navigator','HubSpot','Salesforce'] },
+  { match: ['account executive','ae','sales'],   skills: ['B2B Sales','CRM','Closing','Negotiation','English C1+','Salesforce','Forecasting','Pipeline Management'] },
+  { match: ['account manager'],                  skills: ['Account Management','CRM','Upselling','Client Communication','English C1+','Salesforce','Renewal Management','Stakeholder Management'] },
+  { match: ['marketing'],                        skills: ['Content Strategy','SEO','Google Ads','Social Media','HubSpot','Copywriting','Email Marketing','Analytics','English C1+'] },
+  { match: ['recruiter','talent'],               skills: ['Sourcing','ATS','Interviewing','LinkedIn Recruiter','English C1+','Boolean Search','Candidate Experience','Offer Negotiation'] },
+  { match: ['developer','engineer','software'],  skills: ['JavaScript','React','Node.js','REST APIs','Git','SQL','Problem Solving','English B2+','Agile'] },
+  { match: ['data analyst','analytics'],         skills: ['SQL','Excel','Power BI','Tableau','Python','Data Visualization','English C1+','Reporting','Statistical Analysis'] },
+  { match: ['operations','ops'],                 skills: ['Process Improvement','Project Management','Excel','Asana','Notion','Cross-functional Collaboration','English C1+','SOP Development'] },
+  { match: ['project manager','pm'],             skills: ['Project Management','Agile','Scrum','Jira','Stakeholder Management','English C1+','Risk Management','Budgeting'] },
+  { match: ['virtual assistant','va'],           skills: ['Calendar Management','Email Management','English C1+','Google Workspace','Microsoft Office','Data Entry','Attention to Detail'] },
+  { match: ['support','helpdesk','service desk'],skills: ['Ticketing Systems','Customer Service','English C1+','Troubleshooting','Zendesk','Freshdesk','SLA Management','Empathy'] },
+  { match: ['finance','controller','accountant'],skills: ['QuickBooks','Excel','Financial Reporting','GAAP','Accounts Payable','Accounts Receivable','English C1+','Reconciliation'] },
+  { match: ['hr','human resource','people'],     skills: ['HRIS','Onboarding','Payroll','Labor Law','Employee Relations','English C1+','Performance Management','Recruiting'] },
+  { match: ['design','ux','ui'],                 skills: ['Figma','Adobe XD','User Research','Prototyping','Wireframing','English B2+','Design Systems','Usability Testing'] },
+];
+
+function getDefaultSkillsForRole(roleName, department) {
+  const lower = (roleName || '').toLowerCase();
+  const deptLower = (department || '').toLowerCase();
+  for (const entry of ROLE_SKILLS_MAP) {
+    if (entry.match.some(m => lower.includes(m) || deptLower.includes(m))) {
+      return entry.skills;
+    }
+  }
+  return [];
+}
+
 window.markDirty = function() {
   _openingDirty = true;
   const chip = document.getElementById('od-draft-chip');
@@ -3400,6 +3418,15 @@ window.openNewOpening = function() {
 
   _openingEditMode = true;
   loadOpeningRoleLibrary();
+  // Populate org dropdown for new openings
+  const orgSelNew = document.getElementById('inp-org');
+  if (orgSelNew && typeof NW_ORGS !== 'undefined' && NW_ORGS.length) {
+    orgSelNew.innerHTML = '<option value="">No client org</option>' +
+      NW_ORGS.filter(o => o.name && o.name !== '—')
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(o => `<option value="${o.name}">${o.name}</option>`)
+        .join('');
+  }
   document.getElementById('od-edit-btn').textContent = '✓ Done editing';
   document.querySelectorAll('.opening-edit-btn').forEach(b => b.style.display = 'inline-block');
   setSidebarEditMode(true);
@@ -3414,7 +3441,19 @@ window.openNewOpening = function() {
 
 window.toggleOpeningEdit = function() {
   _openingEditMode = !_openingEditMode;
-  if (_openingEditMode) loadOpeningRoleLibrary();
+  if (_openingEditMode) {
+    loadOpeningRoleLibrary();
+    // Populate the client org dropdown from NW_ORGS
+    const orgSel = document.getElementById('inp-org');
+    if (orgSel && typeof NW_ORGS !== 'undefined' && NW_ORGS.length) {
+      const currentVal = orgSel.value || _currentOpening.org || _currentOpening.orgName || '';
+      orgSel.innerHTML = '<option value="">No client org</option>' +
+        NW_ORGS.filter(o => o.name && o.name !== '—')
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(o => `<option value="${o.name}" ${o.name === currentVal ? 'selected' : ''}>${o.name}</option>`)
+          .join('');
+    }
+  }
   document.getElementById('od-edit-btn').textContent = _openingEditMode ? '✓ Done editing' : '✏️ Edit';
   document.querySelectorAll('.opening-edit-btn').forEach(b => { b.style.display = _openingEditMode ? 'inline-block' : 'none'; });
   setSidebarEditMode(_openingEditMode);
@@ -3526,6 +3565,16 @@ window.applyOpeningRoleReference = function(index) {
   _currentOpening.roleLibraryDepartment = role.department || '';
   _currentOpening.roleLibrarySeniority = senioritySelect?.value || parsed.level || '';
   _currentOpening.roleLibrarySalary = { min:Number(role.min || 0), avg:Number(role.avg || 0), max:Number(role.max || 0), currency:'USD' };
+
+  // Auto-fill skills chips from role name
+  const autoSkills = getDefaultSkillsForRole(role.role, role.department);
+  if (autoSkills.length) {
+    const chipsInput = document.getElementById('inp-skills-chips');
+    if (chipsInput && !chipsInput.value.trim()) {
+      chipsInput.value = autoSkills.join(', ');
+    }
+  }
+
   markDirty();
 };
 

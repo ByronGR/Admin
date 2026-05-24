@@ -4850,13 +4850,13 @@ window.inviteTeamMember = async function() {
     });
 
     // Send branded password-set email — link lands on admin.nearwork.co after reset
-    await fetch('/api/send-password-reset', {
+    await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email,
-        firstName: fname,
-        continueUrl: 'https://admin.nearwork.co'
+        to: email,
+        templateId: 'password_reset',
+        data: { firstName: fname, continueUrl: 'https://admin.nearwork.co' }
       })
     });
 

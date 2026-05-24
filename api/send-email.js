@@ -1,3 +1,26 @@
+// Firebase Admin — only initialised when needed for password reset link generation
+let _adminApp = null;
+function getAdminApp() {
+  if (_adminApp) return _adminApp;
+  const admin = require('firebase-admin');
+  if (admin.apps.length) { _adminApp = admin.app(); return _adminApp; }
+  const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'nearwork-97e3c';
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    _adminApp = admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)) });
+  } else if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    _adminApp = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      })
+    });
+  } else {
+    throw new Error('Firebase Admin credentials are not configured');
+  }
+  return _adminApp;
+}
+
 const TEMPLATE_COPY = {
   account_created: {
     subject: 'You\'re in. Welcome to Nearwork, {firstName} ✅',
@@ -1148,14 +1171,42 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Missing to or valid templateId' });
   }
 
-  const html = buildHtml(template, { ...data, templateId });
+  // Password reset: generate the Firebase link via Admin SDK when the caller
+  // doesn't supply one (so send-email stays the only serverless function needed).
+  let resolvedData = { ...data };
+  if (templateId === 'password_reset' && !resolvedData.resetLink) {
+    const email = Array.isArray(to) ? to[0] : to;
+    const continueUrl = String(resolvedData.continueUrl || 'https://app.nearwork.co/reset-password');
+    try {
+      const admin = require('firebase-admin');
+      getAdminApp();
+      resolvedData.resetLink = await admin.auth().generatePasswordResetLink(
+        String(email).trim().toLowerCase(),
+        { url: continueUrl, handleCodeInApp: false }
+      );
+      // Try to pull first name from Firebase Auth display name
+      if (!resolvedData.firstName) {
+        try {
+          const rec = await admin.auth().getUserByEmail(String(email).trim().toLowerCase());
+          if (rec.displayName) resolvedData.firstName = rec.displayName.trim().split(/\s+/)[0];
+        } catch { /* not critical */ }
+      }
+    } catch (err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+        return res.status(200).json({ ok: true }); // silent — don't leak email existence
+      }
+      return res.status(500).json({ ok: false, error: err.message || 'Could not generate reset link' });
+    }
+  }
+
+  const html = buildHtml(template, { ...resolvedData, templateId });
   const payload = {
     from: `Nearwork <${fromEmail}>`,
     to: Array.isArray(to) ? to : [to],
     reply_to: replyTo,
-    subject: personalizeSubject(subject || template.subject, data),
+    subject: personalizeSubject(subject || template.subject, resolvedData),
     html,
-    text: buildPlainText(template, { ...data, templateId })
+    text: buildPlainText(template, { ...resolvedData, templateId })
   };
 
   const resendResponse = await fetch('https://api.resend.com/emails', {

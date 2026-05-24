@@ -1569,7 +1569,7 @@ onAuthStateChanged(auth, async user => {
         <button class="btn btn-p btn-sm" onclick="openModal('add-org-user-modal')">+ Add user</button>
       </div>
       <div class="ud-table" style="max-width:820px;" id="od-users-table">
-        <div class="ud-hdr"><div>User</div><div>Role</div><div>Status</div><div>Actions</div></div>
+        <div class="ud-hdr"><div>User</div><div>Access / position</div><div>Status</div><div>Actions</div></div>
         <div id="od-users-body">
           <div style="padding:24px;text-align:center;font-size:13px;color:var(--g4);">Loading users…</div>
         </div>
@@ -2987,8 +2987,12 @@ window.renderAdminUsersPage = async function() {
       const safeOrgId = String(user.orgId || user.organizationId || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safeOrgName = String(user.orgName || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safeRole = String(user.portalRole || user.role || 'viewer_client').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeTitle = String(user.businessRole || user.title || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const action = user.invitePending
-        ? `<button class="btn btn-ghost btn-sm" onclick="resendOrgInvite('${user.id}','${safeEmail}','${safeName}','${safeOrgId}','${safeOrgName}','${safeRole}')">Resend invite</button>`
+        ? `<div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="resendOrgInvite('${user.id}','${safeEmail}','${safeName}','${safeOrgId}','${safeOrgName}','${safeRole}','${safeTitle}')">Resend invite</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyOrgInviteLink('${user.id}','${safeEmail}','${safeName}','${safeOrgId}','${safeOrgName}','${safeRole}','${safeTitle}')" title="Copy the invite link without sending an email">🔗 Copy link</button>
+          </div>`
         : `<button class="btn btn-ghost btn-sm" onclick="toast('User details page coming next.','ok')">View</button>`;
       const statusLine = user.invitePending
         ? `<div style="font-size:10px;color:#B45309;margin-top:3px;">Invite pending · Last sent ${formatAdminDate(user.inviteLastSentAt || user.invitedAt)}</div>`
@@ -4275,7 +4279,7 @@ function userDocIdFromInvite(email, orgId) {
 }
 
 async function sendOrgInvitationEmail(invite) {
-  const actionUrl = `https://app.nearwork.co/invite?token=${encodeURIComponent(invite.inviteToken)}&email=${encodeURIComponent(invite.email)}&orgId=${encodeURIComponent(invite.orgId || '')}&orgName=${encodeURIComponent(invite.orgName || '')}&role=${encodeURIComponent(invite.portalRole || 'viewer_client')}&firstName=${encodeURIComponent(invite.firstName || '')}&lastName=${encodeURIComponent(invite.lastName || '')}`;
+  const actionUrl = `https://app.nearwork.co/invite?token=${encodeURIComponent(invite.inviteToken)}&email=${encodeURIComponent(invite.email)}&orgId=${encodeURIComponent(invite.orgId || '')}&orgName=${encodeURIComponent(invite.orgName || '')}&role=${encodeURIComponent(invite.portalRole || 'viewer_client')}&firstName=${encodeURIComponent(invite.firstName || '')}&lastName=${encodeURIComponent(invite.lastName || '')}&title=${encodeURIComponent(invite.businessRole || invite.title || '')}`;
   const response = await fetch('/api/send-email', {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
@@ -4325,7 +4329,12 @@ async function createOrRefreshOrgInvite(u, org) {
     createdByEmail: auth.currentUser?.email || window._currentAdminEmail || '',
     onboarded: false
   };
-  await setDoc(doc(db, 'organizations', org.orgId), { ['invites.' + userDocId]: { ...inviteDoc, userDocId, token: inviteToken } }, { merge:true });
+  await setDoc(doc(db, 'organizations', org.orgId), {
+    invites: {
+      [userDocId]: { ...inviteDoc, userDocId, token: inviteToken }
+    },
+    updatedAt: serverTimestamp()
+  }, { merge:true });
   try {
     await setDoc(doc(db, 'orgInvites', userDocId), { ...inviteDoc, userDocId, token: inviteToken }, { merge:true });
   } catch (mirrorErr) {
@@ -4334,6 +4343,7 @@ async function createOrRefreshOrgInvite(u, org) {
   await sendOrgInvitationEmail({ ...inviteDoc, inviteToken, userDocId, orgName: org.orgName });
   return { email: inviteDoc.email, status:'ok', userDocId, inviteToken };
 }
+window.createOrRefreshOrgInvite = createOrRefreshOrgInvite;
 
 window.genOrgId = function() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -4687,7 +4697,7 @@ window.inviteCurrentOrgUser = async function() {
     lname: document.getElementById('aou-lname')?.value.trim() || '',
     email: document.getElementById('aou-email')?.value.trim().toLowerCase() || '',
     role: document.getElementById('aou-role')?.value || 'viewer_client',
-    title: ''
+    title: document.getElementById('aou-title')?.value.trim() || ''
   };
   if (!u.email) {
     if (errEl) { errEl.textContent = 'Email is required.'; errEl.style.display = 'block'; }
@@ -4695,7 +4705,7 @@ window.inviteCurrentOrgUser = async function() {
   }
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin" style="border-top-color:#fff;"></span>Sending...'; }
   try {
-    await createOrRefreshOrgInvite(u, { orgId: org.orgId, orgName: org.name || org.orgName || org.orgId });
+    await window.createOrRefreshOrgInvite(u, { orgId: org.orgId, orgName: org.name || org.orgName || org.orgId });
     closeModal('add-org-user-modal');
     toast('Invitation sent through Resend.', 'ok');
     await loadOrgDetailData(org.orgId);
@@ -4706,22 +4716,47 @@ window.inviteCurrentOrgUser = async function() {
   }
 };
 
-window.resendOrgInvite = async function(userDocId, email, name, orgId, orgName, portalRole) {
+window.resendOrgInvite = async function(userDocId, email, name, orgId, orgName, portalRole, businessRole = '') {
   if (!email || !orgId) { toast('Missing invite details.', 'bad'); return; }
   try {
     const parts = String(name || '').trim().split(/\s+/);
-    await createOrRefreshOrgInvite({
+    await window.createOrRefreshOrgInvite({
       userDocId,
       email,
       fname: parts[0] || '',
       lname: parts.slice(1).join(' '),
       role: portalRole || 'viewer_client',
-      title: ''
+      title: businessRole || ''
     }, { orgId, orgName: orgName || window._currentOrg?.name || orgId });
     toast('Invitation resent through Resend.', 'ok');
     await loadOrgDetailData(orgId);
   } catch(e) {
     toast('Could not resend invite: ' + (e.message || e), 'bad');
+  }
+};
+
+window.copyOrgInviteLink = async function(userDocId, email, name, orgId, orgName, portalRole, businessRole = '') {
+  if (!email || !orgId) { toast('Missing invite details.', 'bad'); return; }
+  try {
+    const parts = String(name || '').trim().split(/\s+/);
+    const firstName = parts[0] || '';
+    const lastName = parts.slice(1).join(' ');
+    // Generate a fresh token so the link is always valid, but skip the email
+    const inviteToken = createInviteToken();
+    const inviteDocId = userDocId || userDocIdFromInvite(email, orgId);
+    await setDoc(doc(db, 'orgInvites', inviteDocId), {
+      inviteToken,
+      inviteLastSentAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    const link = `https://app.nearwork.co/invite?token=${encodeURIComponent(inviteToken)}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName || '')}&role=${encodeURIComponent(portalRole || 'viewer_client')}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&title=${encodeURIComponent(businessRole || '')}`;
+    await navigator.clipboard.writeText(link).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = link; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    });
+    toast('Invite link copied! No email was sent.', 'ok');
+  } catch(e) {
+    toast('Could not copy link: ' + (e.message || e), 'bad');
   }
 };
 
@@ -4742,15 +4777,37 @@ window.inviteTeamMember = async function() {
   btn.innerHTML = '<span class="spin" style="border-top-color:#fff;"></span>Sending...';
 
   try {
-    const { auth, db, createUserWithEmailAndPassword, sendPasswordResetEmail, saveUserProfile, serverTimestamp } = await import('/firebase-config.js');
+    const {
+      auth, db, saveUserProfile, serverTimestamp, sendPasswordResetEmail
+    } = await import('/firebase-config.js');
+
+    // Use a secondary app instance so creating the staff account doesn't sign the admin out
+    const { initializeApp, deleteApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { getAuth, createUserWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+    const { getFirestore } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const secondaryApp  = initializeApp(auth.app.options, 'staff-invite-' + Date.now());
+    const secondaryAuth = getAuth(secondaryApp);
     const tempPw = 'Nw!' + Math.random().toString(36).slice(2, 10);
-    const cred = await createUserWithEmailAndPassword(auth, email, tempPw);
-    await saveUserProfile(cred.user.uid, {
+    let uid;
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, tempPw);
+      uid = cred.user.uid;
+    } finally {
+      await deleteApp(secondaryApp);
+    }
+
+    await saveUserProfile(uid, {
       email, name: (fname + ' ' + lname).trim(),
       role: 'admin', accessLevel: access,
       createdAt: serverTimestamp(), onboarded: false
     });
-    await sendPasswordResetEmail(auth, email);
+
+    // Send password-set email — link lands on admin.nearwork.co after reset
+    await sendPasswordResetEmail(auth, email, {
+      url: 'https://admin.nearwork.co',
+      handleCodeInApp: false
+    });
+
     closeModal('new-team-modal');
     toast(`Invite sent to ${email}.`, 'ok');
   } catch(e) {
@@ -4799,6 +4856,10 @@ window.inviteTeamMember = async function() {
           <option value="admin_client">Admin — full access to pipeline and candidates</option>
           <option value="viewer_client">Viewer — read only, no notes or changes</option>
         </select>
+      </div>
+      <div class="field">
+        <label>Business role / position</label>
+        <input type="text" id="aou-title" placeholder="Hiring Manager, Operations Lead, Finance" style="width:100%;">
       </div>
       <div id="aou-err" style="display:none;font-size:11px;color:var(--red);margin-top:8px;padding:8px 12px;background:rgba(239,68,68,0.05);border-radius:7px;border:1px solid rgba(239,68,68,0.15);"></div>
     </div>
@@ -6672,6 +6733,7 @@ async function loadOrgDetailData(orgId) {
           const colors = ['linear-gradient(135deg,#16A085,#AF7AC5)','linear-gradient(135deg,#16A085,#12866E)','linear-gradient(135deg,#AF7AC5,#9A5DB3)','linear-gradient(135deg,#16A085,#12866E)'];
           const color = colors[name.charCodeAt(0) % colors.length];
           const role = u.portalRole || u.role || 'viewer';
+          const title = u.businessRole || u.title || u.position || '';
           const statusHtml = u.invitePending
             ? `<span class="badge b-amber">Invite pending</span><div style="font-size:10px;color:var(--g5);margin-top:4px;">Last sent ${formatAdminDate(u.inviteLastSentAt || u.invitedAt)}</div>`
             : u.inviteAccepted
@@ -6683,12 +6745,14 @@ async function loadOrgDetailData(orgId) {
           const safeName = String(name || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           const safeOrgName = String(window._currentOrg?.name || u.orgName || orgId).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           const safeRole = String(role || 'viewer_client').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          const safeTitle = String(title || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           return `<div class="ud-row">
             <div class="ud-user"><div class="ud-av" style="background:${color};">${initials}</div><div><div class="ud-name">${name}</div><div class="ud-email">${u.email || '—'}</div></div></div>
-            <div><select class="fsel" style="font-size:11px;" onchange="toast('Role updated for ${name}.','ok')"><option ${roleSelected('Admin')}>Admin</option><option ${roleSelected('Viewer')}>Viewer</option></select></div>
+            <div><select class="fsel" style="font-size:11px;" onchange="toast('Role updated for ${name}.','ok')"><option ${roleSelected('Admin')}>Admin</option><option ${roleSelected('Viewer')}>Viewer</option></select>${title ? `<div style="font-size:10px;color:var(--g5);margin-top:5px;">${nwSafeText(title)}</div>` : '<div style="font-size:10px;color:var(--g4);margin-top:5px;">No position added</div>'}</div>
             <div>${statusHtml}</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;">
-              <button class="btn btn-ghost btn-sm" onclick="resendOrgInvite('${u.id}','${safeEmail}','${safeName}','${orgId}','${safeOrgName}','${safeRole}')">Resend invite</button>
+              <button class="btn btn-ghost btn-sm" onclick="resendOrgInvite('${u.id}','${safeEmail}','${safeName}','${orgId}','${safeOrgName}','${safeRole}','${safeTitle}')">Resend invite</button>
+              <button class="btn btn-ghost btn-sm" onclick="copyOrgInviteLink('${u.id}','${safeEmail}','${safeName}','${orgId}','${safeOrgName}','${safeRole}','${safeTitle}')" title="Copy the invite link without sending an email">🔗 Copy link</button>
               <button class="btn btn-danger btn-sm" onclick="toast('User removed.','ok')">Remove</button>
             </div>
           </div>`;

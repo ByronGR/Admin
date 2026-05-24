@@ -852,9 +852,39 @@ function buildInterviewStageHtml(data) {
 </html>`;
 }
 
+function buildClientInviteSimpleHtml(data) {
+  const firstName = escapeHtml(firstNameFromData(data));
+  const companyName = escapeHtml(data.companyName || data.orgName || 'your company');
+  const setupLink = escapeHtml(data.setupLink || data.actionUrl || 'https://app.nearwork.co/invite');
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Nearwork client portal is ready</title>
+  </head>
+  <body style="margin:0;background:#F5F4F0;font-family:Arial,sans-serif;color:#111111;">
+    <div style="max-width:620px;margin:0 auto;padding:32px 16px;">
+      <div style="background:#ffffff;border:1px solid #EBEBEB;border-radius:14px;padding:32px;">
+        <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;">Nearwork</div>
+        <div style="width:68px;height:3px;background:#16A085;border-radius:2px;margin:6px 0 28px;"></div>
+        <p style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#12866E;margin:0 0 12px;">Client portal</p>
+        <h1 style="font-size:28px;line-height:1.2;margin:0 0 14px;">Welcome to Nearwork, ${firstName}.</h1>
+        <p style="font-size:15px;line-height:1.7;color:#555555;margin:0 0 18px;">Your workspace for <strong>${companyName}</strong> is ready. Create your password to access candidates, openings, notes, and updates from the Nearwork team.</p>
+        <p style="font-size:15px;line-height:1.7;color:#555555;margin:0 0 26px;">This link is for the Nearwork client portal.</p>
+        <a href="${setupLink}" target="_blank" style="display:inline-block;background:#16A085;color:#ffffff;text-decoration:none;border-radius:8px;padding:13px 24px;font-size:14px;font-weight:800;">Create my password</a>
+        <p style="font-size:12px;line-height:1.6;color:#777777;margin:26px 0 0;">If the button does not work, copy and paste this link into your browser:<br><a href="${setupLink}" style="color:#12866E;word-break:break-all;">${setupLink}</a></p>
+        <p style="font-size:12px;line-height:1.6;color:#777777;margin:18px 0 0;">Questions? Contact <a href="mailto:support@nearwork.co" style="color:#12866E;">support@nearwork.co</a>.</p>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 function buildHtml(template, data) {
   if (data.templateId === 'account_created') return buildAccountCreatedHtml(data);
-  if (data.templateId === 'account_invitation' || data.templateId === 'client_org_created') return buildClientOrgCreatedHtml(data);
+  if (data.templateId === 'client_org_created') return buildClientOrgCreatedHtml(data);
+  if (data.templateId === 'account_invitation') return buildClientInviteSimpleHtml(data);
   if (data.templateId === 'job_applied') return buildApplicationSubmittedHtml(data);
   if (data.templateId === 'job_alert') return buildJobAlertHtml(data);
   if (data.templateId === 'pipeline_profile_review') return buildPipelineProfileReviewHtml(data);
@@ -886,6 +916,38 @@ function buildHtml(template, data) {
 </html>`;
 }
 
+function buildPlainText(template, data) {
+  const firstName = firstNameFromData(data);
+  const orgName = data.orgName || data.companyName || 'your company';
+  const actionUrl = data.setupLink || data.actionUrl || data.dashboardUrl || 'https://app.nearwork.co';
+  if (data.templateId === 'account_invitation' || data.templateId === 'client_org_created') {
+    return [
+      `Hi ${firstName},`,
+      '',
+      `Your Nearwork workspace for ${orgName} is ready.`,
+      'Create your client portal password using this link:',
+      actionUrl,
+      '',
+      'This is for the Nearwork client portal.',
+      '',
+      'Questions? Contact support@nearwork.co',
+      '',
+      'Nearwork Team'
+    ].join('\n');
+  }
+  return [
+    `Hi ${firstName},`,
+    '',
+    template.body,
+    '',
+    actionUrl,
+    '',
+    'Questions? Contact support@nearwork.co',
+    '',
+    'Nearwork Team'
+  ].join('\n');
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -913,12 +975,14 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Missing to or valid templateId' });
   }
 
+  const html = buildHtml(template, { ...data, templateId });
   const payload = {
     from: `Nearwork <${fromEmail}>`,
     to: Array.isArray(to) ? to : [to],
     reply_to: replyTo,
     subject: personalizeSubject(subject || template.subject, data),
-    html: buildHtml(template, { ...data, templateId })
+    html,
+    text: buildPlainText(template, { ...data, templateId })
   };
 
   const resendResponse = await fetch('https://api.resend.com/emails', {

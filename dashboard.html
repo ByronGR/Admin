@@ -4656,23 +4656,70 @@ window.reactivateOrg = async function(orgId, slug, name) {
 };
 
 window.deleteOrg = async function(orgId, slug, name) {
-  if (!confirm(`Delete ${name}?\n\nThis removes it from this dashboard and deletes organizations/${orgId} from Firebase.`)) return;
+  if (!confirm(`Delete "${name}"?\n\nThis will permanently remove:\n• The organization\n• All member invites\n• All client user accounts linked to this org\n\nThis cannot be undone.`)) return;
+
   const row = document.getElementById('org-' + slug)
     || document.querySelector('.org-row[data-code="' + orgId.toLowerCase() + '"]');
   if (row) row.remove();
+
   try {
     localStorage.setItem('nw_deleted_org_' + orgId, '1');
     localStorage.removeItem('nw_logo_' + slug);
     const lastOrg = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
     if (lastOrg?.orgId === orgId) localStorage.removeItem('nw_last_org');
   } catch(e) {}
+
   try {
-    const { db, doc, deleteDoc } = await import('/firebase-config.js');
-    await deleteDoc(doc(db, 'organizations', orgId));
-    toast(`${name} deleted from Firebase.`, 'ok');
+    const { db, auth, doc, deleteDoc, collection, query, where, getDocs } = await import('/firebase-config.js');
+
+    // Collect all data related to this org in parallel
+    const [byOrgId, byOrganizationId, invitesSnap, membersSnap] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('orgId', '==', orgId))),
+      getDocs(query(collection(db, 'users'), where('organizationId', '==', orgId))),
+      getDocs(query(collection(db, 'orgInvites'), where('orgId', '==', orgId))),
+      getDocs(query(collection(db, 'orgMembers'), where('orgId', '==', orgId))),
+    ]);
+
+    // Deduplicate client users (queries may overlap)
+    const clientRoles = ['client', 'client_admin', 'client_user', 'viewer', 'user'];
+    const userMap = new Map();
+    [...byOrgId.docs, ...byOrganizationId.docs].forEach(d => {
+      const role = String(d.data().role || d.data().portalRole || '');
+      if (clientRoles.some(r => role.includes(r))) userMap.set(d.id, d);
+    });
+    const userDocs = [...userMap.values()];
+    const uids = userDocs.map(d => d.id).filter(Boolean);
+
+    // Delete everything from Firestore in parallel
+    await Promise.all([
+      deleteDoc(doc(db, 'organizations', orgId)),
+      ...userDocs.map(d => deleteDoc(doc(db, 'users', d.id))),
+      ...invitesSnap.docs.map(d => deleteDoc(doc(db, 'orgInvites', d.id))),
+      ...membersSnap.docs.map(d => deleteDoc(doc(db, 'orgMembers', d.id))),
+    ]);
+
+    // Delete Firebase Auth accounts via server API (fire-and-forget; non-fatal if it fails)
+    if (uids.length) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        await fetch('/api/delete-org-users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+          body: JSON.stringify({ uids }),
+        });
+      } catch(e) {
+        console.warn('[deleteOrg] Auth account deletion failed (non-fatal):', e.message);
+      }
+    }
+
+    const parts = [`"${name}" deleted`];
+    if (userDocs.length) parts.push(`${userDocs.length} user${userDocs.length > 1 ? 's' : ''} removed`);
+    if (invitesSnap.size) parts.push(`${invitesSnap.size} invite${invitesSnap.size > 1 ? 's' : ''} cleared`);
+    toast(parts.join(' · ') + '.', 'ok');
   } catch(e) {
-    toast('Deleted locally, but Firebase delete failed: ' + e.message, 'bad');
+    toast('Delete failed: ' + e.message, 'bad');
   }
+
   if (window._currentOrg?.orgId === orgId) navTo('orgs', 'Organizations');
   if (typeof filterOrgs === 'function') filterOrgs();
 };

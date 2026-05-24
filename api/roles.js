@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const key   = process.env.AIRTABLE_KEY || process.env.AIRTABLE_TOKEN;
   const base  = process.env.AIRTABLE_BASE || process.env.AIRTABLE_BASE_ID;
   const table = process.env.AIRTABLE_SALARY_TABLE || process.env.AIRTABLE_ROLES_TABLE || 'Table 1';

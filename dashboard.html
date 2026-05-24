@@ -4825,7 +4825,7 @@ window.inviteTeamMember = async function() {
 
   try {
     const {
-      auth, db, saveUserProfile, serverTimestamp, sendPasswordResetEmail
+      auth, db, saveUserProfile, serverTimestamp
     } = await import('/firebase-config.js');
 
     // Use a secondary app instance so creating the staff account doesn't sign the admin out
@@ -4849,10 +4849,15 @@ window.inviteTeamMember = async function() {
       createdAt: serverTimestamp(), onboarded: false
     });
 
-    // Send password-set email — link lands on admin.nearwork.co after reset
-    await sendPasswordResetEmail(auth, email, {
-      url: 'https://admin.nearwork.co',
-      handleCodeInApp: false
+    // Send branded password-set email — link lands on admin.nearwork.co after reset
+    await fetch('/api/send-password-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        firstName: fname,
+        continueUrl: 'https://admin.nearwork.co'
+      })
     });
 
     closeModal('new-team-modal');

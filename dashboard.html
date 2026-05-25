@@ -1789,6 +1789,7 @@ onAuthStateChanged(auth, async user => {
       <button class="btn btn-ghost btn-sm" onclick="leaveOpeningPage()">← Back to openings</button>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="od-draft-chip" style="display:none;font-size:10px;font-weight:700;color:var(--amber);background:rgba(231,76,124,0.10);border:1px solid rgba(231,76,124,0.22);padding:3px 10px;border-radius:99px;">● Unsaved draft</span>
+        <button class="btn btn-ghost btn-sm" id="od-applicants-btn" onclick="openOpeningApplicantsModal()" style="display:none;">👥 <span id="od-applicant-count">0</span> applicants</button>
         <button class="btn btn-ghost btn-sm" id="od-edit-btn" onclick="toggleOpeningEdit()">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" id="od-visibility-btn" onclick="toggleOpeningVisibility()">👁 Set private</button>
         <button class="btn btn-p btn-sm" id="od-save-btn" style="display:none;" onclick="saveOpening()">Save opening</button>
@@ -3366,6 +3367,17 @@ window.openOpeningDetail = function(code, title, status, published, recruiter, e
   _openingScreeningQuestions = getOpeningScreeningQuestions(_currentOpening);
   renderOpeningApplicants();
   renderOpeningScreeningQuestions();
+
+  // Update applicant count button in top bar
+  const _odAppCount = getApplicantsForOpening(code).length;
+  const _odAppBtn = document.getElementById('od-applicants-btn');
+  const _odAppCountEl = document.getElementById('od-applicant-count');
+  if (_odAppBtn) {
+    _odAppBtn.style.display = _odAppCount > 0 ? '' : 'none';
+    if (_odAppCountEl) _odAppCountEl.textContent = _odAppCount;
+    _odAppBtn.style.color = '#12866E';
+    _odAppBtn.style.borderColor = 'rgba(22,160,133,0.3)';
+  }
 
   // Published toggle — restored from localStorage
   const pt = document.getElementById('osb-pub-toggle');
@@ -6351,6 +6363,13 @@ async function loadCandidatesFromFirestore() {
       if (typeof renderAssessmentCandidateSelect === 'function') renderAssessmentCandidateSelect();
       if (typeof renderOpeningApplicants === 'function') renderOpeningApplicants();
       if (typeof renderOpeningList === 'function' && Array.isArray(NW_OPENINGS)) renderOpeningList(NW_OPENINGS);
+      // Refresh applicant count button in opening detail header if it's open
+      if (_currentOpening?.code) {
+        const _c = getApplicantsForOpening(_currentOpening.code).length;
+        const _b = document.getElementById('od-applicants-btn');
+        const _n = document.getElementById('od-applicant-count');
+        if (_b) { _b.style.display = _c > 0 ? '' : 'none'; if (_n) _n.textContent = _c; }
+      }
       console.log(`[ATS] Synced ${incoming.length} candidate(s) from Firestore.`);
 
       // Auto-push each new candidate to HubSpot (fire-and-forget, upsert is safe to repeat)
@@ -6743,13 +6762,20 @@ function renderOpeningRow(o) {
   const pubHtml = pub
     ? `<div class="pub-toggle"><button class="toggle on" onclick="toggleRowPublished(this,'${code}')"></button><span style="color:var(--green);font-size:11px;">Published</span></div>`
     : `<div class="pub-toggle"><button class="toggle" onclick="toggleRowPublished(this,'${code}')"></button><span style="color:var(--g4);font-size:11px;">Draft</span></div>`;
+  const applicantBtnStyle = applicantCount > 0
+    ? 'font-size:10px;color:#12866E;font-weight:700;cursor:pointer;background:rgba(22,160,133,0.1);border:1px solid rgba(22,160,133,0.25);border-radius:99px;padding:2px 8px;margin-top:3px;display:inline-block;'
+    : 'font-size:10px;color:var(--g5);margin-top:2px;';
+  const applicantHtml = applicantCount > 0
+    ? `<span style="${applicantBtnStyle}" onclick="event.stopPropagation();openApplicantsForOpening('${code}')" title="View applicants">👥 ${applicantCount} applicant${applicantCount === 1 ? '' : 's'}</span>`
+    : `<div style="${applicantBtnStyle}">0 applicants</div>`;
   return `<div class="ot-row" data-title="${titleSlug}" data-code="${codeSlug}" data-status="${status}" data-recruiter="${recSlug}" onclick="openOpeningDetail(${onArgs})">
-    <div><div class="ot-role-wrap"><div class="ot-role-icon">${icon}</div><div><div class="ot-role">${title}</div><div class="ot-code copyable" data-copy="${code}" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">${code}</div><div style="font-size:10px;color:var(--g5);margin-top:2px;">${applicantCount} applicant${applicantCount === 1 ? '' : 's'}</div></div></div></div>
+    <div><div class="ot-role-wrap"><div class="ot-role-icon">${icon}</div><div><div class="ot-role">${title}</div><div class="ot-code copyable" data-copy="${code}" onclick="event.stopPropagation();copyCode(this)" title="Click to copy">${code}</div>${applicantHtml}</div></div></div>
     <div class="ot-code">${code}</div>
     <div style="font-size:12px;">${rec}</div>
     <div>${openingStatusBadge(status)}</div>
     <div onclick="event.stopPropagation()">${pubHtml}</div>
     <div onclick="event.stopPropagation()" style="display:flex;gap:5px;">
+      ${applicantCount > 0 ? `<button class="btn btn-ghost btn-sm" style="color:#12866E;border-color:rgba(22,160,133,0.3);" onclick="openApplicantsForOpening('${code}')" title="View applicants">👥 ${applicantCount}</button>` : ''}
       <button class="btn btn-p btn-sm" onclick="openOpeningDetail(${onArgs})">View</button>
       <button class="btn btn-ghost btn-sm" onclick="openOpeningDetail(${onArgs.replace(/\s*$/, ',true')})">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="deleteOpening('${code}')" title="Delete from Firebase">Delete</button>
@@ -7332,6 +7358,22 @@ function renderOpeningApplicants() {
 
 window.openOpeningApplicantsModal = function() {
   if (!_currentOpening?.code) { toast('Open or save an opening first.', 'bad'); return; }
+  renderOpeningApplicants();
+  openModal('opening-applicants-modal');
+};
+
+// Open applicants modal directly from the opening list row (no need to open the full detail first)
+window.openApplicantsForOpening = function(code) {
+  const found = (NW_OPENINGS || []).find(o => o.code === code);
+  if (found) {
+    _currentOpening = { ...found };
+  } else {
+    // Fallback: build minimal object from localStorage
+    try {
+      const stored = JSON.parse(localStorage.getItem('nw_opening_' + code) || 'null');
+      _currentOpening = stored ? { ...stored, code } : { code };
+    } catch(_e) { _currentOpening = { code }; }
+  }
   renderOpeningApplicants();
   openModal('opening-applicants-modal');
 };

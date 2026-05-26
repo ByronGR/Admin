@@ -3023,6 +3023,30 @@ window.updateAdminUserRole = async function(userId, role) {
   }
 };
 
+window.togglePortalUserSuspend = async function(userId, name, suspend) {
+  if (!userId || userId === 'undefined') { toast('Could not identify this user. Reload the page and try again.', 'bad'); return; }
+  const label = suspend ? 'pause' : 'unpause';
+  showConfirm(
+    suspend ? 'Pause user access' : 'Restore user access',
+    suspend
+      ? `Pause ${name}? They will be signed out and cannot access app.nearwork.co until you unpause them.`
+      : `Restore access for ${name}? They will be able to log in again.`,
+    async function() {
+      try {
+        const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
+        await setDoc(doc(db, 'users', userId), { suspended: suspend, updatedAt: serverTimestamp(), updatedBy: window._currentAdminEmail || 'admin' }, { merge: true });
+        toast((suspend ? 'Access paused for ' : 'Access restored for ') + name + '.', 'ok');
+        // Refresh the org detail users list
+        const orgId = window._currentOrg?.orgId;
+        if (orgId) openOrgDetail(orgId);
+      } catch(e) {
+        toast('Could not ' + label + ' user: ' + (e.message || e), 'bad');
+      }
+    },
+    { okLabel: suspend ? 'Pause user' : 'Restore access', okClass: suspend ? 'btn-danger' : 'btn-primary' }
+  );
+};
+
 /* ══ IMPERSONATE ══ */
 function impersonate(orgName){
   // Open client dashboard in new tab
@@ -3830,7 +3854,7 @@ window.togglePubVisibility = async function() {
 
 window.copyOpeningLink = function() {
   const code = _currentOpening.code || 'OPEN-???';
-  const url  = window.location.origin + '/apply/' + code.toLowerCase();
+  const url  = 'https://jobs.nearwork.co/apply?code=' + encodeURIComponent(code);
   navigator.clipboard?.writeText(url).then(() => toast('Link copied: ' + url,'ok')).catch(() => toast('Link: ' + url,'ok'));
 };
 
@@ -6945,10 +6969,13 @@ async function loadOrgDetailData(orgId) {
           const color = colors[name.charCodeAt(0) % colors.length];
           const role = u.portalRole || u.role || 'viewer';
           const title = u.businessRole || u.title || u.position || '';
+          const isSuspended = u.suspended === true;
           const statusHtml = u.invitePending
             ? `<span class="badge b-amber">Invite pending</span><div style="font-size:10px;color:var(--g5);margin-top:4px;">Last sent ${formatAdminDate(u.inviteLastSentAt || u.invitedAt)}</div>`
+            : isSuspended
+              ? `<span style="background:rgba(199,53,101,0.12);color:#C73565;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">⏸ Paused</span><div style="font-size:10px;color:var(--g5);margin-top:4px;">Access suspended</div>`
             : u.inviteAccepted
-              ? `<span style="background:rgba(22,160,133,0.12);color:#12866E;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Accepted</span><div style="font-size:10px;color:var(--g5);margin-top:4px;">Accepted ${formatAdminDate(u.lastLoginAt || u.updatedAt || u.createdAt)}</div>`
+              ? `<span style="background:rgba(22,160,133,0.12);color:#12866E;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Accepted</span><div style="font-size:10px;color:var(--g5);margin-top:4px;">Last seen ${formatAdminDate(u.lastLoginAt || u.updatedAt || u.createdAt)}</div>`
             : '<span style="background:rgba(22,160,133,0.12);color:#12866E;font-weight:700;padding:3px 9px;border-radius:99px;font-size:10px;">Active</span>';
           const roleLabel = role.includes('admin') ? 'Admin' : 'Viewer';
           const roleSelected = (opt) => opt.toLowerCase() === roleLabel.toLowerCase() ? 'selected' : '';
@@ -6957,6 +6984,10 @@ async function loadOrgDetailData(orgId) {
           const safeOrgName = String(window._currentOrg?.name || u.orgName || orgId).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           const safeRole = String(role || 'viewer_client').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           const safeTitle = String(title || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          const targetUserId = u.acceptedUserId || u.id;
+          const pauseBtn = isSuspended
+            ? `<button class="btn btn-ghost btn-sm" style="color:#12866E;" onclick="togglePortalUserSuspend('${targetUserId}','${safeName}',false)">▶ Unpause</button>`
+            : `<button class="btn btn-ghost btn-sm" style="color:#C73565;" onclick="togglePortalUserSuspend('${targetUserId}','${safeName}',true)">⏸ Pause</button>`;
           return `<div class="ud-row">
             <div class="ud-user"><div class="ud-av" style="background:${color};">${initials}</div><div><div class="ud-name">${name}</div><div class="ud-email">${u.email || '—'}</div></div></div>
             <div><select class="fsel" style="font-size:11px;" onchange="toast('Role updated for ${name}.','ok')"><option ${roleSelected('Admin')}>Admin</option><option ${roleSelected('Viewer')}>Viewer</option></select>${title ? `<div style="font-size:10px;color:var(--g5);margin-top:5px;">${nwSafeText(title)}</div>` : '<div style="font-size:10px;color:var(--g4);margin-top:5px;">No position added</div>'}</div>
@@ -6964,7 +6995,7 @@ async function loadOrgDetailData(orgId) {
             <div style="display:flex;gap:5px;flex-wrap:wrap;">
               <button class="btn btn-ghost btn-sm" onclick="resendOrgInvite('${u.id}','${safeEmail}','${safeName}','${orgId}','${safeOrgName}','${safeRole}','${safeTitle}')">Resend invite</button>
               <button class="btn btn-ghost btn-sm" onclick="copyOrgInviteLink('${u.id}','${safeEmail}','${safeName}','${orgId}','${safeOrgName}','${safeRole}','${safeTitle}')" title="Copy the invite link without sending an email">🔗 Copy link</button>
-              <button class="btn btn-danger btn-sm" onclick="toast('User removed.','ok')">Remove</button>
+              ${pauseBtn}
             </div>
           </div>`;
         }).join('');
@@ -7604,6 +7635,7 @@ function renderPipelineCandidate(c, pipelineCode, stageLabel) {
       <div class="pl-cand-role">${c.meta}</div>
       <button class="btn btn-ghost btn-sm pl-eval-btn" onclick="event.stopPropagation();openWhatsAppChat('${c.code}','${pipelineCode}')">${whatsAppIcon()} WhatsApp</button>
       <button class="btn btn-ghost btn-sm pl-eval-btn" onclick="event.stopPropagation();openEnglishEvaluation('${c.code}','${pipelineCode}')">Evaluate English</button>
+      <button class="btn btn-ghost btn-sm pl-eval-btn" style="color:var(--red,#C73565);margin-top:4px;" onclick="event.stopPropagation();removeCandidateFromPipeline('${c.code}','${pipelineCode}')">✕ Remove</button>
     </div>`;
 }
 
@@ -8708,6 +8740,27 @@ window.quickAddCandidateToPipeline = function(code) {
   syncCandidateToHubSpot(c.code, 'pipeline_added');
   sendPipelineEntryEmail(c.code, p, 'profile-review').catch(() => null);
   toast(c.name + ' added to ' + p.openingTitle + '.', 'ok');
+};
+
+window.removeCandidateFromPipeline = function(candidateCode, pipelineCode) {
+  const p = getPipelineByCode(pipelineCode);
+  const c = getATSCandidate(candidateCode);
+  if (!p || !c) { toast('Could not find candidate or pipeline.', 'bad'); return; }
+  showConfirm(
+    'Remove from pipeline',
+    `Remove ${c.name} from "${p.openingTitle}"? This will not delete the candidate record.`,
+    function() {
+      p.candidates = p.candidates.filter(item => item.code !== candidateCode);
+      const idx = c.pipelineCodes.indexOf(pipelineCode);
+      if (idx >= 0) c.pipelineCodes.splice(idx, 1);
+      savePipelineState();
+      renderPipelines();
+      if (window._activeCandidateCode === candidateCode) renderCandidateProfile(candidateCode);
+      syncPipelineToFirebase(p);
+      toast(c.name + ' removed from ' + p.openingTitle + '.', 'ok');
+    },
+    { okLabel: 'Remove', okClass: 'btn-danger' }
+  );
 };
 
 window.syncCandidateToHubSpot = async function(code, eventName = 'ats_sync') {

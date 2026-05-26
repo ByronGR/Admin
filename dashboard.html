@@ -2466,6 +2466,23 @@ Project coordination & time management</textarea>
 
 <!-- ══ MODALS ══ -->
 
+<!-- ══ CONFIRM DIALOG (replaces browser confirm()) ══ -->
+<div class="modal-bg" id="confirm-modal" onclick="if(event.target===this)_confirmCancel()">
+  <div class="modal sm" style="max-width:420px;">
+    <div class="modal-hdr">
+      <div class="modal-title" id="confirm-modal-title">Are you sure?</div>
+      <button class="modal-close" onclick="_confirmCancel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-modal-body" style="margin:0;line-height:1.6;color:var(--g4);font-size:14px;white-space:pre-line;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="_confirmCancel()">Cancel</button>
+      <button class="btn btn-danger" id="confirm-modal-ok" onclick="_confirmOk()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Org -->
 <!-- ══ NEW ORGANIZATION MODAL ══ -->
 <div class="modal-bg" id="new-org-modal" onclick="if(event.target===this)closeModal('new-org-modal')">
@@ -3028,6 +3045,27 @@ function exitImpersonate(){
 /* ══ MODALS ══ */
 function openModal(id){ document.getElementById(id)?.classList.add('open'); }
 function closeModal(id){ document.getElementById(id)?.classList.remove('open'); }
+
+let _confirmCallback = null;
+function showConfirm(title, body, onConfirm, { okLabel = 'Delete', okClass = 'btn-danger' } = {}) {
+  const el = document.getElementById('confirm-modal');
+  if (!el) { if (confirm(body)) onConfirm(); return; } // graceful fallback
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-body').textContent = body;
+  const okBtn = document.getElementById('confirm-modal-ok');
+  okBtn.textContent = okLabel;
+  okBtn.className = 'btn ' + okClass;
+  _confirmCallback = onConfirm;
+  el.classList.add('open');
+}
+function _confirmOk() {
+  closeModal('confirm-modal');
+  if (typeof _confirmCallback === 'function') { const cb = _confirmCallback; _confirmCallback = null; cb(); }
+}
+function _confirmCancel() {
+  closeModal('confirm-modal');
+  _confirmCallback = null;
+}
 
 /* ══ DROPDOWNS ══ */
 function toggleDrop(id){
@@ -3842,21 +3880,26 @@ window.copyCode = function(el) {
 window._isSuperAdmin = true; // Will be set to false for non-super-admin users after auth
 
 // ── Delete opening from UI, local cache, and Firebase ───────────────────────
-window.deleteOpening = async function(code) {
+window.deleteOpening = function(code) {
   const row = document.querySelector('.ot-row[data-code="' + code.toLowerCase() + '"]');
-  if (!confirm('Delete opening ' + code + '?\n\nThis removes it from this dashboard and deletes openings/' + code + ' from Firebase.')) return;
-  if (row) row.remove();
-  localStorage.removeItem('nw_opening_' + code);
-  localStorage.setItem('nw_deleted_opening_' + code, '1');
-  try {
-    const { db, doc, deleteDoc } = await import('/firebase-config.js');
-    await deleteDoc(doc(db, 'openings', code));
-    toast('Opening deleted from Firebase.', 'ok');
-  } catch(e) {
-    toast('Deleted locally, but Firebase delete failed: ' + e.message, 'bad');
-  }
-  filterOpenings();
-  renderDashboardStats();
+  showConfirm(
+    'Delete opening ' + code + '?',
+    'This removes it from this dashboard and deletes openings/' + code + ' from Firebase.',
+    async function() {
+      if (row) row.remove();
+      localStorage.removeItem('nw_opening_' + code);
+      localStorage.setItem('nw_deleted_opening_' + code, '1');
+      try {
+        const { db, doc, deleteDoc } = await import('/firebase-config.js');
+        await deleteDoc(doc(db, 'openings', code));
+        toast('Opening deleted from Firebase.', 'ok');
+      } catch(e) {
+        toast('Deleted locally, but Firebase delete failed: ' + e.message, 'bad');
+      }
+      filterOpenings();
+      renderDashboardStats();
+    }
+  );
 };
 
 window.deleteCurrentOpening = function() {
@@ -4722,19 +4765,25 @@ window.openModal = function(id) {
 <!-- new-pipeline-modal (improved version below) -->
 <script type="module">
 /* ── Org suspend / reactivate (writes to Firestore) ── */
-window.suspendOrg = async function(orgId, slug, name) {
-  if (!confirm(`Suspend ${name}? Their client users will be blocked from logging in.`)) return;
-  try {
-    const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
-    await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
-    const badge = document.getElementById('status-' + slug);
-    if (badge) { badge.textContent = 'Suspended'; badge.className = 'badge b-red'; }
-    const card = document.getElementById('org-' + slug);
-    if (card) card.style.opacity = '0.6';
-    const btn = document.getElementById('suspend-btn-' + slug);
-    if (btn) { btn.textContent = 'Reactivate'; btn.className = 'btn btn-g btn-sm'; btn.onclick = () => reactivateOrg(orgId, slug, name); }
-    toast(`${name} suspended. Client logins blocked.`, 'ok');
-  } catch(e) { toast('Failed to suspend org: ' + e.message, 'bad'); }
+window.suspendOrg = function(orgId, slug, name) {
+  showConfirm(
+    `Suspend ${name}?`,
+    `Their client users will be blocked from logging in.`,
+    async function() {
+      try {
+        const { db, doc, setDoc, serverTimestamp } = await import('/firebase-config.js');
+        await setDoc(doc(db, 'organizations', orgId), { status: 'suspended', suspendedAt: serverTimestamp() }, { merge: true });
+        const badge = document.getElementById('status-' + slug);
+        if (badge) { badge.textContent = 'Suspended'; badge.className = 'badge b-red'; }
+        const card = document.getElementById('org-' + slug);
+        if (card) card.style.opacity = '0.6';
+        const btn = document.getElementById('suspend-btn-' + slug);
+        if (btn) { btn.textContent = 'Reactivate'; btn.className = 'btn btn-g btn-sm'; btn.onclick = () => reactivateOrg(orgId, slug, name); }
+        toast(`${name} suspended. Client logins blocked.`, 'ok');
+      } catch(e) { toast('Failed to suspend org: ' + e.message, 'bad'); }
+    },
+    { okLabel: 'Suspend', okClass: 'btn-danger' }
+  );
 };
 
 window.reactivateOrg = async function(orgId, slug, name) {
@@ -4751,73 +4800,77 @@ window.reactivateOrg = async function(orgId, slug, name) {
   } catch(e) { toast('Failed to reactivate: ' + e.message, 'bad'); }
 };
 
-window.deleteOrg = async function(orgId, slug, name) {
-  if (!confirm(`Delete "${name}"?\n\nThis will permanently remove:\n• The organization\n• All member invites\n• All client user accounts linked to this org\n\nThis cannot be undone.`)) return;
+window.deleteOrg = function(orgId, slug, name) {
+  showConfirm(
+    `Delete "${name}"?`,
+    `This will permanently remove:\n• The organization\n• All member invites\n• All client user accounts linked to this org\n\nThis cannot be undone.`,
+    async function() {
+      const row = document.getElementById('org-' + slug)
+        || document.querySelector('.org-row[data-code="' + orgId.toLowerCase() + '"]');
+      if (row) row.remove();
 
-  const row = document.getElementById('org-' + slug)
-    || document.querySelector('.org-row[data-code="' + orgId.toLowerCase() + '"]');
-  if (row) row.remove();
-
-  try {
-    localStorage.setItem('nw_deleted_org_' + orgId, '1');
-    localStorage.removeItem('nw_logo_' + slug);
-    const lastOrg = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
-    if (lastOrg?.orgId === orgId) localStorage.removeItem('nw_last_org');
-  } catch(e) {}
-
-  try {
-    const { db, auth, doc, deleteDoc, collection, query, where, getDocs } = await import('/firebase-config.js');
-
-    // Collect all data related to this org in parallel
-    const [byOrgId, byOrganizationId, invitesSnap, membersSnap] = await Promise.all([
-      getDocs(query(collection(db, 'users'), where('orgId', '==', orgId))),
-      getDocs(query(collection(db, 'users'), where('organizationId', '==', orgId))),
-      getDocs(query(collection(db, 'orgInvites'), where('orgId', '==', orgId))),
-      getDocs(query(collection(db, 'orgMembers'), where('orgId', '==', orgId))),
-    ]);
-
-    // Deduplicate client users (queries may overlap)
-    const clientRoles = ['client', 'client_admin', 'client_user', 'viewer', 'user'];
-    const userMap = new Map();
-    [...byOrgId.docs, ...byOrganizationId.docs].forEach(d => {
-      const role = String(d.data().role || d.data().portalRole || '');
-      if (clientRoles.some(r => role.includes(r))) userMap.set(d.id, d);
-    });
-    const userDocs = [...userMap.values()];
-    const uids = userDocs.map(d => d.id).filter(Boolean);
-
-    // Delete everything from Firestore in parallel
-    await Promise.all([
-      deleteDoc(doc(db, 'organizations', orgId)),
-      ...userDocs.map(d => deleteDoc(doc(db, 'users', d.id))),
-      ...invitesSnap.docs.map(d => deleteDoc(doc(db, 'orgInvites', d.id))),
-      ...membersSnap.docs.map(d => deleteDoc(doc(db, 'orgMembers', d.id))),
-    ]);
-
-    // Delete Firebase Auth accounts via server API (fire-and-forget; non-fatal if it fails)
-    if (uids.length) {
       try {
-        const idToken = await auth.currentUser?.getIdToken();
-        await fetch('/api/delete-org-users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-          body: JSON.stringify({ uids }),
+        localStorage.setItem('nw_deleted_org_' + orgId, '1');
+        localStorage.removeItem('nw_logo_' + slug);
+        const lastOrg = JSON.parse(localStorage.getItem('nw_last_org') || 'null');
+        if (lastOrg?.orgId === orgId) localStorage.removeItem('nw_last_org');
+      } catch(e) {}
+
+      try {
+        const { db, auth, doc, deleteDoc, collection, query, where, getDocs } = await import('/firebase-config.js');
+
+        // Collect all data related to this org in parallel
+        const [byOrgId, byOrganizationId, invitesSnap, membersSnap] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('orgId', '==', orgId))),
+          getDocs(query(collection(db, 'users'), where('organizationId', '==', orgId))),
+          getDocs(query(collection(db, 'orgInvites'), where('orgId', '==', orgId))),
+          getDocs(query(collection(db, 'orgMembers'), where('orgId', '==', orgId))),
+        ]);
+
+        // Deduplicate client users (queries may overlap)
+        const clientRoles = ['client', 'client_admin', 'client_user', 'viewer', 'user'];
+        const userMap = new Map();
+        [...byOrgId.docs, ...byOrganizationId.docs].forEach(d => {
+          const role = String(d.data().role || d.data().portalRole || '');
+          if (clientRoles.some(r => role.includes(r))) userMap.set(d.id, d);
         });
+        const userDocs = [...userMap.values()];
+        const uids = userDocs.map(d => d.id).filter(Boolean);
+
+        // Delete everything from Firestore in parallel
+        await Promise.all([
+          deleteDoc(doc(db, 'organizations', orgId)),
+          ...userDocs.map(d => deleteDoc(doc(db, 'users', d.id))),
+          ...invitesSnap.docs.map(d => deleteDoc(doc(db, 'orgInvites', d.id))),
+          ...membersSnap.docs.map(d => deleteDoc(doc(db, 'orgMembers', d.id))),
+        ]);
+
+        // Delete Firebase Auth accounts via server API (fire-and-forget; non-fatal if it fails)
+        if (uids.length) {
+          try {
+            const idToken = await auth.currentUser?.getIdToken();
+            await fetch('/api/delete-org-users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+              body: JSON.stringify({ uids }),
+            });
+          } catch(e) {
+            console.warn('[deleteOrg] Auth account deletion failed (non-fatal):', e.message);
+          }
+        }
+
+        const parts = [`"${name}" deleted`];
+        if (userDocs.length) parts.push(`${userDocs.length} user${userDocs.length > 1 ? 's' : ''} removed`);
+        if (invitesSnap.size) parts.push(`${invitesSnap.size} invite${invitesSnap.size > 1 ? 's' : ''} cleared`);
+        toast(parts.join(' · ') + '.', 'ok');
       } catch(e) {
-        console.warn('[deleteOrg] Auth account deletion failed (non-fatal):', e.message);
+        toast('Delete failed: ' + e.message, 'bad');
       }
+
+      if (window._currentOrg?.orgId === orgId) navTo('orgs', 'Organizations');
+      if (typeof filterOrgs === 'function') filterOrgs();
     }
-
-    const parts = [`"${name}" deleted`];
-    if (userDocs.length) parts.push(`${userDocs.length} user${userDocs.length > 1 ? 's' : ''} removed`);
-    if (invitesSnap.size) parts.push(`${invitesSnap.size} invite${invitesSnap.size > 1 ? 's' : ''} cleared`);
-    toast(parts.join(' · ') + '.', 'ok');
-  } catch(e) {
-    toast('Delete failed: ' + e.message, 'bad');
-  }
-
-  if (window._currentOrg?.orgId === orgId) navTo('orgs', 'Organizations');
-  if (typeof filterOrgs === 'function') filterOrgs();
+  );
 };
 
 window.deleteCurrentOrg = function() {
@@ -7309,13 +7362,18 @@ window.updateOpeningQuestionLibrary = function(id, field, value) {
 };
 
 window.deleteOpeningQuestionLibraryItem = function(id) {
-  if (!confirm('Delete this reusable question from settings? It will also be removed from openings where it is selected.')) return;
-  OPENING_QUESTION_LIBRARY = OPENING_QUESTION_LIBRARY.filter(q => q.id !== id);
-  _openingScreeningQuestions = _openingScreeningQuestions.filter(q => q.id !== id);
-  saveOpeningQuestionLibrary();
-  renderOpeningQuestionSettings();
-  renderOpeningScreeningQuestions();
-  markDirty();
+  showConfirm(
+    'Delete question?',
+    'This removes the reusable question from your library and from any openings where it is currently selected.',
+    function() {
+      OPENING_QUESTION_LIBRARY = OPENING_QUESTION_LIBRARY.filter(q => q.id !== id);
+      _openingScreeningQuestions = _openingScreeningQuestions.filter(q => q.id !== id);
+      saveOpeningQuestionLibrary();
+      renderOpeningQuestionSettings();
+      renderOpeningScreeningQuestions();
+      markDirty();
+    }
+  );
 };
 
 function renderOpeningApplicants() {

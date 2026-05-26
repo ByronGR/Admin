@@ -1202,6 +1202,10 @@ onAuthStateChanged(auth, async user => {
   window._currentAdminName = profile.name || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || user.email || 'Nearwork Admin';
   window._currentAdminUid = user.uid;
   window._currentAdminEmail = user.email || profile.email || '';
+  // Stamp lastLoginAt so the Users page shows an accurate "Last seen" timestamp
+  import('/firebase-config.js').then(({ db, doc, setDoc, serverTimestamp }) => {
+    setDoc(doc(db, 'users', user.uid), { lastLoginAt: serverTimestamp() }, { merge: true }).catch(() => null);
+  });
   // Remove guard and show dashboard
   document.getElementById('auth-guard').remove();
   if (typeof window.applyAdminRolePermissions === 'function') window.applyAdminRolePermissions(window._currentAdminRole, adminEmail);
@@ -2598,14 +2602,6 @@ Project coordination & time management</textarea>
 
         <button class="btn btn-ghost btn-sm" onclick="addUserRow()" type="button" style="width:100%;justify-content:center;">+ Add another user</button>
 
-        <!-- What happens notice -->
-        <div style="background:var(--pp);border:1px solid rgba(22,160,133,0.15);border-radius:10px;padding:14px 16px;margin-top:16px;display:flex;gap:10px;align-items:flex-start;">
-          <span style="font-size:16px;flex-shrink:0;">📧</span>
-          <div style="font-size:11px;color:var(--g6);line-height:1.65;">
-            <strong style="color:var(--black);">What happens when you click Create:</strong><br>
-            Nearwork sends a branded invitation email through Resend. The user opens the secure app.nearwork.co link, creates their password, and lands inside this organization workspace.
-          </div>
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="goOrgStep(1)">← Back</button>

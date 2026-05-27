@@ -4869,10 +4869,10 @@ window.deleteOrg = function(orgId, slug, name) {
         if (uids.length) {
           try {
             const idToken = await auth.currentUser?.getIdToken();
-            await fetch('/api/delete-org-users', {
+            await fetch('/api/delete-resources', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-              body: JSON.stringify({ uids }),
+              body: JSON.stringify({ type: 'users', uids }),
             });
           } catch(e) {
             console.warn('[deleteOrg] Auth account deletion failed (non-fatal):', e.message);

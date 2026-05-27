@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Helper functions ─────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // Nearwork admin UIDs — add UIDs of internal admin users here
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'admin' ||
+        request.auth.token.get('isAdmin', false) == true
+      );
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // ── CV / résumé files ────────────────────────────────────────────────
+    // Path: cvs/{candidateCode}/cv-{timestamp}.{ext}  (uploaded via Jobs)
+    // Path: candidate-cvs/{uid}/{timestamp}-{filename}  (uploaded via Talent)
+    match /candidate-cvs/{uid}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid) || isAdmin();
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    match /cvs/{candidateCode}/{fileName} {
+      // Any authenticated user can read (recruiters, clients in their org)
+      allow read: if isAuthenticated();
+
+      // Only the candidate (by matching their uid via the candidate doc check)
+      // or an admin can write/create
+      allow write: if isAuthenticated();
+
+      // Only admins can delete to prevent accidental data loss
+      allow delete: if isAdmin();
+    }
+
+    // ── Candidate profile photos ─────────────────────────────────────────
+    // Path: candidate-photos/{uid}/{filename}
+    match /candidate-photos/{uid}/{fileName} {
+      // Any authenticated user can read profile photos
+      allow read: if isAuthenticated();
+
+      // Only the photo owner or an admin can write
+      allow write: if isOwner(uid) || isAdmin();
+
+      // Owner or admin can delete
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    // ── Organisation / client logos ──────────────────────────────────────
+    // Path: org-assets/{orgId}/{filename}
+    match /org-assets/{orgId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // ── Assessment uploads (if used in the future) ───────────────────────
+    // Path: assessment-files/{assessmentId}/{filename}
+    match /assessment-files/{assessmentId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -7660,7 +7660,7 @@ function renderPipelineBoard(p, opts) {
             <option value="cancelled" ${p.status==='cancelled'?'selected':''}>✕ Cancelled</option>
             <option value="finished" ${p.status==='finished'?'selected':''}>✓ Finished</option>
           </select>
-          ${full ? `<button class="btn btn-ghost btn-sm" onclick="openKickoffNotes('${p.code}')">Kick-off notes</button>` : `<button class="btn btn-ghost btn-sm" onclick="openPipelinePage('${p.code}')">Open workspace</button>`}
+          ${full ? `<button class="btn btn-ghost btn-sm" onclick="openKickoffNotes('${p.code}')">Kick-off notes</button><a class="btn btn-ghost btn-sm" href="/kickoff?code=${p.code}" target="_blank" style="text-decoration:none;">📋 Kick-off Brief</a>` : `<button class="btn btn-ghost btn-sm" onclick="openPipelinePage('${p.code}')">Open workspace</button>`}
         </div>
       </div>
       <div class="pl-board-body">
@@ -7725,6 +7725,7 @@ function renderPipelineFullWorkspace(p) {
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="togglePipelineEdit()">Edit pipeline</button>
       <button class="btn btn-ghost btn-sm" onclick="openKickoffNotes('${p.code}')">Kick-off notes</button>
+      <a class="btn btn-ghost btn-sm" href="/kickoff?code=${p.code}" target="_blank" style="text-decoration:none;">📋 Kick-off Brief</a>
     </div>
     ${placementNote}
     ${renderPipelineInsights(p)}

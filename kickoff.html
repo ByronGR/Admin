@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kick-off Brief · Nearwork Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green: #16A085; --gd: #12866E; --black: #111111; --mid: #555555;
+      --light: #9E9E9E; --bg: #F5F4F0; --surface: #FFFFFF;
+      --border: #E5E4E0; --border2: #D0CFC9; --pp: #F0FAF7;
+      --amber: #F39C12; --red: #E74C3C; --blue: #2563EB;
+      --purple: #7C3AED;
+      --nav-h: 56px; --sidebar-w: 220px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Poppins', sans-serif; background: var(--bg); color: var(--black); font-size: 13px; }
+
+    /* ── Nav ── */
+    .nav { height: var(--nav-h); background: var(--black); display: flex; align-items: center; padding: 0 20px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+    .nav-logo { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -0.04em; text-decoration: none; }
+    .nav-logo span { color: var(--green); }
+    .nav-back { color: rgba(255,255,255,0.6); font-size: 12px; text-decoration: none; display: flex; align-items: center; gap: 4px; }
+    .nav-back:hover { color: #fff; }
+    .nav-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.15); }
+    .nav-title { color: rgba(255,255,255,0.85); font-size: 13px; font-weight: 600; }
+    .nav-spacer { flex: 1; }
+    .save-indicator { font-size: 11px; color: rgba(255,255,255,0.45); transition: color .3s; }
+    .save-indicator.saving { color: var(--amber); }
+    .save-indicator.saved { color: #5eead4; }
+    .nav-user { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+    /* ── Status bar ── */
+    .status-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .sb-opening { font-weight: 700; font-size: 15px; color: var(--black); }
+    .sb-meta { font-size: 11px; color: var(--light); }
+    .sb-spacer { flex: 1; }
+    .sb-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .badge-draft { background: #F5F4F0; color: var(--light); border: 1px solid var(--border); }
+    .badge-submitted { background: #EFF6FF; color: var(--blue); border: 1px solid #BFDBFE; }
+    .badge-changes { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+    .badge-approved { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+
+    /* ── Buttons ── */
+    .btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: 'Poppins', sans-serif; border: none; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: var(--green); color: #fff; }
+    .btn-primary:hover { background: var(--gd); }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-ghost { background: var(--surface); color: var(--black); border: 1.5px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+    .btn-danger { background: rgba(231,76,60,0.08); color: var(--red); border: 1.5px solid rgba(231,76,60,0.2); }
+    .btn-danger:hover { background: rgba(231,76,60,0.15); }
+    .btn-amber { background: #FEF3C7; color: #92400E; border: 1.5px solid #FDE68A; }
+    .btn-amber:hover { background: #FDE68A; }
+    .btn-sm { padding: 5px 12px; font-size: 11px; }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: calc(100vh - var(--nav-h) - 65px); }
+    .sidebar { width: var(--sidebar-w); flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); position: sticky; top: calc(var(--nav-h) + 65px); height: calc(100vh - var(--nav-h) - 65px); overflow-y: auto; padding: 16px 0; }
+    .sidebar-nav a { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 12px; color: var(--mid); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+    .sidebar-nav a:hover, .sidebar-nav a.active { background: var(--pp); color: var(--green); border-left-color: var(--green); font-weight: 600; }
+    .sidebar-nav .section-num { font-size: 10px; color: var(--light); width: 14px; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 16px; }
+    .sidebar-status { padding: 12px 16px; }
+    .sidebar-status-label { font-size: 10px; color: var(--light); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+
+    /* ── Main content ── */
+    .main { flex: 1; padding: 24px 32px; max-width: 860px; }
+    .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 20px; overflow: hidden; }
+    .section-hdr { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); background: #FAFAF9; }
+    .section-icon { font-size: 18px; }
+    .section-title { font-size: 14px; font-weight: 700; }
+    .section-desc { font-size: 11px; color: var(--light); margin-top: 1px; }
+    .section-body { padding: 20px; }
+
+    /* ── Form fields ── */
+    .field-grid { display: grid; gap: 16px; }
+    .field-grid-2 { grid-template-columns: 1fr 1fr; }
+    .field-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 11px; font-weight: 600; color: var(--mid); letter-spacing: .02em; }
+    .field label .required { color: var(--red); margin-left: 2px; }
+    .field label .optional { color: var(--light); font-weight: 400; margin-left: 4px; }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+      font-family: 'Poppins', sans-serif; font-size: 12px; color: var(--black);
+      background: var(--surface); outline: none; width: 100%; transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--green); }
+    textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+    select { cursor: pointer; }
+    input:disabled, select:disabled, textarea:disabled { background: #FAFAF9; color: var(--light); cursor: not-allowed; }
+
+    /* ── Dynamic lists ── */
+    .list-container { display: flex; flex-direction: column; gap: 6px; }
+    .list-item { display: flex; align-items: center; gap: 6px; }
+    .list-item input { flex: 1; }
+    .list-remove { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--light); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
+    .list-remove:hover { border-color: var(--red); color: var(--red); background: rgba(231,76,60,0.06); }
+    .btn-add-item { margin-top: 4px; padding: 6px 12px; background: var(--bg); border: 1.5px dashed var(--border2); border-radius: 7px; font-size: 11px; font-weight: 600; color: var(--light); cursor: pointer; font-family: 'Poppins', sans-serif; transition: all .15s; }
+    .btn-add-item:hover { border-color: var(--green); color: var(--green); background: var(--pp); }
+
+    /* ── Interview stage items ── */
+    .stage-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 8px; }
+    .stage-item-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .stage-item-label { font-size: 11px; font-weight: 700; color: var(--mid); }
+    .stage-item-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 600px) { .stage-item-grid { grid-template-columns: 1fr; } }
+
+    /* ── Audit trail ── */
+    .audit-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .audit-item:last-child { border-bottom: none; }
+    .audit-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
+    .audit-dot-nearwork { background: #E8F8F5; }
+    .audit-dot-client { background: #EFF6FF; }
+    .audit-info { flex: 1; }
+    .audit-action { font-size: 12px; font-weight: 600; color: var(--black); }
+    .audit-meta { font-size: 11px; color: var(--light); margin-top: 2px; }
+    .audit-note { font-size: 12px; color: var(--mid); margin-top: 6px; background: var(--bg); border-radius: 7px; padding: 8px 10px; border-left: 3px solid var(--border2); }
+
+    /* ── Changes-requested banner ── */
+    .changes-banner { background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start; }
+    .changes-banner-icon { font-size: 18px; flex-shrink: 0; }
+    .changes-banner-title { font-size: 13px; font-weight: 700; color: #92400E; }
+    .changes-banner-note { font-size: 12px; color: #92400E; margin-top: 4px; line-height: 1.5; }
+
+    /* ── Approved banner ── */
+    .approved-banner { background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+    .approved-banner-icon { font-size: 20px; }
+    .approved-banner-title { font-size: 13px; font-weight: 700; color: #065F46; }
+    .approved-banner-meta { font-size: 11px; color: #047857; margin-top: 2px; }
+
+    /* ── Internal notes callout ── */
+    .internal-callout { background: #FEF7FF; border: 1px solid #E9D5FF; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .internal-callout-label { font-size: 10px; font-weight: 700; color: #7C3AED; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+    .internal-callout-desc { font-size: 11px; color: #6D28D9; }
+
+    /* ── Confirm modal ── */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 999; backdrop-filter: blur(2px); }
+    .modal-bg.open { display: flex; }
+    .modal-box { background: var(--surface); border-radius: 16px; padding: 28px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+    .modal-icon { font-size: 36px; margin-bottom: 12px; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--black); margin-bottom: 8px; }
+    .modal-desc { font-size: 13px; color: var(--mid); line-height: 1.6; margin-bottom: 16px; }
+    .modal-confirm-label { font-size: 11px; font-weight: 700; color: var(--mid); margin-bottom: 6px; letter-spacing: .04em; text-transform: uppercase; }
+    .modal-confirm-input { width: 100%; padding: 10px 14px; border: 2px solid var(--border); border-radius: 9px; font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--black); outline: none; transition: border-color .15s; }
+    .modal-confirm-input:focus { border-color: var(--green); }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-actions .btn { flex: 1; justify-content: center; }
+
+    /* ── Loading / error states ── */
+    .center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 12px; text-align: center; }
+    .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .field-grid-2, .field-grid-3 { grid-template-columns: 1fr; }
+      .main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Nav ─────────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a class="nav-logo" href="/">Near<span>work</span></a>
+  <div class="nav-sep"></div>
+  <a class="nav-back" href="/" onclick="history.back();return false;">← Back</a>
+  <div class="nav-sep"></div>
+  <span class="nav-title" id="nav-title">Kick-off Brief</span>
+  <span class="nav-spacer"></span>
+  <span class="save-indicator" id="save-indicator">●</span>
+  <span class="nav-user" id="nav-user"></span>
+</nav>
+
+<!-- ─── Loading state ───────────────────────────────────────────── -->
+<div id="loading-state" class="center-state">
+  <div class="spinner"></div>
+  <p style="color:var(--light);font-size:13px;">Loading brief…</p>
+</div>
+
+<!-- ─── Auth error ──────────────────────────────────────────────── -->
+<div id="auth-error" class="center-state" style="display:none;">
+  <div style="font-size:48px;">🔒</div>
+  <p style="font-size:16px;font-weight:700;">Access restricted</p>
+  <p style="color:var(--light);">Only Nearwork staff can access this page.</p>
+  <a href="/login" class="btn btn-primary" style="margin-top:8px;">Sign in</a>
+</div>
+
+<!-- ─── Main page ────────────────────────────────────────────────── -->
+<div id="page" style="display:none;">
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <div>
+      <div class="sb-opening" id="sb-opening">—</div>
+      <div class="sb-meta" id="sb-meta">—</div>
+    </div>
+    <span class="badge badge-draft" id="status-badge">Draft</span>
+    <div class="sb-spacer"></div>
+    <div class="sb-actions">
+      <button class="btn btn-ghost btn-sm" id="btn-copy-link" onclick="copyClientLink()">📋 Copy client link</button>
+      <button class="btn btn-amber btn-sm" id="btn-reopen" onclick="confirmAction('reopen')" style="display:none;">↩ Reopen for editing</button>
+      <button class="btn btn-ghost btn-sm" id="btn-save" onclick="saveDraft()">Save draft</button>
+      <button class="btn btn-primary btn-sm" id="btn-submit" onclick="confirmAction('submit')">Submit for client review →</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- ─── Sidebar ──────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <a href="#s1"><span class="section-num">1</span>Role Overview</a>
+        <a href="#s2"><span class="section-num">2</span>Compensation</a>
+        <a href="#s3"><span class="section-num">3</span>Role Description</a>
+        <a href="#s4"><span class="section-num">4</span>Requirements</a>
+        <a href="#s5"><span class="section-num">5</span>Team & Culture</a>
+        <a href="#s6"><span class="section-num">6</span>Interview Process</a>
+        <a href="#s7"><span class="section-num">7</span>Tools & Tech</a>
+        <a href="#s8"><span class="section-num">8</span>Nearwork Assignment</a>
+        <a href="#s9"><span class="section-num">9</span>Administrative</a>
+        <a href="#s10"><span class="section-num">10</span>Additional Notes</a>
+        <div class="sidebar-divider"></div>
+        <a href="#audit"><span class="section-num">📋</span>Audit Trail</a>
+      </nav>
+    </aside>
+
+    <!-- ─── Form ─────────────────────────────────────────────────── -->
+    <main class="main" id="main-content">
+
+      <div id="changes-banner" class="changes-banner" style="display:none;">
+        <div class="changes-banner-icon">⚠️</div>
+        <div>
+          <div class="changes-banner-title">Client requested changes</div>
+          <div class="changes-banner-note" id="changes-banner-note"></div>
+        </div>
+      </div>
+
+      <div id="approved-banner" class="approved-banner" style="display:none;">
+        <div class="approved-banner-icon">✅</div>
+        <div>
+          <div class="approved-banner-title">Both parties have approved this brief</div>
+          <div class="approved-banner-meta" id="approved-banner-meta"></div>
+        </div>
+      </div>
+
+      <!-- S1 Role Overview -->
+      <section class="section" id="s1">
+        <div class="section-hdr">
+          <span class="section-icon">🎯</span>
+          <div>
+            <div class="section-title">Role Overview</div>
+            <div class="section-desc">Core information about the position and engagement</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Job Title <span class="required">*</span></label>
+              <input type="text" id="f-jobTitle" placeholder="e.g. Senior Software Engineer" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Department / Team <span class="optional">(optional)</span></label>
+              <input type="text" id="f-department" placeholder="e.g. Engineering, Sales, Finance" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Location Policy</label>
+              <select id="f-locationPolicy" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Remote">Remote</option>
+                <option value="Hybrid">Hybrid</option>
+                <option value="On-site">On-site</option>
+                <option value="Flexible">Flexible</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Employment Type</label>
+              <select id="f-employmentType" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+                <option value="Contractor">Contractor</option>
+                <option value="Freelance">Freelance</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Number of Positions</label>
+              <input type="number" id="f-numberOfPositions" placeholder="1" min="1" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Target Start Date</label>
+              <input type="date" id="f-targetStartDate" onchange="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Urgency Level</label>
+              <select id="f-urgency" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Standard">Standard</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Viable in Colombia?</label>
+              <select id="f-colombiaViable" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Yes">Yes</option>
+                <option value="Potentially">Potentially</option>
+                <option value="Needs Discussion">Needs Discussion</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Location / Colombia Viability Notes <span class="optional">(optional)</span></label>
+            <textarea id="f-locationNotes" placeholder="Any notes on remote policies, specific cities, timezone requirements, or why Colombia may or may not be viable…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- S2 Compensation -->
+      <section class="section" id="s2">
+        <div class="section-hdr">
+          <span class="section-icon">💰</span>
+          <div>
+            <div class="section-title">Compensation & Benefits</div>
+            <div class="section-desc">Salary range, pay frequency, and what the role includes</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Salary Min</label>
+              <input type="number" id="f-salaryMin" placeholder="e.g. 3000" min="0" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Salary Max</label>
+              <input type="number" id="f-salaryMax" placeholder="e.g. 5000" min="0" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Currency</label>
+              <select id="f-currency" onchange="scheduleAutoSave()">
+                <option value="USD">USD</option>
+                <option value="COP">COP</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Pay Frequency</label>
+              <select id="f-payFrequency" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Biweekly">Biweekly</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Hourly">Hourly</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Sign-on Bonus <span class="optional">(optional)</span></label>
+              <input type="text" id="f-signOnBonus" placeholder="e.g. USD 2,000 after 3 months" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Variable Pay / Commission <span class="optional">(optional)</span></label>
+              <textarea id="f-variablePay" placeholder="Describe any performance bonuses, OTE, or commission structure…" style="min-height:72px;" oninput="scheduleAutoSave()"></textarea>
+            </div>
+            <div class="field">
+              <label>Equity / Stock Options <span class="optional">(optional)</span></label>
+              <textarea id="f-equity" placeholder="Vesting schedule, grant size, options vs. RSUs…" style="min-height:72px;" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+          <div class="field-grid field-grid-2">
+            <div class="field">
+              <label>Benefits Package</label>
+              <textarea id="f-benefitsPackage" placeholder="Health insurance, paid time off, vacation days, sick leave, parental leave, pension…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+            <div class="field">
+              <label>Additional Perks <span class="optional">(optional)</span></label>
+              <textarea id="f-additionalPerks" placeholder="Remote stipend, training budget, equipment, meal allowance, gym membership…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S3 Role Description -->
+      <section class="section" id="s3">
+        <div class="section-hdr">
+          <span class="section-icon">📋</span>
+          <div>
+            <div class="section-title">Role Description</div>
+            <div class="section-desc">What this person will actually do and what success looks like</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field" style="margin-bottom:14px;">
+            <label>Role Summary / Elevator Pitch <span class="required">*</span></label>
+            <textarea id="f-roleSummary" style="min-height:100px;" placeholder="2–4 sentences describing the role, its purpose, and why it matters to the company…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>Key Responsibilities</label>
+            <div class="list-container" id="list-keyResponsibilities"></div>
+            <button class="btn-add-item" onclick="addListItem('list-keyResponsibilities', '', 'Responsibility (e.g. Lead backend architecture decisions…)')">+ Add responsibility</button>
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>Day-to-day Activities <span class="optional">(optional)</span></label>
+            <textarea id="f-dayToDay" placeholder="What will a typical week look like? Meetings, deliverables, tools used daily…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+          <div style="border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-top:4px;">
+            <div style="background:#FAFAF9;padding:10px 14px;font-size:11px;font-weight:700;color:var(--mid);border-bottom:1px solid var(--border);">SUCCESS MILESTONES</div>
+            <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+              <div class="field">
+                <label>✅ 30 Days</label>
+                <textarea id="f-success30" style="min-height:90px;" placeholder="What should they have accomplished or learned in the first 30 days?" oninput="scheduleAutoSave()"></textarea>
+              </div>
+              <div class="field">
+                <label>🚀 60 Days</label>
+                <textarea id="f-success60" style="min-height:90px;" placeholder="By 60 days, what does good look like?" oninput="scheduleAutoSave()"></textarea>
+              </div>
+              <div class="field">
+                <label>🏆 90 Days</label>
+                <textarea id="f-success90" style="min-height:90px;" placeholder="Fully ramped. What does top performance look like at 90 days?" oninput="scheduleAutoSave()"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S4 Requirements -->
+      <section class="section" id="s4">
+        <div class="section-hdr">
+          <span class="section-icon">🎓</span>
+          <div>
+            <div class="section-title">Candidate Requirements</div>
+            <div class="section-desc">Must-haves, nice-to-haves, experience, and qualifications</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Must-Have Skills / Experience</label>
+              <div class="list-container" id="list-mustHaveSkills"></div>
+              <button class="btn-add-item" onclick="addListItem('list-mustHaveSkills', '', 'e.g. 5+ years Python, REST API design…')">+ Add must-have</button>
+            </div>
+            <div class="field">
+              <label>Nice-to-Have Skills</label>
+              <div class="list-container" id="list-niceToHaveSkills"></div>
+              <button class="btn-add-item" onclick="addListItem('list-niceToHaveSkills', '', 'e.g. Experience with Kubernetes…')">+ Add nice-to-have</button>
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Years of Experience</label>
+              <select id="f-yearsOfExperience" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="< 1 year">Less than 1 year</option>
+                <option value="1–3 years">1–3 years</option>
+                <option value="3–5 years">3–5 years</option>
+                <option value="5–8 years">5–8 years</option>
+                <option value="8–10 years">8–10 years</option>
+                <option value="10+ years">10+ years</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Education Level</label>
+              <select id="f-educationLevel" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="No formal requirement">No formal requirement</option>
+                <option value="High School">High School</option>
+                <option value="Associate's">Associate's</option>
+                <option value="Bachelor's">Bachelor's</option>
+                <option value="Master's">Master's</option>
+                <option value="PhD">PhD</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Field of Study <span class="optional">(if required)</span></label>
+              <input type="text" id="f-fieldOfStudy" placeholder="e.g. Computer Science, Business…" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>English Level Required</label>
+              <select id="f-englishLevel" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Basic">Basic (A1–A2)</option>
+                <option value="Intermediate">Intermediate (B1)</option>
+                <option value="Advanced">Advanced (B2)</option>
+                <option value="Fluent">Fluent (C1)</option>
+                <option value="Native">Native (C2)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Other Languages <span class="optional">(optional)</span></label>
+              <input type="text" id="f-otherLanguages" placeholder="e.g. Spanish C1, French B1…" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Background Check Required</label>
+              <select id="f-backgroundCheck" onchange="scheduleAutoSave()">
+                <option value="">Not specified</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-grid field-grid-2">
+            <div class="field">
+              <label>Required Certifications <span class="optional">(optional)</span></label>
+              <div class="list-container" id="list-requiredCertifications"></div>
+              <button class="btn-add-item" onclick="addListItem('list-requiredCertifications', '', 'e.g. AWS Solutions Architect…')">+ Add certification</button>
+            </div>
+            <div class="field">
+              <label>Industry Experience <span class="optional">(optional)</span></label>
+              <textarea id="f-industryExperience" style="min-height:72px;" placeholder="Any specific industry experience required or preferred? e.g. fintech, healthcare, SaaS…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S5 Team & Culture -->
+      <section class="section" id="s5">
+        <div class="section-hdr">
+          <span class="section-icon">🤝</span>
+          <div>
+            <div class="section-title">Team & Reporting Structure</div>
+            <div class="section-desc">Who they'll work with, report to, and the working environment</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Team Size</label>
+              <input type="number" id="f-teamSize" placeholder="e.g. 8" min="1" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Reports To (Title)</label>
+              <input type="text" id="f-reportsToTitle" placeholder="e.g. VP of Engineering" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Reports To (Person) <span class="optional">(optional)</span></label>
+              <input type="text" id="f-reportsToName" placeholder="e.g. John Smith" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Direct Reports</label>
+              <input type="number" id="f-directReports" placeholder="0 (individual contributor)" min="0" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Working Style</label>
+              <select id="f-workingStyle" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Highly collaborative">Highly collaborative</option>
+                <option value="Mostly independent">Mostly independent</option>
+                <option value="Mixed">Mixed</option>
+                <option value="Cross-functional">Cross-functional</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Works Closely With</label>
+              <input type="text" id="f-worksCloselyWith" placeholder="e.g. Product, Design, QA teams" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Working Hours</label>
+              <input type="text" id="f-workingHours" placeholder="e.g. 9 AM – 6 PM ET, flexible core hours" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Timezone Overlap Required</label>
+              <input type="text" id="f-timezoneRequirements" placeholder="e.g. Must overlap 4h with US-Eastern" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-2">
+            <div class="field">
+              <label>Remote / Hybrid Policy Details <span class="optional">(optional)</span></label>
+              <textarea id="f-remotePolicyDetails" placeholder="Specific policy, office days, async-first culture…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+            <div class="field">
+              <label>Team Culture Notes <span class="optional">(optional)</span></label>
+              <textarea id="f-teamCultureNotes" placeholder="How the team communicates, values, pace, management style…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S6 Interview Process -->
+      <section class="section" id="s6">
+        <div class="section-hdr">
+          <span class="section-icon">💬</span>
+          <div>
+            <div class="section-title">Interview Process</div>
+            <div class="section-desc">Stage-by-stage breakdown, timeline, and decision criteria</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Total Interview Stages</label>
+              <input type="number" id="f-totalInterviewStages" placeholder="e.g. 3" min="1" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Interview Language</label>
+              <select id="f-interviewLanguage" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="English">English only</option>
+                <option value="Spanish">Spanish only</option>
+                <option value="Both">Both English & Spanish</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Time from 1st Interview to Offer</label>
+              <input type="text" id="f-timeToOffer" placeholder="e.g. 2–3 weeks" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>Interview Stages (define each stage)</label>
+            <div id="list-interviewStages"></div>
+            <button class="btn-add-item" onclick="addInterviewStage()">+ Add interview stage</button>
+          </div>
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Assessment / Technical Test Required</label>
+              <select id="f-assessmentRequired" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+                <option value="Maybe">To be decided</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Assessment Details <span class="optional">(if applicable)</span></label>
+              <textarea id="f-assessmentDetails" style="min-height:72px;" placeholder="Type of test, duration, tool used (e.g. HackerRank, take-home project)…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+          <div class="field">
+            <label>Rejection / Disqualifying Criteria</label>
+            <textarea id="f-rejectionCriteria" placeholder="What are the automatic disqualifiers? e.g. cannot work US hours, no Python experience, salary above max…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- S7 Tools & Tech -->
+      <section class="section" id="s7">
+        <div class="section-hdr">
+          <span class="section-icon">🛠️</span>
+          <div>
+            <div class="section-title">Tools & Technology</div>
+            <div class="section-desc">Required stack, software, and internal systems</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Required Tools / Software</label>
+              <div class="list-container" id="list-requiredTools"></div>
+              <button class="btn-add-item" onclick="addListItem('list-requiredTools', '', 'e.g. Jira, Slack, Figma…')">+ Add tool</button>
+            </div>
+            <div class="field">
+              <label>Tech Stack</label>
+              <div class="list-container" id="list-techStack"></div>
+              <button class="btn-add-item" onclick="addListItem('list-techStack', '', 'e.g. React, Node.js, PostgreSQL…')">+ Add technology</button>
+            </div>
+          </div>
+          <div class="field-grid field-grid-3">
+            <div class="field">
+              <label>Internal Systems Candidate Must Know</label>
+              <input type="text" id="f-internalSystems" placeholder="e.g. Salesforce, SAP, HubSpot…" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Training Provided</label>
+              <select id="f-trainingProvided" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Yes">Yes — full onboarding</option>
+                <option value="Partial">Partial — some training</option>
+                <option value="No">No — must hit the ground running</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Training Details <span class="optional">(optional)</span></label>
+              <input type="text" id="f-trainingDetails" placeholder="Duration, format, buddy system…" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S8 Nearwork Assignment -->
+      <section class="section" id="s8">
+        <div class="section-hdr">
+          <span class="section-icon">🏢</span>
+          <div>
+            <div class="section-title">Nearwork Team Assignment</div>
+            <div class="section-desc">Who's on the search, timelines, and strategy — internal use</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Assigned Recruiter</label>
+              <input type="text" id="f-assignedRecruiter" placeholder="Full name" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Account Manager</label>
+              <input type="text" id="f-accountManager" placeholder="Full name" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Sourcing Start Date</label>
+              <input type="date" id="f-sourcingStartDate" onchange="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Candidate Submission Deadline</label>
+              <input type="date" id="f-candidateDeadline" onchange="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Target Candidate Volume</label>
+              <input type="number" id="f-targetCandidateVolume" placeholder="e.g. 5" min="1" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Reporting Cadence</label>
+              <select id="f-reportingCadence" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Biweekly">Biweekly</option>
+                <option value="Monthly">Monthly</option>
+                <option value="As Needed">As Needed</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Reporting Format</label>
+              <input type="text" id="f-reportingFormat" placeholder="e.g. Email update, weekly call, portal only" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>Sourcing Channels</label>
+            <div class="list-container" id="list-sourcingChannels"></div>
+            <button class="btn-add-item" onclick="addListItem('list-sourcingChannels', '', 'e.g. LinkedIn, referrals, job boards…')">+ Add channel</button>
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>Search Strategy Notes <span class="optional">(optional)</span></label>
+            <textarea id="f-searchStrategyNotes" placeholder="Key angles to look for, comparable companies to target, red flags to watch for…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+          <div>
+            <div class="internal-callout">
+              <div class="internal-callout-label">🔒 Internal only</div>
+              <div class="internal-callout-desc">The field below is visible to Nearwork staff only. It will never be shown to the client.</div>
+            </div>
+            <div class="field">
+              <label>Internal Notes (hidden from client)</label>
+              <textarea id="f-internalNotes" placeholder="Recruiter strategy notes, candidate red flags, negotiation context, things not to share with client…" oninput="scheduleAutoSave()"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S9 Administrative -->
+      <section class="section" id="s9">
+        <div class="section-hdr">
+          <span class="section-icon">📄</span>
+          <div>
+            <div class="section-title">Administrative Details</div>
+            <div class="section-desc">Contract, equipment, compliance, and legal considerations</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-grid field-grid-3" style="margin-bottom:14px;">
+            <div class="field">
+              <label>Contract Type</label>
+              <select id="f-contractType" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Employment">Employment (Payroll)</option>
+                <option value="B2B Contractor">B2B Contractor</option>
+                <option value="Freelance">Freelance</option>
+                <option value="Internship">Internship</option>
+                <option value="Part-time Employment">Part-time Employment</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Probation Period</label>
+              <input type="text" id="f-probationPeriod" placeholder="e.g. 3 months, No probation" oninput="scheduleAutoSave()">
+            </div>
+            <div class="field">
+              <label>Notice Period Required</label>
+              <input type="text" id="f-noticePeriod" placeholder="e.g. 2 weeks, 1 month" oninput="scheduleAutoSave()">
+            </div>
+          </div>
+          <div class="field-grid field-grid-3">
+            <div class="field">
+              <label>Work Authorization Required</label>
+              <select id="f-workAuthRequired" onchange="scheduleAutoSave()">
+                <option value="">Not specified</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Non-Compete / NDA Required</label>
+              <select id="f-nonCompeteNda" onchange="scheduleAutoSave()">
+                <option value="">Not specified</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+                <option value="NDA only">NDA only</option>
+                <option value="Non-compete only">Non-compete only</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Equipment Provided By</label>
+              <select id="f-equipmentProvidedBy" onchange="scheduleAutoSave()">
+                <option value="">Select…</option>
+                <option value="Client">Client</option>
+                <option value="Candidate">Candidate (BYOD)</option>
+                <option value="Nearwork">Nearwork</option>
+                <option value="Stipend provided">Stipend provided</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S10 Additional Notes -->
+      <section class="section" id="s10">
+        <div class="section-hdr">
+          <span class="section-icon">📝</span>
+          <div>
+            <div class="section-title">Additional Notes</div>
+            <div class="section-desc">Anything discussed that doesn't fit above</div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field" style="margin-bottom:14px;">
+            <label>Additional Notes / Special Instructions</label>
+            <textarea id="f-additionalNotes" style="min-height:100px;" placeholder="Any client preferences, special considerations, context for this search, things agreed upon verbally…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+          <div class="field">
+            <label>Other Items Discussed (not covered above)</label>
+            <textarea id="f-otherDiscussed" style="min-height:80px;" placeholder="Anything else from the kick-off call that should be documented…" oninput="scheduleAutoSave()"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audit Trail -->
+      <section class="section" id="audit">
+        <div class="section-hdr">
+          <span class="section-icon">📋</span>
+          <div>
+            <div class="section-title">Audit Trail</div>
+            <div class="section-desc">Full history of every action taken on this brief</div>
+          </div>
+        </div>
+        <div class="section-body" id="audit-body">
+          <p style="color:var(--light);font-size:12px;">No activity yet. Save or submit the brief to start the audit trail.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ─── Confirm modal ────────────────────────────────────────────── -->
+<div class="modal-bg" id="confirm-modal">
+  <div class="modal-box">
+    <div class="modal-icon" id="modal-icon">📤</div>
+    <div class="modal-title" id="modal-title">Submit for Client Review?</div>
+    <div class="modal-desc" id="modal-desc">By submitting, you confirm that Nearwork has reviewed and approved this brief. The client will be able to view and approve it in their portal.</div>
+    <div class="modal-confirm-label" id="modal-confirm-label">Type "SUBMIT" to confirm</div>
+    <input type="text" class="modal-confirm-input" id="modal-input" placeholder="" autocomplete="off" oninput="checkConfirmInput()">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-confirm-btn" onclick="executeAction()" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  db, auth, onAuthStateChanged, getDoc, setDoc, doc,
+  collection, query, where, getDocs, serverTimestamp, onSnapshot,
+  isNearworkEmail
+} from '/firebase-config.js';
+
+// ─── State ─────────────────────────────────────────────────────────────────
+let currentUser = null;
+let openingData = null;   // pipeline doc from Firestore
+let briefData = null;
+let currentStatus = 'draft';
+let pendingAction = null;
+let autoSaveTimer = null;
+let isReadOnly = false;
+
+const PIPELINE_CODE = new URLSearchParams(location.search).get('code') || '';
+const ADMIN_API = '/api/kickoff';
+
+// ─── Auth guard ─────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, async user => {
+  if (!user) { showState('auth-error'); return; }
+  if (!isNearworkEmail(user.email)) { showState('auth-error'); return; }
+  currentUser = user;
+  document.getElementById('nav-user').textContent = user.email;
+  if (!PIPELINE_CODE) { showError('No pipeline code in URL. Use ?code=PL-XXXX'); return; }
+  await loadPage();
+});
+
+function showState(id) {
+  ['loading-state','auth-error','page'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? (id === 'page' ? 'block' : 'flex') : 'none';
+  });
+}
+
+function showError(msg) {
+  document.getElementById('loading-state').innerHTML = `
+    <div style="font-size:36px;">⚠️</div>
+    <p style="font-size:15px;font-weight:700;">Error</p>
+    <p style="color:var(--light);">${escHtml(msg)}</p>`;
+  showState('loading-state');
+}
+
+// ─── Load ────────────────────────────────────────────────────────────────────
+async function loadPage() {
+  try {
+    // Load pipeline / opening data
+    const pSnap = await getDoc(doc(db, 'pipelines', PIPELINE_CODE));
+    if (!pSnap.exists()) {
+      // Fallback: try openings collection
+      const oQuery = query(collection(db, 'openings'), where('code', '==', PIPELINE_CODE));
+      const oDocs = await getDocs(oQuery);
+      if (oDocs.empty) { showError(`No pipeline or opening found with code "${PIPELINE_CODE}"`); return; }
+      openingData = { id: oDocs.docs[0].id, ...oDocs.docs[0].data() };
+    } else {
+      openingData = { id: pSnap.id, ...pSnap.data() };
+    }
+
+    document.getElementById('nav-title').textContent = `Kick-off Brief · ${openingData.openingTitle || openingData.title || PIPELINE_CODE}`;
+    document.getElementById('sb-opening').textContent = openingData.openingTitle || openingData.title || PIPELINE_CODE;
+    document.getElementById('sb-meta').textContent = [
+      openingData.orgName, PIPELINE_CODE, openingData.recruiter
+    ].filter(Boolean).join(' · ');
+
+    // Subscribe to brief (real-time)
+    onSnapshot(doc(db, 'kickoffBriefs', PIPELINE_CODE), snap => {
+      if (snap.exists()) {
+        briefData = { id: snap.id, ...snap.data() };
+        populateForm(briefData);
+        updateStatusUI(briefData.status || 'draft');
+        renderAuditTrail(briefData.history || []);
+      }
+    });
+
+    showState('page');
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// ─── Form population ─────────────────────────────────────────────────────────
+function populateForm(data) {
+  // Simple text/select fields
+  const fields = [
+    'jobTitle','department','locationPolicy','employmentType','numberOfPositions',
+    'targetStartDate','urgency','colombiaViable','locationNotes',
+    'salaryMin','salaryMax','currency','payFrequency','signOnBonus','variablePay','equity','benefitsPackage','additionalPerks',
+    'roleSummary','dayToDay','success30','success60','success90',
+    'yearsOfExperience','educationLevel','fieldOfStudy','englishLevel','otherLanguages','backgroundCheck','industryExperience',
+    'teamSize','reportsToTitle','reportsToName','directReports','workingStyle','worksCloselyWith','workingHours','timezoneRequirements','remotePolicyDetails','teamCultureNotes',
+    'totalInterviewStages','interviewLanguage','timeToOffer','assessmentRequired','assessmentDetails','rejectionCriteria',
+    'internalSystems','trainingProvided','trainingDetails',
+    'assignedRecruiter','accountManager','sourcingStartDate','candidateDeadline','targetCandidateVolume','reportingCadence','reportingFormat','searchStrategyNotes','internalNotes',
+    'contractType','probationPeriod','noticePeriod','workAuthRequired','nonCompeteNda','equipmentProvidedBy',
+    'additionalNotes','otherDiscussed'
+  ];
+  fields.forEach(k => {
+    const el = document.getElementById('f-' + k);
+    if (el && data[k] != null) el.value = data[k];
+  });
+
+  // Dynamic lists
+  const listFields = ['keyResponsibilities','mustHaveSkills','niceToHaveSkills','requiredCertifications','requiredTools','techStack','sourcingChannels'];
+  const listPlaceholders = {
+    keyResponsibilities: 'Responsibility…',
+    mustHaveSkills: 'Skill or requirement…',
+    niceToHaveSkills: 'Nice-to-have…',
+    requiredCertifications: 'Certification…',
+    requiredTools: 'Tool or software…',
+    techStack: 'Technology…',
+    sourcingChannels: 'Channel…',
+  };
+  listFields.forEach(k => {
+    const arr = data[k];
+    if (!Array.isArray(arr)) return;
+    const container = document.getElementById('list-' + k);
+    if (!container) return;
+    container.innerHTML = '';
+    arr.forEach(v => addListItem(k, v, listPlaceholders[k] || ''));
+  });
+
+  // Interview stages
+  const stages = data.interviewStages;
+  if (Array.isArray(stages)) {
+    document.getElementById('list-interviewStages').innerHTML = '';
+    stages.forEach(s => addInterviewStage(s));
+  }
+}
+
+// ─── Collect form data ────────────────────────────────────────────────────────
+function collectFormData() {
+  const g = id => {
+    const el = document.getElementById('f-' + id);
+    if (!el) return undefined;
+    const v = el.value?.trim();
+    return v || undefined;
+  };
+  const gn = id => {
+    const el = document.getElementById('f-' + id);
+    const v = parseFloat(el?.value);
+    return Number.isFinite(v) ? v : undefined;
+  };
+  const gList = id => {
+    return Array.from(document.querySelectorAll(`#list-${id} input[type="text"]`))
+      .map(i => i.value.trim()).filter(Boolean);
+  };
+  const gStages = () => {
+    return Array.from(document.querySelectorAll('#list-interviewStages .stage-item')).map(item => ({
+      name: item.querySelector('[data-field="name"]')?.value.trim() || '',
+      format: item.querySelector('[data-field="format"]')?.value.trim() || '',
+      interviewer: item.querySelector('[data-field="interviewer"]')?.value.trim() || '',
+      duration: item.querySelector('[data-field="duration"]')?.value.trim() || '',
+    })).filter(s => s.name);
+  };
+
+  return {
+    jobTitle: g('jobTitle'), department: g('department'), locationPolicy: g('locationPolicy'),
+    employmentType: g('employmentType'), numberOfPositions: gn('numberOfPositions'),
+    targetStartDate: g('targetStartDate'), urgency: g('urgency'),
+    colombiaViable: g('colombiaViable'), locationNotes: g('locationNotes'),
+    salaryMin: gn('salaryMin'), salaryMax: gn('salaryMax'), currency: g('currency'),
+    payFrequency: g('payFrequency'), signOnBonus: g('signOnBonus'), variablePay: g('variablePay'),
+    equity: g('equity'), benefitsPackage: g('benefitsPackage'), additionalPerks: g('additionalPerks'),
+    roleSummary: g('roleSummary'), dayToDay: g('dayToDay'),
+    success30: g('success30'), success60: g('success60'), success90: g('success90'),
+    keyResponsibilities: gList('keyResponsibilities'),
+    mustHaveSkills: gList('mustHaveSkills'), niceToHaveSkills: gList('niceToHaveSkills'),
+    yearsOfExperience: g('yearsOfExperience'), educationLevel: g('educationLevel'),
+    fieldOfStudy: g('fieldOfStudy'), englishLevel: g('englishLevel'),
+    otherLanguages: g('otherLanguages'), backgroundCheck: g('backgroundCheck'),
+    requiredCertifications: gList('requiredCertifications'), industryExperience: g('industryExperience'),
+    teamSize: gn('teamSize'), reportsToTitle: g('reportsToTitle'), reportsToName: g('reportsToName'),
+    directReports: gn('directReports'), workingStyle: g('workingStyle'),
+    worksCloselyWith: g('worksCloselyWith'), workingHours: g('workingHours'),
+    timezoneRequirements: g('timezoneRequirements'), remotePolicyDetails: g('remotePolicyDetails'),
+    teamCultureNotes: g('teamCultureNotes'),
+    totalInterviewStages: gn('totalInterviewStages'), interviewLanguage: g('interviewLanguage'),
+    timeToOffer: g('timeToOffer'), interviewStages: gStages(),
+    assessmentRequired: g('assessmentRequired'), assessmentDetails: g('assessmentDetails'),
+    rejectionCriteria: g('rejectionCriteria'),
+    requiredTools: gList('requiredTools'), techStack: gList('techStack'),
+    internalSystems: g('internalSystems'), trainingProvided: g('trainingProvided'),
+    trainingDetails: g('trainingDetails'),
+    assignedRecruiter: g('assignedRecruiter'), accountManager: g('accountManager'),
+    sourcingStartDate: g('sourcingStartDate'), candidateDeadline: g('candidateDeadline'),
+    targetCandidateVolume: gn('targetCandidateVolume'), reportingCadence: g('reportingCadence'),
+    reportingFormat: g('reportingFormat'), sourcingChannels: gList('sourcingChannels'),
+    searchStrategyNotes: g('searchStrategyNotes'), internalNotes: g('internalNotes'),
+    contractType: g('contractType'), probationPeriod: g('probationPeriod'),
+    noticePeriod: g('noticePeriod'), workAuthRequired: g('workAuthRequired'),
+    nonCompeteNda: g('nonCompeteNda'), equipmentProvidedBy: g('equipmentProvidedBy'),
+    additionalNotes: g('additionalNotes'), otherDiscussed: g('otherDiscussed'),
+  };
+}
+
+// ─── API call ────────────────────────────────────────────────────────────────
+async function callAPI(action, extraData = {}) {
+  const token = await currentUser.getIdToken();
+  const res = await fetch(ADMIN_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({
+      action,
+      code: PIPELINE_CODE,
+      orgId: openingData?.orgId || openingData?.org || '',
+      ...collectFormData(),
+      ...extraData,
+    }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+// ─── Auto-save ───────────────────────────────────────────────────────────────
+window.scheduleAutoSave = function() {
+  if (isReadOnly) return;
+  setSaveIndicator('saving');
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(saveDraft, 2500);
+};
+
+window.saveDraft = async function() {
+  if (isReadOnly) return;
+  try {
+    setSaveIndicator('saving');
+    await callAPI('save');
+    setSaveIndicator('saved');
+    setTimeout(() => setSaveIndicator('idle'), 3000);
+  } catch (e) {
+    setSaveIndicator('error');
+    console.error('Auto-save failed:', e.message);
+  }
+};
+
+function setSaveIndicator(state) {
+  const el = document.getElementById('save-indicator');
+  el.className = 'save-indicator ' + (state === 'saving' ? 'saving' : state === 'saved' ? 'saved' : '');
+  el.title = state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved' : state === 'error' ? 'Save failed' : '';
+}
+
+// ─── Status UI ────────────────────────────────────────────────────────────────
+function updateStatusUI(status) {
+  currentStatus = status;
+  const badge = document.getElementById('status-badge');
+  const btnSave = document.getElementById('btn-save');
+  const btnSubmit = document.getElementById('btn-submit');
+  const btnReopen = document.getElementById('btn-reopen');
+  const changesBanner = document.getElementById('changes-banner');
+  const approvedBanner = document.getElementById('approved-banner');
+
+  badge.className = 'badge badge-' + (status === 'submitted' ? 'submitted' : status === 'changes_requested' ? 'changes' : status === 'approved' ? 'approved' : 'draft');
+  const statusLabels = { draft: '● Draft', submitted: '⏳ Pending Review', changes_requested: '⚠️ Changes Requested', approved: '✅ Approved' };
+  badge.textContent = statusLabels[status] || status;
+
+  isReadOnly = (status === 'approved' || status === 'submitted');
+
+  btnSave.style.display = isReadOnly ? 'none' : '';
+  btnSubmit.style.display = (status === 'approved' || status === 'submitted') ? 'none' : '';
+  btnReopen.style.display = (status === 'submitted' || status === 'approved') ? '' : 'none';
+
+  changesBanner.style.display = 'none';
+  approvedBanner.style.display = 'none';
+
+  if (status === 'changes_requested' && briefData?.history) {
+    const last = [...(briefData.history || [])].reverse().find(h => h.action === 'changes_requested');
+    if (last) {
+      document.getElementById('changes-banner-note').textContent = `"${last.note}" — ${last.by}, ${formatDate(last.timestamp)}`;
+      changesBanner.style.display = 'flex';
+    }
+  }
+  if (status === 'approved') {
+    document.getElementById('approved-banner-meta').textContent =
+      `Nearwork: ${briefData?.nearworkApprovedBy || '—'} · Client: ${briefData?.clientApprovedBy || '—'}`;
+    approvedBanner.style.display = 'flex';
+  }
+
+  // Disable all inputs when read-only
+  document.querySelectorAll('#main-content input, #main-content select, #main-content textarea').forEach(el => {
+    el.disabled = isReadOnly;
+  });
+  document.querySelectorAll('#main-content .btn-add-item, #main-content .list-remove').forEach(el => {
+    el.disabled = isReadOnly;
+    el.style.display = isReadOnly ? 'none' : '';
+  });
+}
+
+// ─── Confirm modal ───────────────────────────────────────────────────────────
+window.confirmAction = function(action) {
+  pendingAction = action;
+  const modal = document.getElementById('confirm-modal');
+  const icon = document.getElementById('modal-icon');
+  const title = document.getElementById('modal-title');
+  const desc = document.getElementById('modal-desc');
+  const label = document.getElementById('modal-confirm-label');
+  const input = document.getElementById('modal-input');
+  const btn = document.getElementById('modal-confirm-btn');
+  input.value = '';
+  btn.disabled = true;
+
+  if (action === 'submit') {
+    icon.textContent = '📤'; title.textContent = 'Submit for Client Review?';
+    desc.textContent = 'By submitting, Nearwork confirms this brief is accurate and ready for client review. The client will see a "Pending Review" link in their portal and can approve or request changes.';
+    label.textContent = 'Type SUBMIT to confirm';
+    input.placeholder = 'SUBMIT';
+  } else if (action === 'reopen') {
+    icon.textContent = '↩️'; title.textContent = 'Reopen for Editing?';
+    desc.textContent = 'This will move the brief back to Draft status. If it was already approved, both parties will need to approve it again.';
+    label.textContent = 'Type REOPEN to confirm';
+    input.placeholder = 'REOPEN';
+  }
+  modal.classList.add('open');
+  setTimeout(() => input.focus(), 100);
+};
+
+window.checkConfirmInput = function() {
+  const input = document.getElementById('modal-input').value.trim().toUpperCase();
+  const expected = pendingAction === 'submit' ? 'SUBMIT' : 'REOPEN';
+  document.getElementById('modal-confirm-btn').disabled = (input !== expected);
+};
+
+window.closeConfirmModal = function() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  pendingAction = null;
+};
+
+window.executeAction = async function() {
+  if (!pendingAction) return;
+  const btn = document.getElementById('modal-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+  try {
+    await callAPI(pendingAction);
+    closeConfirmModal();
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
+  }
+};
+
+// ─── Copy client link ────────────────────────────────────────────────────────
+window.copyClientLink = function() {
+  const link = `https://app.nearwork.co/pipeline/${PIPELINE_CODE}/kickoff`;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = document.getElementById('btn-copy-link');
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+};
+
+// ─── Dynamic list helpers ─────────────────────────────────────────────────────
+window.addListItem = function(listId, value = '', placeholder = '') {
+  const container = document.getElementById('list-' + listId);
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'list-item';
+  div.innerHTML = `
+    <input type="text" value="${escHtml(value)}" placeholder="${escHtml(placeholder)}" oninput="scheduleAutoSave()">
+    <button type="button" class="list-remove" onclick="this.parentElement.remove();scheduleAutoSave()" title="Remove">×</button>`;
+  container.appendChild(div);
+  if (!isReadOnly) div.querySelector('input').focus();
+};
+
+window.addInterviewStage = function(stage = {}) {
+  const container = document.getElementById('list-interviewStages');
+  const num = container.children.length + 1;
+  const div = document.createElement('div');
+  div.className = 'stage-item';
+  div.innerHTML = `
+    <div class="stage-item-hdr">
+      <span class="stage-item-label">Stage ${num}</span>
+      <button type="button" class="btn btn-ghost btn-sm" style="padding:3px 8px;" onclick="this.closest('.stage-item').remove();scheduleAutoSave()">Remove</button>
+    </div>
+    <div class="stage-item-grid">
+      <div class="field"><label>Stage Name</label><input type="text" data-field="name" value="${escHtml(stage.name||'')}" placeholder="e.g. Technical Interview" oninput="scheduleAutoSave()"></div>
+      <div class="field"><label>Format & Duration</label><input type="text" data-field="format" value="${escHtml(stage.format||'')}" placeholder="e.g. Video call, 60 min" oninput="scheduleAutoSave()"></div>
+      <div class="field"><label>Conducted By</label><input type="text" data-field="interviewer" value="${escHtml(stage.interviewer||'')}" placeholder="e.g. CTO + HR Manager" oninput="scheduleAutoSave()"></div>
+      <div class="field"><label>Focus / Notes</label><input type="text" data-field="duration" value="${escHtml(stage.duration||'')}" placeholder="e.g. System design, behavioral" oninput="scheduleAutoSave()"></div>
+    </div>`;
+  container.appendChild(div);
+};
+
+// ─── Audit trail ─────────────────────────────────────────────────────────────
+function renderAuditTrail(history) {
+  const body = document.getElementById('audit-body');
+  if (!history.length) {
+    body.innerHTML = '<p style="color:var(--light);font-size:12px;">No activity yet.</p>';
+    return;
+  }
+  const sorted = [...history].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const actionIcons = {
+    saved: '💾', submitted: '📤', approved: '✅', changes_requested: '⚠️', reopened: '↩️', created: '🆕'
+  };
+  const actionLabels = {
+    saved: 'Draft saved', submitted: 'Submitted for client review',
+    approved: 'Approved', changes_requested: 'Changes requested',
+    reopened: 'Reopened for editing', created: 'Brief created'
+  };
+  body.innerHTML = sorted.map(h => `
+    <div class="audit-item">
+      <div class="audit-dot audit-dot-${h.byRole}">${actionIcons[h.action] || '●'}</div>
+      <div class="audit-info">
+        <div class="audit-action">${actionLabels[h.action] || h.action}</div>
+        <div class="audit-meta">${escHtml(h.by)} · ${h.byRole === 'nearwork' ? 'Nearwork' : 'Client'} · ${formatDate(h.timestamp)}</div>
+        ${h.note && h.action !== 'saved' && h.action !== 'submitted' ? `<div class="audit-note">${escHtml(h.note)}</div>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function formatDate(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts?.toDate ? ts.toDate() : ts);
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+  } catch { return String(ts); }
+}
+
+// ─── Sidebar active link tracking ────────────────────────────────────────────
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = '#' + e.target.id;
+      document.querySelectorAll('.sidebar-nav a').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === id);
+      });
+    }
+  });
+}, { rootMargin: '-10% 0px -80% 0px' });
+document.querySelectorAll('section[id]').forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

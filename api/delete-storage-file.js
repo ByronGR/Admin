@@ -71,14 +71,14 @@ module.exports = async function handler(req, res) {
     const deleted = results.length - failed.length;
 
     if (failed.length) {
-      console.error('delete-storage-file partial failure:', failed.map((f) => (f as PromiseRejectedResult).reason?.message));
+      console.error('delete-storage-file partial failure:', failed.map((f) => f.reason?.message));
     }
 
     return res.status(200).json({
       ok: failed.length === 0,
       deleted,
       failed: failed.length,
-      errors: failed.map((f) => (f as PromiseRejectedResult).reason?.message || 'Unknown error'),
+      errors: failed.map((f) => f.reason?.message || 'Unknown error'),
     });
   } catch (error) {
     console.error('delete-storage-file error:', error);

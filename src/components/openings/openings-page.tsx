@@ -9,15 +9,13 @@ import {
   addDoc,
   updateDoc,
   serverTimestamp,
-  query,
-  orderBy,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate } from '@/lib/utils';
+import { fmtDate, sortByTimestamp } from '@/lib/utils';
 import type { Opening, Organization } from '@/lib/types';
 import { Search, Plus, X, Edit3, Briefcase } from 'lucide-react';
 
@@ -44,10 +42,10 @@ export default function OpeningsPage() {
 
   useEffect(() => {
     Promise.all([
-      getDocs(query(collection(db, 'openings'), orderBy('createdAt', 'desc'))),
+      getDocs(collection(db, 'openings')),
       getDocs(collection(db, 'organizations')),
     ]).then(([openSnap, orgSnap]) => {
-      setOpenings(openSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+      setOpenings(sortByTimestamp(openSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
       setOrgs(orgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization)));
       setLoading(false);
     }).catch(() => {
@@ -92,8 +90,8 @@ export default function OpeningsPage() {
       showToast('Opening created', 'success');
       setNewModal(false);
       // Reload
-      const snap = await getDocs(query(collection(db, 'openings'), orderBy('createdAt', 'desc')));
-      setOpenings(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+      const snap = await getDocs(collection(db, 'openings'));
+      setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
     } catch {
       showToast('Failed to create opening', 'error');
     } finally {
@@ -148,8 +146,8 @@ export default function OpeningsPage() {
 
         {selected ? (
           <OpeningDetail opening={selected} orgs={orgs} onClose={() => setSelected(null)} onRefresh={async () => {
-            const snap = await getDocs(query(collection(db, 'openings'), orderBy('createdAt', 'desc')));
-            setOpenings(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+            const snap = await getDocs(collection(db, 'openings'));
+            setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
           }} />
         ) : (
           <>

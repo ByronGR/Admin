@@ -156,6 +156,32 @@ export function clamp(n: number, min: number, max: number): number {
   return Math.min(Math.max(n, min), max);
 }
 
+/**
+ * Sort an array of Firestore docs by a timestamp field (newest first by default).
+ * Works with Firestore Timestamps, { seconds, nanoseconds } objects, ISO strings,
+ * and epoch numbers — so docs that lack the field simply sort to the bottom.
+ */
+export function sortByTimestamp<T>(
+  arr: T[],
+  field: keyof T,
+  direction: 'asc' | 'desc' = 'desc'
+): T[] {
+  const toMs = (v: unknown): number => {
+    if (!v) return 0;
+    if (typeof v === 'object' && v !== null && 'toMillis' in v)
+      return (v as { toMillis(): number }).toMillis();
+    if (typeof v === 'object' && v !== null && 'seconds' in v)
+      return (v as { seconds: number }).seconds * 1000;
+    if (typeof v === 'string' || typeof v === 'number') return new Date(v).getTime();
+    return 0;
+  };
+  return [...arr].sort((a, b) =>
+    direction === 'desc'
+      ? toMs(b[field]) - toMs(a[field])
+      : toMs(a[field]) - toMs(b[field])
+  );
+}
+
 /** Parse a string to a safe number, or fallback */
 export function parseNum(val: string | number | undefined, fallback = 0): number {
   const n = Number(val);

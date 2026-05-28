@@ -8,7 +8,6 @@ import {
   serverTimestamp,
   query,
   where,
-  orderBy,
   addDoc,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
@@ -16,7 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, fmtRelative, initials } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, sortByTimestamp } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Search, Plus, Download, Mail, Phone, MapPin, ExternalLink, X } from 'lucide-react';
 
@@ -62,11 +61,9 @@ export default function CandidatesPage() {
   async function load() {
     setLoading(true);
     try {
-      const snap = await getDocs(
-        query(collection(db, 'candidates'), orderBy('createdAt', 'desc'))
-      );
+      const snap = await getDocs(collection(db, 'candidates'));
       setCandidates(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate))
+        sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)), 'createdAt')
       );
     } catch {
       showToast('Failed to load candidates', 'error');

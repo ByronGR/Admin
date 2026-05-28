@@ -9,14 +9,13 @@ import {
   serverTimestamp,
   query,
   where,
-  orderBy,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtRelative } from '@/lib/utils';
+import { fmtRelative, sortByTimestamp } from '@/lib/utils';
 import type { CandidateAssessment } from '@/lib/types';
 import { Search, ClipboardList, CheckCircle, Clock, XCircle } from 'lucide-react';
 
@@ -67,18 +66,10 @@ export default function AssessmentsPage() {
   async function loadResults() {
     setLoading(true);
     try {
-      const snap = await getDocs(
-        query(collection(db, 'assessments'), orderBy('completedAt', 'desc'))
-      );
-      setAssessments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CandidateAssessment)));
+      const snap = await getDocs(collection(db, 'assessments'));
+      setAssessments(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CandidateAssessment)), 'completedAt'));
     } catch {
-      // fallback: try without order
-      try {
-        const snap = await getDocs(collection(db, 'assessments'));
-        setAssessments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CandidateAssessment)));
-      } catch {
-        showToast('Failed to load assessments', 'error');
-      }
+      showToast('Failed to load assessments', 'error');
     } finally {
       setLoading(false);
     }

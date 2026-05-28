@@ -7,15 +7,13 @@ import {
   getDocs,
   addDoc,
   serverTimestamp,
-  query,
-  orderBy,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, fmtCurrency } from '@/lib/utils';
+import { fmtDate, fmtCurrency, sortByTimestamp } from '@/lib/utils';
 import type { Placement } from '@/lib/types';
 import { Search, Plus, Trophy, Shield, DollarSign } from 'lucide-react';
 
@@ -45,8 +43,8 @@ export default function HiredPage() {
   async function load() {
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, 'placements'), orderBy('createdAt', 'desc')));
-      setPlacements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)));
+      const snap = await getDocs(collection(db, 'placements'));
+      setPlacements(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
     } catch {
       showToast('Failed to load placements', 'error');
     } finally {

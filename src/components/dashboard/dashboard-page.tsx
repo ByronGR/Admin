@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   db,
   collection,
-  query,
-  where,
   getDocs,
-  orderBy,
-  limit,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -101,10 +97,10 @@ export default function DashboardPage() {
         await Promise.all([
           getDocs(collection(db, 'organizations')),
           getDocs(collection(db, 'openings')),
-          getDocs(query(collection(db, 'candidates'), orderBy('createdAt', 'desc'), limit(200))),
+          getDocs(collection(db, 'candidates')),
           getDocs(collection(db, 'pipelines')),
           getDocs(collection(db, 'placements')),
-          getDocs(query(collection(db, 'users'), where('source', '==', 'admin.nearwork.co'))),
+          getDocs(collection(db, 'users')),
         ]);
 
       const orgs = orgsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization));

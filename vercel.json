@@ -1,22 +1,3 @@
 {
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/login",
-      "destination": "/login"
-    },
-    {
-      "source": "/kickoff",
-      "destination": "/kickoff"
-    },
-    {
-      "source": "/patch.js",
-      "destination": "/patch.js"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/dashboard"
-    }
-  ]
+  "framework": "nextjs"
 }

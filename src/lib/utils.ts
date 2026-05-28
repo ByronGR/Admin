@@ -1,0 +1,163 @@
+// ─── Utility helpers ──────────────────────────────────────────────────────────
+
+import type { Timestamp } from '@/lib/types';
+
+/** Format a Firestore Timestamp or ISO string into a human-readable date */
+export function fmtDate(
+  val: Timestamp | string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }
+): string {
+  if (!val) return '—';
+  const d =
+    typeof val === 'string'
+      ? new Date(val)
+      : val.toDate?.() ?? new Date(val.seconds * 1000);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', opts);
+}
+
+/** Format a Firestore Timestamp or ISO string into a time string */
+export function fmtTime(val: Timestamp | string | null | undefined): string {
+  if (!val) return '—';
+  const d =
+    typeof val === 'string'
+      ? new Date(val)
+      : val.toDate?.() ?? new Date(val.seconds * 1000);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Format relative time (e.g. "2 hours ago") */
+export function fmtRelative(val: Timestamp | string | null | undefined): string {
+  if (!val) return '—';
+  const d =
+    typeof val === 'string'
+      ? new Date(val)
+      : val.toDate?.() ?? new Date(val.seconds * 1000);
+  if (isNaN(d.getTime())) return '—';
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return fmtDate(val);
+}
+
+/** Format a number as currency */
+export function fmtCurrency(
+  amount: number | null | undefined,
+  currency = 'USD',
+  locale = 'en-US'
+): string {
+  if (amount == null) return '—';
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+/** Format a number with commas */
+export function fmtNumber(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return new Intl.NumberFormat('en-US').format(n);
+}
+
+/** Generate a pipeline code like PL-8421 */
+export function generateCode(prefix = 'PL'): string {
+  return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+/** Capitalize first letter */
+export function capitalize(s: string): string {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+/** Convert snake_case to Title Case */
+export function snakeToTitle(s: string): string {
+  return s
+    .split('_')
+    .map((w) => capitalize(w))
+    .join(' ');
+}
+
+/** Truncate a string with ellipsis */
+export function truncate(s: string, max = 60): string {
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+/** Extract initials from a name */
+export function initials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+/** Debounce a function */
+export function debounce<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  ms: number
+): (...args: Parameters<T>) => void {
+  let timer: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+/** Color for pipeline stage chips */
+export const STAGE_COLORS: Record<string, string> = {
+  sourcing: 'bg-gray-100 text-gray-600',
+  screening: 'bg-blue-100 text-blue-700',
+  assessment: 'bg-violet-100 text-violet-700',
+  interview_1: 'bg-indigo-100 text-indigo-700',
+  interview_2: 'bg-purple-100 text-purple-700',
+  interview_3: 'bg-fuchsia-100 text-fuchsia-700',
+  technical: 'bg-orange-100 text-orange-700',
+  offer: 'bg-amber-100 text-amber-700',
+  hired: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-600',
+};
+
+/** Color for status badges */
+export const STATUS_COLORS: Record<string, string> = {
+  active: 'bg-green-100 text-green-700',
+  paused: 'bg-amber-100 text-amber-700',
+  closed: 'bg-gray-100 text-gray-600',
+  filled: 'bg-blue-100 text-blue-700',
+  cancelled: 'bg-red-100 text-red-600',
+  open: 'bg-green-100 text-green-700',
+  draft: 'bg-gray-100 text-gray-600',
+  pending: 'bg-amber-100 text-amber-700',
+  approved: 'bg-green-100 text-green-700',
+  submitted: 'bg-blue-100 text-blue-700',
+  changes_requested: 'bg-amber-100 text-amber-700',
+};
+
+/** NCR formula: max(2500, weightedAvg - 250) */
+export function calcNCR(weightedAvgCOP: number): number {
+  const usdCOP = weightedAvgCOP;
+  return Math.max(2500, usdCOP - 250);
+}
+
+/** Clamp a number between min and max */
+export function clamp(n: number, min: number, max: number): number {
+  return Math.min(Math.max(n, min), max);
+}
+
+/** Parse a string to a safe number, or fallback */
+export function parseNum(val: string | number | undefined, fallback = 0): number {
+  const n = Number(val);
+  return isNaN(n) ? fallback : n;
+}

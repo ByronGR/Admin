@@ -194,16 +194,13 @@ export type PipelineStatus =
   | 'cancelled';
 
 export type PipelineStage =
-  | 'sourcing'
-  | 'screening'
+  | 'profile-review'
+  | 'background-check'
   | 'assessment'
-  | 'interview_1'
-  | 'interview_2'
-  | 'interview_3'
-  | 'technical'
-  | 'offer'
-  | 'hired'
-  | 'rejected';
+  | 'interview'
+  | 'presented'
+  | 'client-review'
+  | 'hired';
 
 export interface PipelineCandidate {
   candidateId: string;

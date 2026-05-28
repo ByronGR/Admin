@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   db,
@@ -680,7 +680,7 @@ function MetricCard({
   sub,
   dark,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: number;
   sub: string;

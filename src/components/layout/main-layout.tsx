@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Nav } from './nav';
 import { Sidebar } from './sidebar';
@@ -9,7 +9,7 @@ import { ToastProvider } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
 
 interface MainLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {

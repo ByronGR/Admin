@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   auth,
@@ -44,7 +44,7 @@ function LoginForm() {
     }
   }, [searchParams]);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setError('');
     if (!isNearworkEmail(email)) {
@@ -67,7 +67,7 @@ function LoginForm() {
     }
   }
 
-  async function handleReset(e: React.FormEvent) {
+  async function handleReset(e: FormEvent) {
     e.preventDefault();
     if (!resetEmail) return;
     setLoading(true);

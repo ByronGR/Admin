@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   auth, db, onAuthStateChanged, isNearworkEmail,
@@ -723,7 +723,7 @@ const ta = `${inp} resize-y min-h-[80px] leading-relaxed`;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ id, icon, title, desc, children }: { id: string; icon: string; title: string; desc: string; children: React.ReactNode }) {
+function Section({ id, icon, title, desc, children }: { id: string; icon: string; title: string; desc: string; children: ReactNode }) {
   return (
     <div id={id} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
       <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
@@ -738,7 +738,7 @@ function Section({ id, icon, title, desc, children }: { id: string; icon: string
   );
 }
 
-function Field({ label, required, optional, children }: { label: string; required?: boolean; optional?: boolean; children: React.ReactNode }) {
+function Field({ label, required, optional, children }: { label: string; required?: boolean; optional?: boolean; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[11px] font-semibold text-[#555555] tracking-[0.02em]">
@@ -762,7 +762,7 @@ function Select({ name, options, disabled }: { name: string; options: string[]; 
 
 function DynamicList({ items, setItems, disabled, placeholder, onAdd }: {
   items: string[];
-  setItems: React.Dispatch<React.SetStateAction<string[]>>;
+  setItems: Dispatch<SetStateAction<string[]>>;
   disabled?: boolean;
   placeholder?: string;
   onAdd?: () => void;

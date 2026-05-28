@@ -18,12 +18,14 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, sortByTimestamp, generateCode } from '@/lib/utils';
 import type { Opening, Organization } from '@/lib/types';
-import { Search, Plus, X, Edit3, Briefcase, Trash2 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { Search, Plus, X, Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle, ChevronRight } from 'lucide-react';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function OpeningsPage() {
   const { showToast } = useToast();
+  const { profile } = useAuth();
 
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -180,7 +182,7 @@ export default function OpeningsPage() {
         </div>
 
         {selected ? (
-          <OpeningDetail opening={selected} orgs={orgs} onClose={() => setSelected(null)} onRefresh={async () => {
+          <OpeningDetail opening={selected} orgs={orgs} currentRole={profile?.role} onClose={() => setSelected(null)} onRefresh={async () => {
             const snap = await getDocs(collection(db, 'openings'));
             setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
           }} />
@@ -247,8 +249,9 @@ export default function OpeningsPage() {
                       <div className={`text-xs font-600 capitalize ${priorityColors[o.priority ?? 'medium'] ?? 'text-[var(--mid)]'}`}>
                         {o.priority ?? 'medium'}
                       </div>
-                      <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge label={o.status} variant="status" />
+                        <ApprovalBadge status={o.approvalStatus} />
                       </div>
                     </div>
                   ))
@@ -405,19 +408,42 @@ export default function OpeningsPage() {
 
 // ─── Opening detail ───────────────────────────────────────────────────────────
 
+function ApprovalBadge({ status }: { status?: string }) {
+  if (!status || status === 'draft') return null;
+  if (status === 'pending_review') return (
+    <span className="flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-700 text-amber-700">
+      <Clock className="h-2.5 w-2.5" />Review
+    </span>
+  );
+  if (status === 'approved') return (
+    <span className="flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-700 text-blue-700">
+      <CheckCircle className="h-2.5 w-2.5" />Approved
+    </span>
+  );
+  if (status === 'published') return (
+    <span className="flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-700 text-green-700">
+      <CheckCircle className="h-2.5 w-2.5" />Published
+    </span>
+  );
+  return null;
+}
+
 function OpeningDetail({
   opening,
   orgs,
+  currentRole,
   onClose,
   onRefresh,
 }: {
   opening: Opening;
   orgs: Organization[];
+  currentRole?: string;
   onClose: () => void;
   onRefresh: () => Promise<void>;
 }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [approvalSaving, setApprovalSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -476,9 +502,115 @@ function OpeningDetail({
     }
   }
 
+  async function updateApproval(newStatus: string) {
+    setApprovalSaving(true);
+    try {
+      await updateDoc(doc(db, 'openings', opening.id), {
+        approvalStatus: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      showToast(
+        newStatus === 'pending_review' ? 'Submitted for review' :
+        newStatus === 'approved' ? 'Opening approved' :
+        newStatus === 'published' ? 'Opening published' : 'Status updated',
+        'success',
+      );
+      await onRefresh();
+    } catch {
+      showToast('Failed to update approval status', 'error');
+    } finally {
+      setApprovalSaving(false);
+    }
+  }
+
   const org = orgs.find((o) => o.id === opening.orgId);
+  const approvalStatus = opening.approvalStatus ?? 'draft';
+  const isAdmin = currentRole === 'super_admin' || currentRole === 'admin';
+
+  const APPROVAL_STEPS = ['draft', 'pending_review', 'approved', 'published'] as const;
+  const stepIdx = APPROVAL_STEPS.indexOf(approvalStatus as typeof APPROVAL_STEPS[number]);
 
   return (
+    <div className="space-y-4">
+      {/* Approval flow bar */}
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Step indicators */}
+          <div className="flex items-center gap-1">
+            {([
+              { key: 'draft', label: 'Draft' },
+              { key: 'pending_review', label: 'In Review' },
+              { key: 'approved', label: 'Approved' },
+              { key: 'published', label: 'Published' },
+            ] as const).map((step, i) => {
+              const done = i < stepIdx;
+              const active = i === stepIdx;
+              return (
+                <div key={step.key} className="flex items-center gap-1">
+                  <div className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-700 ${
+                    done ? 'bg-green-100 text-green-700' :
+                    active ? 'bg-[var(--green)] text-white' :
+                    'bg-[var(--bg)] text-[var(--light)]'
+                  }`}>
+                    {done && <CheckCircle className="h-3 w-3" />}
+                    {active && step.key === 'pending_review' && <Clock className="h-3 w-3" />}
+                    {active && step.key === 'draft' && <AlertCircle className="h-3 w-3" />}
+                    {step.label}
+                  </div>
+                  {i < 3 && <ChevronRight className="h-3.5 w-3.5 text-[var(--light)]" />}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Action button */}
+          <div className="flex items-center gap-2">
+            {approvalStatus === 'draft' && (
+              <button
+                onClick={() => updateApproval('pending_review')}
+                disabled={approvalSaving}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-60"
+                style={{ background: 'var(--green)' }}
+              >
+                {approvalSaving ? <Spinner size="sm" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Submit for review
+              </button>
+            )}
+            {approvalStatus === 'pending_review' && isAdmin && (
+              <button
+                onClick={() => updateApproval('approved')}
+                disabled={approvalSaving}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-60"
+                style={{ background: 'var(--green)' }}
+              >
+                {approvalSaving ? <Spinner size="sm" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                Approve opening
+              </button>
+            )}
+            {approvalStatus === 'pending_review' && !isAdmin && (
+              <span className="text-xs text-[var(--light)]">Awaiting admin approval</span>
+            )}
+            {approvalStatus === 'approved' && (
+              <button
+                onClick={() => updateApproval('published')}
+                disabled={approvalSaving}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-60"
+                style={{ background: 'var(--green)' }}
+              >
+                {approvalSaving ? <Spinner size="sm" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                Publish opening
+              </button>
+            )}
+            {approvalStatus === 'published' && (
+              <span className="flex items-center gap-1.5 text-xs font-600 text-green-700">
+                <CheckCircle className="h-4 w-4" />
+                Published and active
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
     <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
       <div className="mb-5 flex items-center gap-4">
         <div
@@ -617,6 +749,7 @@ function OpeningDetail({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

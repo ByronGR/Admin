@@ -13,12 +13,12 @@ import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
 import { fmtNumber } from '@/lib/utils';
 import type { Placement } from '@/lib/types';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
 
 // ─── NCR formula ──────────────────────────────────────────────────────────────
 
-function calcNCR(weightedAvgRate: number): number {
-  return Math.max(2500, weightedAvgRate - 250);
+function calcNCR(rate: number): number {
+  return Math.max(2500, rate - 250);
 }
 
 function formatCOP(n: number): string {
@@ -30,10 +30,8 @@ function formatCOP(n: number): string {
   }).format(n);
 }
 
-// ─── Frankfurter API ──────────────────────────────────────────────────────────
+// ─── Currency API ─────────────────────────────────────────────────────────────
 
-
-// fawazahmed0 currency CDN — free, no key, includes COP
 async function fetchCurrentRate(): Promise<{ rate: number; date: string } | null> {
   try {
     const r = await fetch(
@@ -49,7 +47,6 @@ async function fetchCurrentRate(): Promise<{ rate: number; date: string } | null
 }
 
 async function fetch90DayHistory(): Promise<Array<{ date: string; rate: number }>> {
-  // Sample ~10 dates evenly spaced over 90 days
   const dates: string[] = [];
   for (let i = 90; i >= 0; i -= 9) {
     const d = new Date();
@@ -85,11 +82,9 @@ export default function SalaryRatesPage() {
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [placementsLoading, setPlacementsLoading] = useState(true);
 
-  // Calculator
+  // Standard calculator
   const [copInput, setCopInput] = useState('');
   const [partnerUSD, setPartnerUSD] = useState('');
-
-  // Calculator output
   const [calcResult, setCalcResult] = useState<{
     ncrCOP: number;
     ncrUSD: number;
@@ -98,6 +93,10 @@ export default function SalaryRatesPage() {
     marginPct: number;
     alert: boolean;
   } | null>(null);
+
+  // Smart NCR suggestion
+  const [ncrUsdMin, setNcrUsdMin] = useState('');
+  const [ncrUsdMax, setNcrUsdMax] = useState('');
 
   const loadFX = useCallback(async () => {
     setFxLoading(true);
@@ -120,7 +119,7 @@ export default function SalaryRatesPage() {
       .catch(() => setPlacementsLoading(false));
   }, [loadFX]);
 
-  // Calculate on input change
+  // Standard calculator
   useEffect(() => {
     const cop = Number(copInput.replace(/[,.]/g, ''));
     const usd = Number(partnerUSD.replace(/[,$]/g, ''));
@@ -128,10 +127,7 @@ export default function SalaryRatesPage() {
       setCalcResult(null);
       return;
     }
-    // NCR is what Nearwork charges partner (USD)
     const ncrCOP = calcNCR(currentRate.rate);
-    const ncrUSD = ncrCOP / currentRate.rate; // not how it works — NCR is the rate used to bill
-    // Candidate cost in USD = COP salary / NCR rate
     const candidateCostUSD = cop / ncrCOP;
     const margin = usd - candidateCostUSD;
     const marginPct = (margin / usd) * 100;
@@ -145,7 +141,39 @@ export default function SalaryRatesPage() {
     });
   }, [copInput, partnerUSD, currentRate]);
 
-  // Chart: simple SVG spark line for 90-day history
+  // Smart NCR suggestion derived values
+  const avg90 = history.length > 0
+    ? history.reduce((s, h) => s + h.rate, 0) / history.length
+    : 0;
+  const trendPct = avg90 > 0 && currentRate
+    ? ((currentRate.rate - avg90) / avg90) * 100
+    : 0;
+  const isVolatile = Math.abs(trendPct) > 3;
+  // If volatile and rate is trending DOWN (bad for converting COP salaries), use conservative avg
+  const conservativeRate = trendPct < -3 ? avg90 : currentRate?.rate ?? 0;
+  const safeNCR = calcNCR(conservativeRate);
+  const currentNCR = currentRate ? calcNCR(currentRate.rate) : 0;
+
+  const ncrSuggestion = (() => {
+    const minUSD = Number(ncrUsdMin.replace(/[,$]/g, ''));
+    const maxUSD = Number(ncrUsdMax.replace(/[,$]/g, ''));
+    if (!minUSD || !currentRate) return null;
+
+    const effectiveMax = maxUSD || minUSD;
+    const ncrUsed = isVolatile && trendPct < 0 ? safeNCR : currentNCR;
+
+    // COP salary = USD salary * NCR rate (how much COP to offer for USD salary)
+    const copMin = Math.round(minUSD * ncrUsed);
+    const copMax = Math.round(effectiveMax * ncrUsed);
+
+    // Suggested partner billing: add 15% margin on top of candidate cost
+    const suggestedBillingMin = Math.round(minUSD * 1.15 * 100) / 100;
+    const suggestedBillingMax = Math.round(effectiveMax * 1.15 * 100) / 100;
+
+    return { copMin, copMax, ncrUsed, suggestedBillingMin, suggestedBillingMax, minUSD, maxUSD };
+  })();
+
+  // Chart
   const chartWidth = 600;
   const chartHeight = 80;
   const minRate = history.length > 0 ? Math.min(...history.map((h) => h.rate)) * 0.998 : 4000;
@@ -176,7 +204,7 @@ export default function SalaryRatesPage() {
               FX Calculator & Salary Rates
             </h1>
             <p className="mt-0.5 text-xs text-[var(--light)]">
-              NCR conversion, COP salary benchmarks, and COP placement margin alerts.
+              NCR conversion, COP salary benchmarks, and smart billing suggestions.
             </p>
           </div>
           <button
@@ -207,9 +235,9 @@ export default function SalaryRatesPage() {
               </div>
               <div className="h-8 w-px bg-[var(--border)]" />
               <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">NCR rate (max(2500, rate-250))</p>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">NCR rate (max(2500, rate−250))</p>
                 <p className="mt-0.5 text-xl font-700 text-[var(--green)]">
-                  {fmtNumber(calcNCR(currentRate.rate))} <span className="text-xs font-500 text-[var(--light)]">COP</span>
+                  {fmtNumber(currentNCR)} <span className="text-xs font-500 text-[var(--light)]">COP</span>
                 </p>
                 <p className="text-[10px] text-[var(--light)]">Nearwork client billing reference</p>
               </div>
@@ -217,8 +245,27 @@ export default function SalaryRatesPage() {
               <div>
                 <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">90-day avg</p>
                 <p className="mt-0.5 text-base font-700 text-[var(--black)]">
-                  {history.length > 0 ? fmtNumber(Math.round(history.reduce((s, h) => s + h.rate, 0) / history.length)) : '—'} <span className="text-xs text-[var(--light)]">COP</span>
+                  {avg90 > 0 ? fmtNumber(Math.round(avg90)) : '—'} <span className="text-xs text-[var(--light)]">COP</span>
                 </p>
+              </div>
+              <div className="h-8 w-px bg-[var(--border)]" />
+              <div>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Trend vs 90d avg</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  {Math.abs(trendPct) < 1 ? (
+                    <Minus className="h-4 w-4 text-[var(--light)]" />
+                  ) : trendPct > 0 ? (
+                    <TrendingUp className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4 text-red-500" />
+                  )}
+                  <span className={`text-sm font-700 ${isVolatile ? (trendPct > 0 ? 'text-green-600' : 'text-red-500') : 'text-[var(--mid)]'}`}>
+                    {trendPct > 0 ? '+' : ''}{trendPct.toFixed(1)}%
+                  </span>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-700 uppercase ${isVolatile ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                    {isVolatile ? 'Volatile' : 'Stable'}
+                  </span>
+                </div>
               </div>
             </div>
           ) : (
@@ -226,13 +273,115 @@ export default function SalaryRatesPage() {
           )}
         </div>
 
-        {/* Calculator + 12-month projection */}
+        {/* Smart NCR Suggestion */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-[var(--green)]" />
+            <h3 className="text-sm font-700 text-[var(--black)]">Smart NCR Suggestion</h3>
+          </div>
+          <p className="mb-5 text-xs text-[var(--light)]">
+            Enter the USD salary for a role and get the recommended COP offer range with trend-safe NCR rate.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2 mb-4">
+            <div>
+              <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                USD salary — min (monthly)
+              </label>
+              <input
+                value={ncrUsdMin}
+                onChange={(e) => setNcrUsdMin(e.target.value)}
+                placeholder="1,500"
+                inputMode="numeric"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                USD salary — max (monthly) <span className="normal-case font-400">optional</span>
+              </label>
+              <input
+                value={ncrUsdMax}
+                onChange={(e) => setNcrUsdMax(e.target.value)}
+                placeholder="2,000"
+                inputMode="numeric"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+            </div>
+          </div>
+
+          {ncrSuggestion ? (
+            <div className="space-y-3">
+              {/* Trend warning */}
+              {isVolatile && trendPct < 0 && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <div className="text-xs text-amber-700">
+                    <span className="font-700">Rate is volatile</span> — the spot rate is {Math.abs(trendPct).toFixed(1)}% below the 90-day average.
+                    We&apos;re using the <span className="font-700">conservative NCR ({fmtNumber(safeNCR)})</span> to protect your margins.
+                  </div>
+                </div>
+              )}
+              {isVolatile && trendPct > 0 && (
+                <div className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 p-3">
+                  <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-green-700" />
+                  <div className="text-xs text-green-700">
+                    Rate trending <span className="font-700">UP +{trendPct.toFixed(1)}%</span> — favorable for COP-denominated offers. Current NCR ({fmtNumber(currentNCR)}) is being used.
+                  </div>
+                </div>
+              )}
+
+              {/* Results grid */}
+              <div className="grid grid-cols-2 gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 sm:grid-cols-4">
+                <div>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">NCR rate used</p>
+                  <p className="mt-0.5 text-sm font-800 text-[var(--black)]">{fmtNumber(ncrSuggestion.ncrUsed)}</p>
+                  <p className="text-[9px] text-[var(--light)]">{isVolatile && trendPct < 0 ? 'Conservative (90d avg)' : 'Current spot'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">COP offer</p>
+                  <p className="mt-0.5 text-sm font-800 text-[var(--green)]">
+                    {formatCOP(ncrSuggestion.copMin)}
+                    {ncrSuggestion.maxUSD > 0 && ` – ${formatCOP(ncrSuggestion.copMax)}`}
+                  </p>
+                  <p className="text-[9px] text-[var(--light)]">Monthly COP equivalent</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">USD cost to NW</p>
+                  <p className="mt-0.5 text-sm font-800 text-[var(--black)]">
+                    ${ncrSuggestion.minUSD.toLocaleString()}
+                    {ncrSuggestion.maxUSD > 0 && ` – $${ncrSuggestion.maxUSD.toLocaleString()}`}
+                  </p>
+                  <p className="text-[9px] text-[var(--light)]">Pass-through to candidate</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Suggested billing</p>
+                  <p className="mt-0.5 text-sm font-800 text-[var(--green)]">
+                    ${ncrSuggestion.suggestedBillingMin.toLocaleString()}
+                    {ncrSuggestion.maxUSD > 0 && ` – $${ncrSuggestion.suggestedBillingMax.toLocaleString()}`}
+                  </p>
+                  <p className="text-[9px] text-[var(--light)]">+15% margin to partner</p>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[var(--light)]">
+                Formula: COP offer = USD salary × NCR rate. Billing = USD salary × 1.15 (15% target margin). Adjust margin manually as needed.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-6 text-center text-xs text-[var(--light)]">
+              Enter a USD salary above to see the suggestion.
+            </div>
+          )}
+        </div>
+
+        {/* Standard Calculator + 90-day chart */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* FX Calculator */}
           <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
             <h3 className="mb-1 text-sm font-700 text-[var(--black)]">FX Calculator</h3>
             <p className="mb-5 text-xs text-[var(--light)]">
-              Enter a candidate&apos;s monthly COP salary to review client billing and margin health.
+              Enter a candidate&apos;s COP salary to review client billing and margin.
             </p>
             <div className="space-y-4">
               <div>
@@ -315,6 +464,19 @@ export default function SalaryRatesPage() {
                   className="w-full"
                   style={{ height: 100 }}
                 >
+                  {/* 90-day avg reference line */}
+                  {avg90 > 0 && (
+                    <line
+                      x1="0"
+                      y1={rateToY(avg90).toFixed(1)}
+                      x2={chartWidth}
+                      y2={rateToY(avg90).toFixed(1)}
+                      stroke="var(--light)"
+                      strokeWidth="1"
+                      strokeDasharray="4,4"
+                      opacity="0.5"
+                    />
+                  )}
                   {/* NCR reference line */}
                   {currentRate && (
                     <line
@@ -348,7 +510,10 @@ export default function SalaryRatesPage() {
                 </svg>
                 <div className="flex justify-between text-[10px] text-[var(--light)]">
                   <span>{points[0]?.date}</span>
-                  <span className="text-[var(--green)]">— NCR</span>
+                  <div className="flex items-center gap-3">
+                    <span>— NCR</span>
+                    <span style={{ color: 'var(--light)' }}>- - 90d avg</span>
+                  </div>
                   <span>{points[points.length - 1]?.date}</span>
                 </div>
               </div>
@@ -360,7 +525,7 @@ export default function SalaryRatesPage() {
         <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
           <h3 className="mb-1 text-sm font-700 text-[var(--black)]">Active COP placements</h3>
           <p className="mb-4 text-xs text-[var(--light)]">
-            Only COP-denominated placements are monitored for FX margin and renegotiation alerts.
+            COP-denominated placements monitored for FX margin and renegotiation alerts.
           </p>
 
           {placementsLoading ? (
@@ -405,7 +570,7 @@ export default function SalaryRatesPage() {
                           Rate drift
                         </span>
                       ) : (
-                        <span className="text-[10px] text-green-600 font-600">OK</span>
+                        <span className="text-[10px] font-600 text-green-600">OK</span>
                       )}
                     </div>
                   </div>

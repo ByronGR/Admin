@@ -107,7 +107,7 @@ export default function ProfilePage() {
   }
 
   const displayPhoto = photoPreview ?? profile?.photoUrl;
-  const displayName = form.name || user?.email?.split('@')[0] ?? 'Admin';
+  const displayName = form.name || (user?.email?.split('@')[0] ?? 'Admin');
 
   return (
     <MainLayout>

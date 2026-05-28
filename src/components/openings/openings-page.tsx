@@ -37,7 +37,9 @@ export default function OpeningsPage() {
   const [form, setForm] = useState({
     title: '', orgId: '', orgName: '', department: '', location: '',
     type: 'full_time', salaryMin: '', salaryMax: '', salaryCurrency: 'USD',
-    description: '', requirements: '', recruiter: '', priority: 'medium',
+    description: '', requirements: '',
+    sourcer: '', recruiter: '', hiringManager: '', accountManager: '',
+    priority: 'medium',
   });
   const [saving, setSaving] = useState(false);
 
@@ -82,9 +84,13 @@ export default function OpeningsPage() {
         salaryCurrency: form.salaryCurrency,
         description: form.description,
         requirements: form.requirements.split('\n').filter(Boolean),
+        sourcer: form.sourcer,
         recruiter: form.recruiter,
+        hiringManager: form.hiringManager,
+        accountManager: form.accountManager || null,
         priority: form.priority,
         status: 'open',
+        approvalStatus: 'draft',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -97,7 +103,10 @@ export default function OpeningsPage() {
         openingId: openingRef.id,
         orgId: form.orgId,
         orgName: org?.name ?? '',
+        sourcer: form.sourcer,
         recruiter: form.recruiter,
+        hiringManager: form.hiringManager,
+        accountManager: form.accountManager || null,
         department: form.department,
         location: form.location,
         status: 'active',
@@ -108,6 +117,13 @@ export default function OpeningsPage() {
 
       showToast(`Opening created · Pipeline ${pipelineCode} auto-generated`, 'success');
       setNewModal(false);
+      setForm({
+        title: '', orgId: '', orgName: '', department: '', location: '',
+        type: 'full_time', salaryMin: '', salaryMax: '', salaryCurrency: 'USD',
+        description: '', requirements: '',
+        sourcer: '', recruiter: '', hiringManager: '', accountManager: '',
+        priority: 'medium',
+      });
       // Reload
       const snap = await getDocs(collection(db, 'openings'));
       setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
@@ -287,11 +303,40 @@ export default function OpeningsPage() {
             />
           </div>
           <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Sourcer</label>
+            <input
+              value={form.sourcer}
+              onChange={(e) => setForm((f) => ({ ...f, sourcer: e.target.value }))}
+              placeholder="Sourcer name"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
             <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
             <input
               value={form.recruiter}
               onChange={(e) => setForm((f) => ({ ...f, recruiter: e.target.value }))}
               placeholder="Recruiter name"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Hiring Manager</label>
+            <input
+              value={form.hiringManager}
+              onChange={(e) => setForm((f) => ({ ...f, hiringManager: e.target.value }))}
+              placeholder="Hiring manager name"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Account Manager <span className="normal-case font-400">(optional)</span>
+            </label>
+            <input
+              value={form.accountManager}
+              onChange={(e) => setForm((f) => ({ ...f, accountManager: e.target.value }))}
+              placeholder="Account manager name"
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
             />
           </div>
@@ -378,7 +423,10 @@ function OpeningDetail({
   const [editForm, setEditForm] = useState({
     title: opening.title,
     description: opening.description ?? '',
+    sourcer: opening.sourcer ?? '',
     recruiter: opening.recruiter ?? '',
+    hiringManager: opening.hiringManager ?? '',
+    accountManager: opening.accountManager ?? '',
     status: opening.status,
     priority: opening.priority ?? 'medium',
     salaryMin: String(opening.salaryMin ?? ''),
@@ -391,7 +439,15 @@ function OpeningDetail({
     setSaving(true);
     try {
       await updateDoc(doc(db, 'openings', opening.id), {
-        ...editForm,
+        title: editForm.title,
+        location: editForm.location,
+        description: editForm.description,
+        sourcer: editForm.sourcer,
+        recruiter: editForm.recruiter,
+        hiringManager: editForm.hiringManager,
+        accountManager: editForm.accountManager || null,
+        status: editForm.status,
+        priority: editForm.priority,
         salaryMin: editForm.salaryMin ? Number(editForm.salaryMin) : null,
         salaryMax: editForm.salaryMax ? Number(editForm.salaryMax) : null,
         updatedAt: serverTimestamp(),
@@ -482,7 +538,10 @@ function OpeningDetail({
             { label: 'Type', value: opening.type?.replace('_', ' ') },
             { label: 'Priority', value: opening.priority },
             { label: 'Salary', value: opening.salaryMin && opening.salaryMax ? `$${opening.salaryMin}–$${opening.salaryMax}/mo` : '—' },
+            { label: 'Sourcer', value: opening.sourcer },
             { label: 'Recruiter', value: opening.recruiter },
+            { label: 'Hiring Manager', value: opening.hiringManager },
+            { label: 'Account Manager', value: opening.accountManager },
             { label: 'Created', value: fmtDate(opening.createdAt) },
           ].map(({ label, value }) => (
             <div key={label}>
@@ -502,7 +561,10 @@ function OpeningDetail({
           {[
             { key: 'title', label: 'Title' },
             { key: 'location', label: 'Location' },
+            { key: 'sourcer', label: 'Sourcer' },
             { key: 'recruiter', label: 'Recruiter' },
+            { key: 'hiringManager', label: 'Hiring Manager' },
+            { key: 'accountManager', label: 'Account Manager (optional)' },
             { key: 'salaryMin', label: 'Salary min', type: 'number' },
             { key: 'salaryMax', label: 'Salary max', type: 'number' },
           ].map(({ key, label, type }) => (

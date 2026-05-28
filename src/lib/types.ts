@@ -11,12 +11,21 @@ export type Timestamp = {
 export type StaffRole =
   | 'super_admin'
   | 'admin'
-  | 'sr_recruiter'
   | 'recruiter'
-  | 'account_manager'
+  | 'sales'
   | 'hr'
   | 'employee'
   | 'user';
+
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  recruiter: 'Recruiter',
+  sales: 'Sales',
+  hr: 'HR',
+  employee: 'Employee',
+  user: 'User',
+};
 
 export interface UserProfile {
   id: string;
@@ -26,31 +35,71 @@ export interface UserProfile {
   lastName?: string;
   role: StaffRole;
   staffRole: StaffRole;
+  photoUrl?: string;
+  calendlyLink?: string;
   source?: string;
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'suspended';
   orgId?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
 
+// ─── Staff Invite ─────────────────────────────────────────────────────────────
+
+export interface StaffInvite {
+  id: string;
+  email: string;
+  role: StaffRole;
+  invitedBy: string;
+  invitedByEmail?: string;
+  status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+  token: string;
+  createdAt?: Timestamp;
+  expiresAt?: Timestamp;
+  acceptedAt?: Timestamp;
+}
+
+// ─── English / CEFR ──────────────────────────────────────────────────────────
+
+export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
+export interface EnglishScore {
+  level: CEFRLevel;
+  feedback: string;
+  assessedBy?: string;
+  assessedAt?: string;
+}
+
 // ─── Organization ─────────────────────────────────────────────────────────────
+
+export type OrgPackage = 'starter' | 'growth' | 'enterprise' | 'eor' | 'spp';
+export type OrgContractType = 'managed_team' | 'eor' | 'spp' | 'direct';
+
+export interface OrgUser {
+  email: string;
+  name?: string;
+  role?: string;
+  status?: 'invited' | 'active' | 'inactive';
+  invitedAt?: string;
+}
 
 export interface Organization {
   id: string;
   name: string;
   industry?: string;
   website?: string;
-  email?: string;
-  phone?: string;
   country?: string;
   city?: string;
   address?: string;
   logo?: string;
   status?: 'active' | 'inactive' | 'prospect';
-  notes?: string;
+  package?: OrgPackage;
+  contractType?: OrgContractType;
+  hubspotLink?: string;
   contractStart?: string;
   contractEnd?: string;
   source?: string;
+  orgUsers?: OrgUser[];
   cacEntries?: CACEntry[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -74,6 +123,8 @@ export type OpeningStatus =
   | 'cancelled'
   | 'draft';
 
+export type OpeningApprovalStatus = 'draft' | 'pending_review' | 'approved' | 'published';
+
 export interface Opening {
   id: string;
   orgId: string;
@@ -90,10 +141,14 @@ export interface Opening {
   requirements?: string[];
   responsibilities?: string[];
   status: OpeningStatus;
+  approvalStatus?: OpeningApprovalStatus;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   targetDate?: string;
-  hiringManager?: string;
+  // Team fields
+  sourcer?: string;
   recruiter?: string;
+  hiringManager?: string;
+  accountManager?: string;
   assessmentId?: string;
   questionSettings?: QuestionSettings;
   applicationCount?: number;
@@ -194,13 +249,25 @@ export type PipelineStatus =
   | 'cancelled';
 
 export type PipelineStage =
-  | 'profile-review'
+  | 'applied'
   | 'background-check'
-  | 'assessment'
   | 'interview'
-  | 'presented'
-  | 'client-review'
-  | 'hired';
+  | 'assessment'
+  | 'partner-review'
+  | 'partner-interview'
+  | 'hired'
+  | 'not-selected';
+
+export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
+  'applied': 'Applied',
+  'background-check': 'Background Check',
+  'interview': 'Interview',
+  'assessment': 'Assessment',
+  'partner-review': 'Partner Review',
+  'partner-interview': 'Partner Interview',
+  'hired': 'Hired',
+  'not-selected': 'Not Selected',
+};
 
 export interface PipelineCandidate {
   candidateId: string;
@@ -208,6 +275,7 @@ export interface PipelineCandidate {
   email?: string;
   stage: PipelineStage;
   score?: number;
+  englishScore?: EnglishScore;
   addedAt?: Timestamp;
   updatedAt?: Timestamp;
   notes?: string;
@@ -251,19 +319,31 @@ export interface AssessmentQuestion {
   tags?: string[];
 }
 
+export type DISCStyle = 'D' | 'I' | 'S' | 'C';
+
 export interface Assessment {
   id: string;
   title: string;
   description?: string;
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
   openingId?: string;
   orgId?: string;
+  uniqueToken?: string;
+  expiresAt?: Timestamp;
   questions: AssessmentQuestion[];
   timeLimit?: number;
   passingScore?: number;
-  status?: 'draft' | 'active' | 'archived';
+  status?: 'pending' | 'in_progress' | 'completed' | 'expired' | 'draft' | 'active' | 'archived';
+  technicalScore?: number;
+  discStyle?: DISCStyle;
+  discScores?: Record<DISCStyle, number>;
+  nearworkScore?: number;
   createdBy?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  completedAt?: Timestamp;
 }
 
 export interface CandidateAssessment {
@@ -493,7 +573,7 @@ export interface NCREntry {
   startDate?: string;
 }
 
-// ─── Invite ───────────────────────────────────────────────────────────────────
+// ─── Org Invite ───────────────────────────────────────────────────────────────
 
 export interface OrgInvite {
   id: string;
@@ -506,4 +586,47 @@ export interface OrgInvite {
   token?: string;
   createdAt?: Timestamp;
   expiresAt?: Timestamp;
+}
+
+// ─── Contractor / Hired Profile ───────────────────────────────────────────────
+
+export interface PerformanceReview {
+  id: string;
+  period: string; // e.g. "Q1 2026"
+  score: number; // 1-5
+  feedback?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+
+export interface ContractorProfile {
+  id: string; // usually matches candidateId
+  candidateId: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  orgId?: string;
+  orgName?: string;
+  openingTitle?: string;
+  placementId?: string;
+  startDate: string;
+  endDate?: string;
+  salaryAmount: number;
+  salaryCurrency?: string;
+  salaryFrequency?: 'monthly' | 'biweekly' | 'weekly' | 'hourly';
+  // PTO
+  ptoDaysPerYear?: number;
+  ptoUsed?: number;
+  // EOR
+  isEOR?: boolean;
+  eorProvider?: string;
+  eorBenefits?: string[];
+  // ROL Score (Retention, Opportunity, Loyalty)
+  rolScore?: number; // 0-100
+  rolFeedback?: string;
+  // Performance
+  performanceReviews?: PerformanceReview[];
+  // Status
+  status?: 'active' | 'ended' | 'on_hold';
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }

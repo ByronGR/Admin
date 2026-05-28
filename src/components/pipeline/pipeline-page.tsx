@@ -37,59 +37,53 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, initials, truncate, snakeToTitle } from '@/lib/utils';
-import type { Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
+import { initials, snakeToTitle } from '@/lib/utils';
+import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel } from '@/lib/types';
 import {
   Search,
-  Plus,
-  Filter,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   MessageCircle,
   Trash2,
   Edit3,
   ClipboardList,
   X,
+  Languages,
 } from 'lucide-react';
 
-// ─── Pipeline stages ──────────────────────────────────────────────────────────
+// ─── Pipeline stages (8-stage) ────────────────────────────────────────────────
 
 export const PIPELINE_STAGES = [
-  { key: 'profile-review', label: 'Profile Review' },
-  { key: 'background-check', label: 'Background Checks' },
-  { key: 'assessment', label: 'Assessment' },
+  { key: 'applied', label: 'Applied' },
+  { key: 'background-check', label: 'Background Check' },
   { key: 'interview', label: 'Interview' },
-  { key: 'presented', label: 'Presented' },
-  { key: 'client-review', label: 'Client Review', clientAction: true },
+  { key: 'assessment', label: 'Assessment' },
+  { key: 'partner-review', label: 'Partner Review', clientAction: true },
+  { key: 'partner-interview', label: 'Partner Interview', clientAction: true },
   { key: 'hired', label: 'Hired', clientAction: true },
+  { key: 'not-selected', label: 'Not Selected', terminal: true },
 ] as const;
 
 type StageKey = (typeof PIPELINE_STAGES)[number]['key'];
 
 function normalizeStage(stage: string): StageKey {
-  const s = String(stage || '')
-    .trim()
-    .toLowerCase();
-  if (['applied', 'screening', 'shortlisted'].includes(s)) return 'profile-review';
+  const s = String(stage || '').trim().toLowerCase();
+  // Map old stage names to new
+  if (['profile-review', 'screening', 'shortlisted', 'new'].includes(s)) return 'applied';
   if (['background-checks', 'background'].includes(s)) return 'background-check';
-  if (s === 'client-interview') return 'interview';
-  if (['company-review', 'final-review', 'offer'].includes(s)) return 'client-review';
+  if (['client-interview', 'interview_1', 'interview_2'].includes(s)) return 'interview';
+  if (['presented', 'client-review', 'company-review', 'final-review', 'offer'].includes(s)) return 'partner-review';
+  if (['rejected', 'withdrawn'].includes(s)) return 'not-selected';
   if (PIPELINE_STAGES.some((st) => st.key === s)) return s as StageKey;
-  return 'profile-review';
+  return 'applied';
 }
 
-function scoreClass(score: number): string {
-  if (!score || score === 0) return 'score-na';
-  if (score >= 80) return 'score-hi';
-  if (score >= 60) return 'score-mid';
-  return 'score-lo';
-}
+const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
-  const { user } = useAuth();
+  useAuth(); // ensure auth context
   const { showToast } = useToast();
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -115,6 +109,18 @@ export default function PipelinePage() {
     candidate: PipelineCandidate | null;
     pipelineCode: string;
   }>({ open: false, candidate: null, pipelineCode: '' });
+
+  // English score gate — shown when moving from interview → assessment
+  const [engModal, setEngModal] = useState<{
+    open: boolean;
+    candidateId: string;
+    pipelineId: string;
+    pipelineCode: string;
+    pendingStage: StageKey;
+  }>({ open: false, candidateId: '', pipelineId: '', pipelineCode: '', pendingStage: 'assessment' });
+  const [engLevel, setEngLevel] = useState<CEFRLevel>('B2');
+  const [engFeedback, setEngFeedback] = useState('');
+  const [engSaving, setEngSaving] = useState(false);
 
   useEffect(() => {
     // Real-time listener
@@ -164,6 +170,26 @@ export default function PipelinePage() {
   const [dragging, setDragging] = useState<PipelineCandidate | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  async function moveCandidateToStage(
+    pipelineCode: string,
+    candidateCode: string,
+    toStage: StageKey,
+    englishScore?: { level: CEFRLevel; feedback: string }
+  ) {
+    const pipeline = pipelines.find((p) => p.code === pipelineCode);
+    if (!pipeline) return;
+    const newCandidates = (pipeline.candidates ?? []).map((c) =>
+      c.candidateId === candidateCode
+        ? { ...c, stage: toStage, ...(englishScore ? { englishScore: { ...englishScore, assessedAt: new Date().toISOString() } } : {}) }
+        : c
+    );
+    await updateDoc(doc(db, 'pipelines', pipeline.id), {
+      candidates: newCandidates,
+      updatedAt: serverTimestamp(),
+    });
+    showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
+  }
+
   async function handleDragEnd(event: DragEndEvent, pipelineCode: string) {
     const { active, over } = event;
     setDragging(null);
@@ -181,6 +207,23 @@ export default function PipelinePage() {
     const fromStage = pipeline.candidates![candIndex].stage;
     if (fromStage === toStage) return;
 
+    // English score gate: required when advancing from interview stage
+    if (fromStage === 'interview' && toStage !== 'not-selected' && toStage !== 'applied' && toStage !== 'background-check') {
+      const cand = pipeline.candidates![candIndex];
+      if (!cand.englishScore) {
+        setEngModal({
+          open: true,
+          candidateId: candidateCode,
+          pipelineId: pipeline.id,
+          pipelineCode,
+          pendingStage: toStage,
+        });
+        setEngLevel('B2');
+        setEngFeedback('');
+        return;
+      }
+    }
+
     // Optimistic update
     const updated = pipelines.map((p) => {
       if (p.code !== pipelineCode) return p;
@@ -191,20 +234,29 @@ export default function PipelinePage() {
     setPipelines(updated);
 
     try {
-      const pipelineDoc = pipelines.find((p) => p.code === pipelineCode);
-      if (!pipelineDoc) return;
-      const newCandidates = (pipelineDoc.candidates ?? []).map((c) =>
-        c.candidateId === candidateCode ? { ...c, stage: toStage } : c
-      );
-      await updateDoc(doc(db, 'pipelines', pipelineDoc.id), {
-        candidates: newCandidates,
-        updatedAt: serverTimestamp(),
-      });
-      showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
+      await moveCandidateToStage(pipelineCode, candidateCode, toStage);
     } catch {
       showToast('Failed to move candidate', 'error');
-      // Revert
       setPipelines(pipelines);
+    }
+  }
+
+  async function saveEnglishScore() {
+    if (!engFeedback.trim()) {
+      showToast('Please enter feedback before continuing', 'error');
+      return;
+    }
+    setEngSaving(true);
+    try {
+      await moveCandidateToStage(engModal.pipelineCode, engModal.candidateId, engModal.pendingStage, {
+        level: engLevel,
+        feedback: engFeedback.trim(),
+      });
+      setEngModal({ open: false, candidateId: '', pipelineId: '', pipelineCode: '', pendingStage: 'assessment' });
+    } catch {
+      showToast('Failed to save English score', 'error');
+    } finally {
+      setEngSaving(false);
     }
   }
 
@@ -494,44 +546,43 @@ export default function PipelinePage() {
           <div className="space-y-3 text-sm">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Stage
-                </p>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Stage</p>
                 <p className="mt-0.5 font-500 capitalize text-[var(--black)]">
-                  {snakeToTitle(briefModal.candidate.stage)}
+                  {PIPELINE_STAGES.find((s) => s.key === normalizeStage(briefModal.candidate!.stage))?.label ?? briefModal.candidate.stage}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Score
-                </p>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Score</p>
                 <p className="mt-0.5 font-700 text-[var(--black)]">
                   {briefModal.candidate.score ?? '—'}
                 </p>
               </div>
               {briefModal.candidate.email && (
                 <div className="col-span-2">
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                    Email
-                  </p>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Email</p>
                   <p className="mt-0.5 text-[var(--black)]">{briefModal.candidate.email}</p>
+                </div>
+              )}
+              {briefModal.candidate.englishScore && (
+                <div className="col-span-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Languages className="h-3.5 w-3.5 text-[var(--green)]" />
+                    <p className="text-[10px] font-700 uppercase tracking-wider text-[var(--green)]">English Score</p>
+                  </div>
+                  <p className="text-sm font-700 text-[var(--black)]">{briefModal.candidate.englishScore.level}</p>
+                  <p className="mt-0.5 text-xs text-[var(--mid)]">{briefModal.candidate.englishScore.feedback}</p>
                 </div>
               )}
               {briefModal.candidate.notes && (
                 <div className="col-span-2">
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                    Notes
-                  </p>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Notes</p>
                   <p className="mt-0.5 text-[var(--mid)]">{briefModal.candidate.notes}</p>
                 </div>
               )}
             </div>
             <div className="flex gap-2 border-t border-[var(--border)] pt-3">
               <button
-                onClick={() => {
-                  setBriefModal({ open: false, candidate: null, pipelineCode: '' });
-                  // TODO: navigate to messages with this candidate
-                }}
+                onClick={() => setBriefModal({ open: false, candidate: null, pipelineCode: '' })}
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
@@ -540,10 +591,7 @@ export default function PipelinePage() {
               <button
                 onClick={() => {
                   if (briefModal.candidate) {
-                    removeCandidateFromPipeline(
-                      briefModal.candidate.candidateId,
-                      briefModal.pipelineCode
-                    );
+                    removeCandidateFromPipeline(briefModal.candidate.candidateId, briefModal.pipelineCode);
                   }
                   setBriefModal({ open: false, candidate: null, pipelineCode: '' });
                 }}
@@ -555,6 +603,69 @@ export default function PipelinePage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* English score gate modal */}
+      <Modal
+        open={engModal.open}
+        onClose={() => setEngModal({ open: false, candidateId: '', pipelineId: '', pipelineCode: '', pendingStage: 'assessment' })}
+        title="English score required"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-600 text-amber-800">
+              A CEFR English level and feedback must be recorded before advancing this candidate past the Interview stage.
+            </p>
+          </div>
+          <div>
+            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">CEFR Level *</label>
+            <div className="flex gap-2 flex-wrap">
+              {CEFR_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setEngLevel(level)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-700 transition-colors ${
+                    engLevel === level
+                      ? 'text-white'
+                      : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                  }`}
+                  style={engLevel === level ? { background: 'var(--green)' } : {}}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-[var(--light)]">A1–A2 basic · B1–B2 intermediate · C1–C2 proficient</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Feedback *</label>
+            <textarea
+              value={engFeedback}
+              onChange={(e) => setEngFeedback(e.target.value)}
+              rows={3}
+              placeholder="Describe the candidate's English proficiency: fluency, accent, comprehension, professional communication…"
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setEngModal({ open: false, candidateId: '', pipelineId: '', pipelineCode: '', pendingStage: 'assessment' })}
+              className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveEnglishScore}
+              disabled={engSaving || !engFeedback.trim()}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
+              style={{ background: 'var(--green)' }}
+            >
+              {engSaving && <Spinner size="sm" />}
+              Save & advance
+            </button>
+          </div>
+        </div>
       </Modal>
     </MainLayout>
   );
@@ -1017,6 +1128,7 @@ function CandidateCard({
   };
 
   const score = candidate.score ?? 0;
+  const hasEngScore = !!candidate.englishScore;
 
   return (
     <div
@@ -1031,24 +1143,25 @@ function CandidateCard({
         <p className="text-xs font-600 text-[var(--black)] leading-tight truncate">
           {candidate.name}
         </p>
-        {score > 0 && (
-          <span
-            className={`shrink-0 rounded-full px-1.5 text-[9px] font-800 ${
-              score >= 80
-                ? 'bg-green-100 text-green-700'
-                : score >= 60
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-600'
-            }`}
-          >
-            {score}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {hasEngScore && (
+            <span className="rounded bg-blue-100 px-1 text-[9px] font-700 text-blue-700" title={`English: ${candidate.englishScore!.level}`}>
+              {candidate.englishScore!.level}
+            </span>
+          )}
+          {score > 0 && (
+            <span
+              className={`rounded-full px-1.5 text-[9px] font-800 ${
+                score >= 80 ? 'bg-green-100 text-green-700' : score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+              }`}
+            >
+              {score}
+            </span>
+          )}
+        </div>
       </div>
       {!compact && candidate.email && (
-        <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">
-          {candidate.email}
-        </p>
+        <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">{candidate.email}</p>
       )}
       {!compact && (
         <button

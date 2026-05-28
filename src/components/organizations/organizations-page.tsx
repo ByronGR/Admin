@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials } from '@/lib/utils';
-import type { Organization, Pipeline } from '@/lib/types';
+import type { Organization, Pipeline, OrgPackage, OrgContractType } from '@/lib/types';
 import { Search, Plus, Building2, ExternalLink, ChevronRight, X, Edit3, Trash2 } from 'lucide-react';
 
 // ─── Status badge helper ──────────────────────────────────────────────────────
@@ -45,8 +45,9 @@ export default function OrganizationsPage() {
   // New org modal
   const [newModal, setNewModal] = useState(false);
   const [form, setForm] = useState({
-    name: '', website: '', email: '', phone: '', country: '', city: '',
-    industry: '', plan: '', status: 'active', notes: '',
+    name: '', website: '', country: '', city: '',
+    industry: '', package: '', contractType: '', hubspotLink: '', status: 'active',
+    inviteEmails: '', // comma-separated user emails to invite
   });
   const [saving, setSaving] = useState(false);
 
@@ -86,22 +87,34 @@ export default function OrganizationsPage() {
         .replace(/[^A-Z0-9]/g, '')
         .slice(0, 6);
 
+      // Build org users from invite emails
+      const orgUsers = form.inviteEmails
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .map((email) => ({
+          email,
+          status: 'invited',
+          invitedAt: new Date().toISOString(),
+        }));
+
       await addDoc(collection(db, 'organizations'), {
         name: form.name,
         website: form.website,
-        email: form.email,
-        phone: form.phone,
         country: form.country,
         city: form.city,
         industry: form.industry,
+        package: form.package ? (form.package as OrgPackage) : null,
+        contractType: form.contractType ? (form.contractType as OrgContractType) : null,
+        hubspotLink: form.hubspotLink || null,
         status: form.status,
-        notes: form.notes,
+        orgUsers: orgUsers.length ? orgUsers : [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
       showToast('Organization created', 'success');
       setNewModal(false);
-      setForm({ name: '', website: '', email: '', phone: '', country: '', city: '', industry: '', plan: '', status: 'active', notes: '' });
+      setForm({ name: '', website: '', country: '', city: '', industry: '', package: '', contractType: '', hubspotLink: '', status: 'active', inviteEmails: '' });
       load();
     } catch {
       showToast('Failed to create organization', 'error');
@@ -236,39 +249,100 @@ export default function OrganizationsPage() {
       {/* New org modal */}
       <Modal open={newModal} onClose={() => setNewModal(false)} title="New organization" size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
-          {[
-            { key: 'name', label: 'Organization name *', placeholder: 'Acme Inc.', colSpan: true },
-            { key: 'website', label: 'Website', placeholder: 'acme.com' },
-            { key: 'email', label: 'Contact email', placeholder: 'hr@acme.com', type: 'email' },
-            { key: 'phone', label: 'Phone', placeholder: '+1 555 0100' },
-            { key: 'country', label: 'Country', placeholder: 'USA' },
-            { key: 'city', label: 'City', placeholder: 'New York' },
-            { key: 'industry', label: 'Industry', placeholder: 'Technology' },
-          ].map(({ key, label, placeholder, type, colSpan }) => (
-            <div key={key} className={colSpan ? 'sm:col-span-2' : ''}>
-              <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                {label}
-              </label>
-              <input
-                type={type ?? 'text'}
-                value={(form as Record<string, string>)[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                placeholder={placeholder}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-              />
-            </div>
-          ))}
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-              Notes
-            </label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Internal notes..."
-              rows={2}
-              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Organization name *</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Acme Inc."
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Website</label>
+            <input
+              value={form.website}
+              onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+              placeholder="acme.com"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Industry</label>
+            <input
+              value={form.industry}
+              onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
+              placeholder="Technology"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Country</label>
+            <input
+              value={form.country}
+              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+              placeholder="USA"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">City</label>
+            <input
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+              placeholder="New York"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Package</label>
+            <select
+              value={form.package}
+              onChange={(e) => setForm((f) => ({ ...f, package: e.target.value }))}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)]"
+            >
+              <option value="">Select package…</option>
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="enterprise">Enterprise</option>
+              <option value="eor">EOR</option>
+              <option value="spp">SPP</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Contract type</label>
+            <select
+              value={form.contractType}
+              onChange={(e) => setForm((f) => ({ ...f, contractType: e.target.value }))}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)]"
+            >
+              <option value="">Select type…</option>
+              <option value="managed_team">Managed Team</option>
+              <option value="eor">EOR</option>
+              <option value="spp">SPP</option>
+              <option value="direct">Direct</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">HubSpot link</label>
+            <input
+              value={form.hubspotLink}
+              onChange={(e) => setForm((f) => ({ ...f, hubspotLink: e.target.value }))}
+              placeholder="https://app.hubspot.com/contacts/…"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Invite org users</label>
+            <input
+              value={form.inviteEmails}
+              onChange={(e) => setForm((f) => ({ ...f, inviteEmails: e.target.value }))}
+              placeholder="hr@acme.com, ceo@acme.com"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+            <p className="mt-1 text-[10px] text-[var(--light)]">
+              Comma-separated. These users will receive an invitation to create an account at app.nearwork.co.
+            </p>
           </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -313,13 +387,13 @@ function OrgDetail({
   const [editForm, setEditForm] = useState({
     name: org.name,
     website: org.website ?? '',
-    email: org.email ?? '',
-    phone: org.phone ?? '',
     country: org.country ?? '',
     city: org.city ?? '',
     industry: org.industry ?? '',
+    package: org.package ?? '',
+    contractType: org.contractType ?? '',
+    hubspotLink: org.hubspotLink ?? '',
     status: org.status ?? 'active',
-    notes: org.notes ?? '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -336,7 +410,15 @@ function OrgDetail({
     setSaving(true);
     try {
       await updateDoc(doc(db, 'organizations', org.id), {
-        ...editForm,
+        name: editForm.name,
+        website: editForm.website,
+        country: editForm.country,
+        city: editForm.city,
+        industry: editForm.industry,
+        package: editForm.package ? (editForm.package as OrgPackage) : null,
+        contractType: editForm.contractType ? (editForm.contractType as OrgContractType) : null,
+        hubspotLink: editForm.hubspotLink || null,
+        status: editForm.status,
         updatedAt: serverTimestamp(),
       });
       showToast('Organization updated', 'success');
@@ -433,19 +515,26 @@ function OrgDetail({
                 { label: 'Industry', value: org.industry },
                 { label: 'Country', value: org.country },
                 { label: 'City', value: org.city },
-                { label: 'Email', value: org.email },
-                { label: 'Phone', value: org.phone },
+                { label: 'Package', value: org.package },
+                { label: 'Contract Type', value: org.contractType?.replace('_', ' ') },
                 { label: 'Created', value: fmtDate(org.createdAt) },
               ].map(({ label, value }) => (
                 <div key={label}>
                   <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">{label}</p>
-                  <p className="mt-0.5 text-[var(--black)]">{value ?? '—'}</p>
+                  <p className="mt-0.5 capitalize text-[var(--black)]">{value ?? '—'}</p>
                 </div>
               ))}
-              {org.notes && (
+              {org.hubspotLink && (
                 <div className="sm:col-span-3">
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Notes</p>
-                  <p className="mt-0.5 text-[var(--mid)]">{org.notes}</p>
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">HubSpot</p>
+                  <a
+                    href={org.hubspotLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 text-[var(--green)] hover:underline"
+                  >
+                    {org.hubspotLink}
+                  </a>
                 </div>
               )}
             </div>
@@ -454,18 +543,16 @@ function OrgDetail({
               {[
                 { key: 'name', label: 'Name' },
                 { key: 'website', label: 'Website' },
-                { key: 'email', label: 'Email', type: 'email' },
-                { key: 'phone', label: 'Phone' },
                 { key: 'country', label: 'Country' },
                 { key: 'city', label: 'City' },
                 { key: 'industry', label: 'Industry' },
-              ].map(({ key, label, type }) => (
+                { key: 'hubspotLink', label: 'HubSpot link' },
+              ].map(({ key, label }) => (
                 <div key={key}>
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                     {label}
                   </label>
                   <input
-                    type={type ?? 'text'}
                     value={(editForm as Record<string, string>)[key]}
                     onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
@@ -473,9 +560,36 @@ function OrgDetail({
                 </div>
               ))}
               <div>
-                <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Status
-                </label>
+                <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Package</label>
+                <select
+                  value={editForm.package}
+                  onChange={(e) => setEditForm((f) => ({ ...f, package: e.target.value }))}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+                >
+                  <option value="">None</option>
+                  <option value="starter">Starter</option>
+                  <option value="growth">Growth</option>
+                  <option value="enterprise">Enterprise</option>
+                  <option value="eor">EOR</option>
+                  <option value="spp">SPP</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Contract type</label>
+                <select
+                  value={editForm.contractType}
+                  onChange={(e) => setEditForm((f) => ({ ...f, contractType: e.target.value }))}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+                >
+                  <option value="">None</option>
+                  <option value="managed_team">Managed Team</option>
+                  <option value="eor">EOR</option>
+                  <option value="spp">SPP</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Status</label>
                 <select
                   value={editForm.status}
                   onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as 'active' | 'inactive' | 'prospect' }))}
@@ -485,17 +599,6 @@ function OrgDetail({
                   <option value="inactive">Inactive</option>
                   <option value="prospect">Prospect</option>
                 </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Notes
-                </label>
-                <textarea
-                  value={editForm.notes}
-                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-                  rows={2}
-                  className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-                />
               </div>
               <div className="sm:col-span-2 flex gap-2">
                 <button
@@ -519,35 +622,57 @@ function OrgDetail({
         </div>
       </div>
 
-      {/* Right: pipelines */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-        <h3 className="mb-3 text-sm font-600 text-[var(--black)]">
-          Pipelines ({pipelines.length})
-        </h3>
-        {loadingPipelines ? (
-          <div className="flex justify-center py-4">
-            <Spinner size="sm" />
-          </div>
-        ) : pipelines.length === 0 ? (
-          <p className="text-xs text-[var(--light)]">No pipelines yet for this org.</p>
-        ) : (
-          <div className="space-y-2">
-            {pipelines.map((p) => (
-              <div
-                key={p.id}
-                className="rounded-xl border border-[var(--border)] p-3 hover:border-[var(--green)]"
-              >
-                <p className="text-xs font-600 text-[var(--black)]">{p.title}</p>
-                <p className="text-[10px] text-[var(--light)]">
-                  {p.code} · {p.candidates?.length ?? 0} candidates
-                </p>
-                <div className="mt-1">
-                  <Badge label={p.status} variant="status" className="text-[9px]" />
+      {/* Right column */}
+      <div className="space-y-4">
+        {/* Org users */}
+        {(org.orgUsers ?? []).length > 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-3 text-sm font-600 text-[var(--black)]">
+              Client users ({org.orgUsers?.length ?? 0})
+            </h3>
+            <div className="space-y-2">
+              {(org.orgUsers ?? []).map((u) => (
+                <div key={u.email} className="flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-2">
+                  <p className="text-xs text-[var(--black)]">{u.email}</p>
+                  <span className={`text-[10px] font-600 ${u.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {u.status === 'active' ? 'Active' : 'Invited'}
+                  </span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Pipelines */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-3 text-sm font-600 text-[var(--black)]">
+            Pipelines ({pipelines.length})
+          </h3>
+          {loadingPipelines ? (
+            <div className="flex justify-center py-4">
+              <Spinner size="sm" />
+            </div>
+          ) : pipelines.length === 0 ? (
+            <p className="text-xs text-[var(--light)]">No pipelines yet for this org.</p>
+          ) : (
+            <div className="space-y-2">
+              {pipelines.map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-xl border border-[var(--border)] p-3 hover:border-[var(--green)]"
+                >
+                  <p className="text-xs font-600 text-[var(--black)]">{p.title}</p>
+                  <p className="text-[10px] text-[var(--light)]">
+                    {p.code} · {p.candidates?.length ?? 0} candidates
+                  </p>
+                  <div className="mt-1">
+                    <Badge label={p.status} variant="status" className="text-[9px]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

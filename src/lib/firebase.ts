@@ -55,23 +55,17 @@ const storage = getStorage(app);
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────
 
-const STAFF_ROLES = [
-  'super_admin',
-  'admin',
-  'sr_recruiter',
-  'recruiter',
-  'account_manager',
-  'hr',
-  'employee',
-  'user',
-] as const;
+import type { StaffRole } from './types';
+export type { StaffRole };
+
+const STAFF_ROLES: StaffRole[] = [
+  'super_admin', 'admin', 'recruiter', 'sales', 'hr', 'employee', 'user',
+];
 
 const HARD_CODED_SUPER_ADMINS = [
   'byron.giraldo@nearwork.co',
   'stephany.picos@nearwork.co',
 ];
-
-export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export function isNearworkEmail(email: string): boolean {
   return String(email ?? '')
@@ -87,15 +81,15 @@ export function normalizeStaffRole(role: string): StaffRole {
     .replaceAll('-', '_')
     .replaceAll(' ', '_');
   if (value === 'super_admin') return 'super_admin';
-  if (value === 'senior_recruiter') return 'sr_recruiter';
+  if (value === 'sr_recruiter' || value === 'senior_recruiter') return 'recruiter';
+  if (value === 'account_manager') return 'sales';
   if (value === 'users') return 'employee';
-  return (STAFF_ROLES as readonly string[]).includes(value)
-    ? (value as StaffRole)
-    : 'employee';
+  if ((STAFF_ROLES as string[]).includes(value)) return value as StaffRole;
+  return 'employee';
 }
 
 export function isAdminRole(role: string): boolean {
-  return (STAFF_ROLES as readonly string[]).includes(normalizeStaffRole(role));
+  return (STAFF_ROLES as string[]).includes(normalizeStaffRole(role));
 }
 
 // ─── User profile helpers ─────────────────────────────────────────────────────

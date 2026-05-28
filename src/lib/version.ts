@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.1.3';
+export const APP_VERSION = '0.2.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,37 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.2.0',
+    date: '2026-05-28',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Invite-only access — Super Admins generate a magic link; only invited @nearwork.co addresses can create accounts (/join page)',
+          'Team page (/users) — list all staff, invite new members, change roles, suspend accounts',
+          'Profile page (/profile) — edit name, upload photo, set Calendly link, reset password',
+          'Global search in nav bar — searches candidates, organizations, openings, and pipelines in real time',
+          'Pipeline redesigned to 8 stages: Applied, Background Check, Interview, Assessment, Partner Review, Partner Interview, Hired, Not Selected',
+          'English score gate — moving a candidate past Interview requires entering CEFR level (A1–C2) + written feedback; visible on card and candidate brief',
+          'Assessment rebuild — 50 hardcoded technical questions (6 categories) + 25 DISC behavioral questions; unique link per candidate; 24-hour expiry; send from admin',
+          'Opening team fields — Sourcer, Recruiter, Hiring Manager, Account Manager (optional) on every opening',
+          'Organization redesign — removed phone/email/notes from create form; added Package, Contract Type, HubSpot link, and client user invite emails',
+          'Org detail now shows client users panel and pipeline list side by side',
+          'Settings page enhanced — Calendly link field, notification toggles, invite-only access note',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'StaffRole type unified across types.ts and firebase.ts; old sr_recruiter/account_manager mapped to recruiter/sales',
+          'STAFF_ROLE_LABELS constant exported from types.ts for consistent display names',
+          'question-bank.ts: 75 hardcoded questions with correctIndex and DISC style mappings',
+          'scoreDISC() helper: tallies D/I/S/C answers and returns dominant style + full scores',
+        ],
+      },
+    ],
+  },
   {
     version: '0.1.3',
     date: '2026-05-28',

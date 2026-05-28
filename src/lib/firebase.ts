@@ -100,10 +100,10 @@ export function isAdminRole(role: string): boolean {
 
 // ─── User profile helpers ─────────────────────────────────────────────────────
 
-export async function getUserProfile(uid: string) {
+export async function getUserProfile(uid: string): Promise<(DocumentData & { id: string }) | null> {
   try {
     const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) return { id: snap.id, ...snap.data() };
+    if (snap.exists()) return { id: snap.id, ...snap.data() } as DocumentData & { id: string };
     return null;
   } catch (e) {
     console.error('getUserProfile error:', e);

@@ -45,7 +45,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 function KickoffInner() {
   const params = useSearchParams();
-  const pipelineCode = params.get('code') ?? '';
+  const pipelineCode = params?.get('code') ?? '';
 
   const [user, setUser] = useState<User | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'auth-error' | 'error' | 'ready'>('loading');

@@ -38,7 +38,7 @@ function LoginForm() {
 
   // Error from query param
   useEffect(() => {
-    const err = searchParams.get('error');
+    const err = searchParams?.get('error');
     if (err === 'not_nearwork') {
       setError('Access restricted to @nearwork.co accounts.');
     }

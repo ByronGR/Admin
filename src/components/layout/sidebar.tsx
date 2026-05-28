@@ -41,7 +41,7 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active =
-              pathname === href || pathname.startsWith(href + '/');
+              pathname === href || (pathname?.startsWith(href + '/') ?? false);
             return (
               <li key={href}>
                 <Link

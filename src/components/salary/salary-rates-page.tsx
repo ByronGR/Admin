@@ -32,44 +32,46 @@ function formatCOP(n: number): string {
 
 // ─── Frankfurter API ──────────────────────────────────────────────────────────
 
-interface FrankfurterResponse {
-  amount: number;
-  base: string;
-  date: string;
-  rates: Record<string, number>;
-}
 
-interface FxHistory {
-  start_date: string;
-  end_date: string;
-  base: string;
-  rates: Record<string, Record<string, number>>;
-}
-
+// fawazahmed0 currency CDN — free, no key, includes COP
 async function fetchCurrentRate(): Promise<{ rate: number; date: string } | null> {
   try {
-    const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=COP');
-    const d: FrankfurterResponse = await r.json();
-    return { rate: d.rates?.COP ?? 0, date: d.date };
+    const r = await fetch(
+      'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json',
+    );
+    const d = await r.json();
+    const rate = Number(d.usd?.cop);
+    if (!rate) return null;
+    return { rate, date: d.date as string };
   } catch {
     return null;
   }
 }
 
 async function fetch90DayHistory(): Promise<Array<{ date: string; rate: number }>> {
-  try {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 90);
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
-    const r = await fetch(`https://api.frankfurter.app/${fmt(start)}..${fmt(end)}?from=USD&to=COP`);
-    const d: FxHistory = await r.json();
-    return Object.entries(d.rates ?? {})
-      .map(([date, rates]) => ({ date, rate: rates['COP'] ?? 0 }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  } catch {
-    return [];
+  // Sample ~10 dates evenly spaced over 90 days
+  const dates: string[] = [];
+  for (let i = 90; i >= 0; i -= 9) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
   }
+  const results = await Promise.allSettled(
+    dates.map((date) =>
+      fetch(
+        `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${date}/v1/currencies/usd.min.json`,
+      )
+        .then((r) => r.json())
+        .then((d) => ({ date: d.date as string, rate: Number(d.usd?.cop) })),
+    ),
+  );
+  return results
+    .filter(
+      (r): r is PromiseFulfilledResult<{ date: string; rate: number }> =>
+        r.status === 'fulfilled' && r.value.rate > 0,
+    )
+    .map((r) => r.value)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -183,7 +185,7 @@ export default function SalaryRatesPage() {
             className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${fxLoading ? 'animate-spin' : ''}`} />
-            Refresh Frankfurter
+            Refresh FX rate
           </button>
         </div>
 
@@ -201,7 +203,7 @@ export default function SalaryRatesPage() {
                 <p className="mt-0.5 text-2xl font-800 text-[var(--black)]">
                   {fmtNumber(Math.round(currentRate.rate))} <span className="text-sm font-500 text-[var(--light)]">COP</span>
                 </p>
-                <p className="text-[10px] text-[var(--light)]">As of {currentRate.date} · Frankfurter</p>
+                <p className="text-[10px] text-[var(--light)]">As of {currentRate.date} · ExchangeRate CDN</p>
               </div>
               <div className="h-8 w-px bg-[var(--border)]" />
               <div>
@@ -297,7 +299,7 @@ export default function SalaryRatesPage() {
           <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
             <h3 className="mb-1 text-sm font-700 text-[var(--black)]">90-day USD/COP history</h3>
             <p className="mb-5 text-xs text-[var(--light)]">
-              Frankfurter spot line against Nearwork&apos;s internal NCR billing reference.
+              Spot rate vs Nearwork&apos;s internal NCR billing reference.
             </p>
 
             {fxLoading ? (

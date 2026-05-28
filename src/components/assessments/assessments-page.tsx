@@ -5,7 +5,9 @@ import {
   db,
   collection,
   getDocs,
+  doc,
   addDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   where,
@@ -17,7 +19,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtRelative, sortByTimestamp } from '@/lib/utils';
 import type { CandidateAssessment } from '@/lib/types';
-import { Search, ClipboardList, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Search, ClipboardList, CheckCircle, Clock, XCircle, Trash2 } from 'lucide-react';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -84,6 +86,16 @@ export default function AssessmentsPage() {
       showToast('Failed to load question bank', 'error');
     } finally {
       setBankLoading(false);
+    }
+  }
+
+  async function deleteAssessment(id: string) {
+    try {
+      await deleteDoc(doc(db, 'assessments', id));
+      setAssessments((prev) => prev.filter((a) => a.id !== id));
+      showToast('Assessment deleted', 'success');
+    } catch {
+      showToast('Failed to delete assessment', 'error');
     }
   }
 
@@ -216,18 +228,19 @@ export default function AssessmentsPage() {
               <div className="flex h-40 items-center justify-center"><Spinner /></div>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_36px] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
                   <div>Candidate</div>
                   <div>Pipeline</div>
                   <div>Score</div>
                   <div>Result</div>
                   <div>Completed</div>
+                  <div></div>
                 </div>
                 {filteredResults.length === 0 ? (
                   <div className="py-16 text-center text-sm text-[var(--light)]">No assessment results found.</div>
                 ) : (
                   filteredResults.map((a) => (
-                    <div key={a.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)]">
+                    <div key={a.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_36px] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)]">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-600 text-[var(--black)]">{a.candidateId}</p>
                       </div>
@@ -250,6 +263,19 @@ export default function AssessmentsPage() {
                       </div>
                       <div className="text-[10px] text-[var(--light)]">
                         {a.completedAt ? fmtRelative(a.completedAt) : '—'}
+                      </div>
+                      <div>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Delete this assessment record?')) {
+                              deleteAssessment(a.id);
+                            }
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--light)] hover:bg-red-50 hover:text-red-500"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))

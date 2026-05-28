@@ -8,6 +8,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
@@ -17,7 +18,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, sortByTimestamp } from '@/lib/utils';
 import type { Opening, Organization } from '@/lib/types';
-import { Search, Plus, X, Edit3, Briefcase } from 'lucide-react';
+import { Search, Plus, X, Edit3, Briefcase, Trash2 } from 'lucide-react';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -354,6 +355,8 @@ function OpeningDetail({
 }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editForm, setEditForm] = useState({
     title: opening.title,
     description: opening.description ?? '',
@@ -385,6 +388,20 @@ function OpeningDetail({
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'openings', opening.id));
+      showToast('Opening deleted', 'success');
+      await onRefresh();
+      onClose();
+    } catch {
+      showToast('Failed to delete opening', 'error');
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   const org = orgs.find((o) => o.id === opening.orgId);
 
   return (
@@ -402,7 +419,7 @@ function OpeningDetail({
             {org?.name ?? opening.orgName ?? '—'} · {opening.department ?? 'General'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge label={opening.status} variant="status" />
           <button
             onClick={() => setEditing((v) => !v)}
@@ -411,6 +428,32 @@ function OpeningDetail({
             <Edit3 className="h-3.5 w-3.5" />
             Edit
           </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-600 font-500">Delete this opening?</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-[var(--mid)] hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 

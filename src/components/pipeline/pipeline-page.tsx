@@ -24,6 +24,7 @@ import {
   getDocs,
   doc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   where,
@@ -233,6 +234,15 @@ export default function PipelinePage() {
     }
   }
 
+  async function deletePipeline(pipelineId: string) {
+    try {
+      await deleteDoc(doc(db, 'pipelines', pipelineId));
+      showToast('Pipeline deleted', 'success');
+    } catch {
+      showToast('Failed to delete pipeline', 'error');
+    }
+  }
+
   // Search candidates for adding to pipeline
   useEffect(() => {
     if (!addModal.open || !candidateSearch.trim()) {
@@ -388,6 +398,7 @@ export default function PipelinePage() {
                 onToggle={() => toggleRow(p.code)}
                 onOpen={() => setActivePipelineCode(p.code)}
                 onUpdateStatus={updatePipelineStatus}
+                onDelete={deletePipeline}
                 onDragEnd={(e) => handleDragEnd(e, p.code)}
                 onDragStart={(e) => {
                   const candidateCode = String(e.active.id).replace('cand-', '');
@@ -557,6 +568,7 @@ function PipelineRow({
   onToggle,
   onOpen,
   onUpdateStatus,
+  onDelete,
   onDragEnd,
   onDragStart,
   dragging,
@@ -570,6 +582,7 @@ function PipelineRow({
   onToggle: () => void;
   onOpen: () => void;
   onUpdateStatus: (id: string, status: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onDragEnd: (e: DragEndEvent) => void;
   onDragStart: (e: DragStartEvent) => void;
   dragging: PipelineCandidate | null;
@@ -578,6 +591,16 @@ function PipelineRow({
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    await onDelete(pipeline.id);
+    setDeleting(false);
+    setConfirmDelete(false);
+  }
+
   const statusColor =
     pipeline.status === 'active'
       ? 'b-green'
@@ -613,6 +636,31 @@ function PipelineRow({
           <Badge label={pipeline.status} variant="status" />
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-600 font-500">Delete pipeline?</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Yes'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-[var(--mid)] hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={onOpen}
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"

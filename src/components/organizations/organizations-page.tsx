@@ -8,6 +8,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   where,
@@ -19,7 +20,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials } from '@/lib/utils';
 import type { Organization, Pipeline } from '@/lib/types';
-import { Search, Plus, Building2, ExternalLink, ChevronRight, X, Edit3 } from 'lucide-react';
+import { Search, Plus, Building2, ExternalLink, ChevronRight, X, Edit3, Trash2 } from 'lucide-react';
 
 // ─── Status badge helper ──────────────────────────────────────────────────────
 
@@ -307,6 +308,8 @@ function OrgDetail({
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editForm, setEditForm] = useState({
     name: org.name,
     website: org.website ?? '',
@@ -346,6 +349,20 @@ function OrgDetail({
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'organizations', org.id));
+      showToast('Organization deleted', 'success');
+      onRefresh();
+      onClose();
+    } catch {
+      showToast('Failed to delete organization', 'error');
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       {/* Left: details + edit */}
@@ -372,7 +389,7 @@ function OrgDetail({
                 </a>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge label={org.status ?? 'active'} variant="status" />
               <button
                 onClick={() => setEditing((v) => !v)}
@@ -381,6 +398,32 @@ function OrgDetail({
                 <Edit3 className="h-3.5 w-3.5" />
                 Edit
               </button>
+              {confirmDelete ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-600 font-500">Delete this org?</span>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60"
+                  >
+                    {deleting ? 'Deleting…' : 'Yes, delete'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="text-xs text-[var(--mid)] hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              )}
             </div>
           </div>
 

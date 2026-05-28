@@ -911,7 +911,7 @@ function KanbanColumn({
           {candidates.length}
         </span>
       </div>
-      {stage.clientAction && (
+      {'clientAction' in stage && stage.clientAction && (
         <p className="px-3 pb-1 text-[9px] font-600 uppercase tracking-wider text-[var(--green)]">
           Client action
         </p>

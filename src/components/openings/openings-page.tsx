@@ -16,7 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, sortByTimestamp } from '@/lib/utils';
+import { fmtDate, sortByTimestamp, generateCode } from '@/lib/utils';
 import type { Opening, Organization } from '@/lib/types';
 import { Search, Plus, X, Edit3, Briefcase, Trash2 } from 'lucide-react';
 
@@ -70,7 +70,7 @@ export default function OpeningsPage() {
     setSaving(true);
     const org = orgs.find((o) => o.id === form.orgId);
     try {
-      await addDoc(collection(db, 'openings'), {
+      const openingRef = await addDoc(collection(db, 'openings'), {
         title: form.title,
         orgId: form.orgId,
         orgName: org?.name ?? '',
@@ -88,7 +88,25 @@ export default function OpeningsPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      showToast('Opening created', 'success');
+
+      // Auto-create a linked pipeline for every new opening
+      const pipelineCode = generateCode('NW');
+      await addDoc(collection(db, 'pipelines'), {
+        code: pipelineCode,
+        title: form.title,
+        openingId: openingRef.id,
+        orgId: form.orgId,
+        orgName: org?.name ?? '',
+        recruiter: form.recruiter,
+        department: form.department,
+        location: form.location,
+        status: 'active',
+        candidates: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      showToast(`Opening created · Pipeline ${pipelineCode} auto-generated`, 'success');
       setNewModal(false);
       // Reload
       const snap = await getDocs(collection(db, 'openings'));

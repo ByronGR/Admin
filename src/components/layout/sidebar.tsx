@@ -12,7 +12,9 @@ import {
   ClipboardList,
   MessageSquare,
   DollarSign,
+  Settings,
 } from 'lucide-react';
+import { APP_VERSION } from '@/lib/version';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/assessments', label: 'Assessments', icon: ClipboardList },
   { href: '/messages', label: 'Messages', icon: MessageSquare },
   { href: '/salary-rates', label: 'Salary Rates', icon: DollarSign },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -67,8 +70,11 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t border-[var(--border)] px-4 py-3">
         <p className="text-[10px] text-[var(--light)]">
-          Nearwork Admin v2.0
+          Nearwork Admin
         </p>
+        <Link href="/changelog" className="text-[10px] text-[var(--light)] hover:text-[var(--green)]">
+          v{APP_VERSION}
+        </Link>
       </div>
     </aside>
   );

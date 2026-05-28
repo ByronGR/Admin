@@ -49,7 +49,9 @@ import {
   ClipboardList,
   X,
   Languages,
+  LayoutGrid,
 } from 'lucide-react';
+import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
 
 // ─── Pipeline stages (8-stage) ────────────────────────────────────────────────
 
@@ -829,6 +831,7 @@ function PipelineWorkspace({
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
 }) {
   const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<'kanban' | 'chat'>('kanban');
   const [showEdit, setShowEdit] = useState(false);
   const [editRecruiter, setEditRecruiter] = useState(pipeline.recruiter ?? '');
   const [editManager, setEditManager] = useState(pipeline.accountManager ?? '');
@@ -948,17 +951,47 @@ function PipelineWorkspace({
         )}
       </div>
 
-      {/* Kanban board */}
-      <KanbanBoard
-        pipeline={pipeline}
-        onDragEnd={onDragEnd}
-        onDragStart={onDragStart}
-        dragging={dragging}
-        sensors={sensors}
-        onRemove={onRemove}
-        onAddCandidate={onAddCandidate}
-        onOpenBrief={onOpenBrief}
-      />
+      {/* Tab bar */}
+      <div className="flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-1" style={{ width: 'fit-content' }}>
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
+            activeTab === 'kanban'
+              ? 'bg-white text-[var(--black)] shadow-sm'
+              : 'text-[var(--light)] hover:text-[var(--mid)]'
+          }`}
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+          Kanban
+        </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
+            activeTab === 'chat'
+              ? 'bg-white text-[var(--black)] shadow-sm'
+              : 'text-[var(--light)] hover:text-[var(--mid)]'
+          }`}
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          Chat
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'kanban' ? (
+        <KanbanBoard
+          pipeline={pipeline}
+          onDragEnd={onDragEnd}
+          onDragStart={onDragStart}
+          dragging={dragging}
+          sensors={sensors}
+          onRemove={onRemove}
+          onAddCandidate={onAddCandidate}
+          onOpenBrief={onOpenBrief}
+        />
+      ) : (
+        <PipelineChatPanel pipeline={pipeline} />
+      )}
     </div>
   );
 }

@@ -329,7 +329,9 @@ export interface Assessment {
   candidateName?: string;
   candidateEmail?: string;
   openingId?: string;
+  openingTitle?: string;
   orgId?: string;
+  orgName?: string;
   uniqueToken?: string;
   expiresAt?: Timestamp;
   questions: AssessmentQuestion[];

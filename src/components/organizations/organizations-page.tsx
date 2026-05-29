@@ -26,13 +26,14 @@ import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId } from '@/lib/utils';
 import type {
   Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
-  AccountHealthGrade, HealthHistoryEntry, OrgTier,
+  AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC,
 } from '@/lib/types';
 import {
   Search, Plus, Building2, ExternalLink, ChevronRight, X,
   Edit3, Trash2, Mail, UserPlus, UserMinus, RefreshCw,
   Link2, Camera, Briefcase, Trophy, Users, TrendingUp,
   AlertTriangle, Activity, History, DollarSign,
+  Phone, Star, GitBranch, UserCog, Crown, Plus as PlusIcon,
 } from 'lucide-react';
 
 // ─── Package definitions (from nearwork.co/pricing) ───────────────────────────
@@ -694,6 +695,23 @@ function OrgDetail({
   // Action-needed state
   const [savingAction, setSavingAction] = useState(false);
 
+  // Openings/Pipelines view toggles
+  const [showInactiveOpenings, setShowInactiveOpenings] = useState(false);
+  const [showInactivePipelines, setShowInactivePipelines] = useState(false);
+
+  // Nearwork staff state
+  const [staffModal, setStaffModal] = useState(false);
+  const [staffForm, setStaffForm] = useState({
+    accountManager: org.accountManager ?? '',
+    salesCloser: org.salesCloser ?? '',
+  });
+  const [savingStaff, setSavingStaff] = useState(false);
+
+  // POC (decision-makers) state
+  const [pocModal, setPocModal] = useState(false);
+  const [pocList, setPocList] = useState<OrgPOC[]>(org.pocContacts ?? []);
+  const [savingPoc, setSavingPoc] = useState(false);
+
   useEffect(() => {
     Promise.all([
       getDocs(query(collection(db, 'pipelines'), where('orgId', '==', org.id))),
@@ -708,9 +726,76 @@ function OrgDetail({
   }, [org.id]);
 
   const pkg = getPkg(org.package);
+  const isOpeningActive = (o: Opening) => o.status === 'open' || o.status === 'paused';
+  const isPipelineActive = (p: Pipeline) => p.status === 'active' || p.status === 'paused';
   const activeOpenings = openings.filter((o) => o.status === 'open').length;
   const activePlacements = placements.filter((p) => p.status === 'active').length;
+  const shownOpenings = showInactiveOpenings ? openings : openings.filter(isOpeningActive);
+  const shownPipelines = showInactivePipelines ? pipelines : pipelines.filter(isPipelineActive);
+  const inactiveOpeningsCount = openings.filter((o) => !isOpeningActive(o)).length;
+  const inactivePipelinesCount = pipelines.filter((p) => !isPipelineActive(p)).length;
   const orgUsers: OrgUser[] = org.orgUsers ?? [];
+
+  // ── Save Nearwork staff ──────────────────────────────────────────────────────
+
+  async function saveStaff() {
+    setSavingStaff(true);
+    try {
+      const data = {
+        accountManager: staffForm.accountManager.trim() || null,
+        salesCloser: staffForm.salesCloser.trim() || null,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(doc(db, 'organizations', org.id), data);
+      onUpdated({
+        ...org,
+        accountManager: data.accountManager ?? undefined,
+        salesCloser: data.salesCloser ?? undefined,
+      });
+      showToast('Nearwork staff updated', 'success');
+      setStaffModal(false);
+    } catch {
+      showToast('Failed to save', 'error');
+    } finally {
+      setSavingStaff(false);
+    }
+  }
+
+  // ── Save POC (decision-makers) ────────────────────────────────────────────────
+
+  function addPocRow() {
+    setPocList((l) => [...l, { id: genSafeId(), name: '', role: '', email: '', phone: '', isDecisionMaker: false }]);
+  }
+  function updatePocRow(id: string, patch: Partial<OrgPOC>) {
+    setPocList((l) => l.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+  function removePocRow(id: string) {
+    setPocList((l) => l.filter((p) => p.id !== id));
+  }
+  async function savePoc() {
+    setSavingPoc(true);
+    try {
+      const clean = pocList
+        .filter((p) => p.name.trim())
+        .map((p) => ({
+          id: p.id,
+          name: p.name.trim(),
+          role: p.role?.trim() || '',
+          email: p.email?.trim() || '',
+          phone: p.phone?.trim() || '',
+          isDecisionMaker: !!p.isDecisionMaker,
+        }));
+      await updateDoc(doc(db, 'organizations', org.id), { pocContacts: clean, updatedAt: serverTimestamp() });
+      onUpdated({ ...org, pocContacts: clean });
+      setPocList(clean);
+      showToast('Contacts updated', 'success');
+      setPocModal(false);
+    } catch {
+      showToast('Failed to save', 'error');
+    } finally {
+      setSavingPoc(false);
+    }
+  }
 
   // ── Logo upload ────────────────────────────────────────────────────────────
 
@@ -1228,19 +1313,99 @@ function OrgDetail({
             </div>
           )}
 
-          {/* Pipelines */}
+          {/* Openings */}
           <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-4 text-sm font-700 text-[var(--black)]">
-              Pipelines <span className="text-[var(--light)]">({pipelines.length})</span>
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+                <Briefcase className="h-4 w-4 text-[var(--green)]" />
+                Openings
+                <span className="text-[var(--light)]">({activeOpenings} active)</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                {inactiveOpeningsCount > 0 && (
+                  <button
+                    onClick={() => setShowInactiveOpenings((v) => !v)}
+                    className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+                  >
+                    {showInactiveOpenings ? 'Hide' : 'Show'} inactive ({inactiveOpeningsCount})
+                  </button>
+                )}
+                <a
+                  href={`/openings?org=${org.id}`}
+                  className="flex items-center gap-1 text-[10px] font-600 text-[var(--green)] hover:underline"
+                >
+                  View all <ChevronRight className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
             {dataLoading ? (
               <div className="flex justify-center py-4"><Spinner size="sm" /></div>
-            ) : pipelines.length === 0 ? (
-              <p className="py-4 text-center text-xs text-[var(--light)]">No pipelines yet for this org.</p>
+            ) : shownOpenings.length === 0 ? (
+              <p className="py-4 text-center text-xs text-[var(--light)]">
+                {openings.length === 0 ? 'No openings yet for this org.' : 'No active openings.'}
+              </p>
             ) : (
               <div className="space-y-2">
-                {pipelines.map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
+                {shownOpenings.map((o) => (
+                  <a
+                    key={o.id}
+                    href={`/openings?id=${o.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-600 text-[var(--black)]">{o.title}</p>
+                      <p className="text-[10px] text-[var(--light)]">
+                        {o.department || o.type?.replace('_', ' ') || 'Role'}
+                        {typeof o.applicationCount === 'number' ? ` · ${o.applicationCount} applicants` : ''}
+                      </p>
+                    </div>
+                    <Badge label={o.status} variant="status" className="text-[9px]" />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pipelines */}
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+                <GitBranch className="h-4 w-4 text-[var(--green)]" />
+                Pipelines
+                <span className="text-[var(--light)]">({pipelines.filter(isPipelineActive).length} active)</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                {inactivePipelinesCount > 0 && (
+                  <button
+                    onClick={() => setShowInactivePipelines((v) => !v)}
+                    className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+                  >
+                    {showInactivePipelines ? 'Hide' : 'Show'} inactive ({inactivePipelinesCount})
+                  </button>
+                )}
+                <a
+                  href={`/pipeline?org=${org.id}`}
+                  className="flex items-center gap-1 text-[10px] font-600 text-[var(--green)] hover:underline"
+                >
+                  View all <ChevronRight className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+            {dataLoading ? (
+              <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+            ) : shownPipelines.length === 0 ? (
+              <p className="py-4 text-center text-xs text-[var(--light)]">
+                {pipelines.length === 0 ? 'No pipelines yet for this org.' : 'No active pipelines.'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {shownPipelines.map((p) => (
+                  <a
+                    key={p.id}
+                    href={`/pipeline?id=${p.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-600 text-[var(--black)]">{p.title}</p>
                       <p className="text-[10px] text-[var(--light)]">
@@ -1248,7 +1413,8 @@ function OrgDetail({
                       </p>
                     </div>
                     <Badge label={p.status} variant="status" className="text-[9px]" />
-                  </div>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+                  </a>
                 ))}
               </div>
             )}
@@ -1283,7 +1449,93 @@ function OrgDetail({
           )}
         </div>
 
-        {/* Right: Users */}
+        {/* Right column */}
+        <div className="space-y-5">
+        {/* Nearwork staff */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+              <UserCog className="h-4 w-4 text-[var(--green)]" />Nearwork staff
+            </h3>
+            <button
+              onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '' }); setStaffModal(true); }}
+              className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+              title="Edit Nearwork staff"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: 'var(--green)' }}>
+                <Crown className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Account Manager</p>
+                <p className="truncate text-xs font-600 text-[var(--black)]">{org.accountManager || <span className="font-400 text-[var(--light)]">Unassigned</span>}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--mid)]" style={{ background: 'var(--bg)' }}>
+                <Star className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Sales closer</p>
+                <p className="truncate text-xs font-600 text-[var(--black)]">{org.salesCloser || <span className="font-400 text-[var(--light)]">Not recorded</span>}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Decision-makers (POC) */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+              <Users className="h-4 w-4 text-[var(--green)]" />Decision-makers
+              <span className="text-[var(--light)]">({(org.pocContacts ?? []).length})</span>
+            </h3>
+            <button
+              onClick={() => { setPocList(org.pocContacts ?? []); setPocModal(true); }}
+              className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+              title="Edit contacts"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {(org.pocContacts ?? []).length === 0 ? (
+            <div className="rounded-xl bg-[var(--bg)] px-4 py-6 text-center">
+              <p className="text-xs text-[var(--light)]">No contacts yet. Add who makes decisions on the client side.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(org.pocContacts ?? []).map((c) => (
+                <div key={c.id} className="rounded-xl border border-[var(--border)] p-3">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-xs font-600 text-[var(--black)]">{c.name}</p>
+                    {c.isDecisionMaker && (
+                      <span className="rounded-full bg-[var(--green)]/10 px-2 py-0.5 text-[9px] font-700 text-[var(--green)]">Decision-maker</span>
+                    )}
+                  </div>
+                  {c.role && <p className="text-[10px] text-[var(--light)]">{c.role}</p>}
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    {c.email && (
+                      <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-[10px] font-500 text-[var(--mid)] hover:text-[var(--green)]">
+                        <Mail className="h-3 w-3" />{c.email}
+                      </a>
+                    )}
+                    {c.phone && (
+                      <a href={`tel:${c.phone}`} className="flex items-center gap-1 text-[10px] font-500 text-[var(--mid)] hover:text-[var(--green)]">
+                        <Phone className="h-3 w-3" />{c.phone}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Client users */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-700 text-[var(--black)]">
@@ -1355,6 +1607,7 @@ function OrgDetail({
               ))}
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -1437,6 +1690,124 @@ function OrgDetail({
               {savingSpend && <Spinner size="sm" />}Save
             </button>
             <button onClick={() => setSpendModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Nearwork staff modal */}
+      <Modal open={staffModal} onClose={() => setStaffModal(false)} title="Nearwork staff" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              <Crown className="h-3 w-3" />Account Manager
+            </label>
+            <input
+              value={staffForm.accountManager}
+              onChange={(e) => setStaffForm((f) => ({ ...f, accountManager: e.target.value }))}
+              placeholder="Owns the relationship"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              <Star className="h-3 w-3" />Sales closer
+            </label>
+            <input
+              value={staffForm.salesCloser}
+              onChange={(e) => setStaffForm((f) => ({ ...f, salesCloser: e.target.value }))}
+              placeholder="Who closed the deal"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveStaff}
+              disabled={savingStaff}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingStaff && <Spinner size="sm" />}Save
+            </button>
+            <button onClick={() => setStaffModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Decision-makers (POC) modal */}
+      <Modal open={pocModal} onClose={() => setPocModal(false)} title="Decision-makers" size="lg">
+        <div className="space-y-4">
+          {pocList.length === 0 ? (
+            <p className="rounded-xl bg-[var(--bg)] px-4 py-6 text-center text-xs text-[var(--light)]">
+              No contacts yet. Add the people who make decisions on the client side.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {pocList.map((c) => (
+                <div key={c.id} className="rounded-xl border border-[var(--border)] p-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      value={c.name}
+                      onChange={(e) => updatePocRow(c.id, { name: e.target.value })}
+                      placeholder="Full name"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+                    />
+                    <input
+                      value={c.role ?? ''}
+                      onChange={(e) => updatePocRow(c.id, { role: e.target.value })}
+                      placeholder="Role / title"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+                    />
+                    <input
+                      value={c.email ?? ''}
+                      onChange={(e) => updatePocRow(c.id, { email: e.target.value })}
+                      placeholder="Email"
+                      type="email"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+                    />
+                    <input
+                      value={c.phone ?? ''}
+                      onChange={(e) => updatePocRow(c.id, { phone: e.target.value })}
+                      placeholder="Phone"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-500 text-[var(--mid)]">
+                      <input
+                        type="checkbox"
+                        checked={!!c.isDecisionMaker}
+                        onChange={(e) => updatePocRow(c.id, { isDecisionMaker: e.target.checked })}
+                        className="h-3.5 w-3.5 accent-[var(--green)]"
+                      />
+                      Decision-maker
+                    </label>
+                    <button
+                      onClick={() => removePocRow(c.id)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-600 text-[var(--light)] hover:bg-red-50 hover:text-red-500"
+                    >
+                      <Trash2 className="h-3 w-3" />Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={addPocRow}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-4 py-2.5 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />Add contact
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={savePoc}
+              disabled={savingPoc}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingPoc && <Spinner size="sm" />}Save contacts
+            </button>
+            <button onClick={() => setPocModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
           </div>
         </div>
       </Modal>

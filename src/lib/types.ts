@@ -126,8 +126,22 @@ export interface Organization {
   healthHistory?: HealthHistoryEntry[];   // trend log; a note is required on every change
   actionNeeded?: boolean;                 // surfaced on the main list (pipeline movement, client msg…)
   actionNote?: string;                    // what action is needed
+  // ─── People ─────────────────────────────────────────────────────────────────
+  pocContacts?: OrgPOC[];                 // client-side decision-makers (one or more)
+  accountManager?: string;                // Nearwork AM — owns the relationship (most important)
+  salesCloser?: string;                   // Nearwork rep who closed the deal
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+}
+
+// Client-side point of contact / decision-maker
+export interface OrgPOC {
+  id: string;
+  name: string;
+  role?: string;        // job title at the client
+  email?: string;
+  phone?: string;
+  isDecisionMaker?: boolean;
 }
 
 export interface CACEntry {

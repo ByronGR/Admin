@@ -157,6 +157,27 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 /**
+ * Generate a short, human-safe ID from a charset that omits visually
+ * confusable characters: 0 O, 1 I L.
+ * Safe chars: 2-9 + A-Z minus (O I L) = 32 characters.
+ * Example output: 'A7KM2P'
+ */
+const SAFE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export function genSafeId(length = 6): string {
+  let id = '';
+  const arr = new Uint8Array(length);
+  if (typeof window !== 'undefined') {
+    window.crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < length; i++) arr[i] = Math.floor(Math.random() * 256);
+  }
+  for (let i = 0; i < length; i++) {
+    id += SAFE_CHARS[arr[i] % SAFE_CHARS.length];
+  }
+  return id;
+}
+
+/**
  * Sort an array of Firestore docs by a timestamp field (newest first by default).
  * Works with Firestore Timestamps, { seconds, nanoseconds } objects, ISO strings,
  * and epoch numbers — so docs that lack the field simply sort to the bottom.

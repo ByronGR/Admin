@@ -72,7 +72,7 @@ export interface EnglishScore {
 
 // ─── Organization ─────────────────────────────────────────────────────────────
 
-export type OrgPackage = 'starter' | 'growth' | 'enterprise' | 'eor' | 'spp';
+export type OrgPackage = 'essential' | 'starter' | 'growth' | 'scale' | 'enterprise' | 'eor' | 'spp';
 export type OrgContractType = 'managed_team' | 'eor' | 'spp' | 'direct';
 
 export interface OrgUser {

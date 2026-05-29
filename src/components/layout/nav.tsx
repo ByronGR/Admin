@@ -109,22 +109,22 @@ function GlobalSearch() {
 
   return (
     <div ref={containerRef} className="relative hidden md:block">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 focus-within:border-[var(--green)] focus-within:bg-white">
-        <Search className="h-3.5 w-3.5 text-[var(--light)]" />
+      <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 focus-within:border-[var(--green)] focus-within:bg-white focus-within:shadow-sm transition-all">
+        <Search className="h-4 w-4 shrink-0 text-[var(--light)]" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search candidates, orgs, openings…"
-          className="w-56 bg-transparent text-xs outline-none placeholder:text-[var(--light)]"
+          placeholder="Search candidates, orgs, openings, pipelines…"
+          className="w-72 bg-transparent text-sm outline-none placeholder:text-[var(--light)]"
         />
         {searching && (
-          <div className="h-3 w-3 animate-spin rounded-full border border-[var(--light)] border-t-[var(--green)]" />
+          <div className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border border-[var(--light)] border-t-[var(--green)]" />
         )}
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-96 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-[420px] overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-lg">
           {results.map((r) => (
             <button
               key={`${r.type}-${r.id}`}
@@ -133,13 +133,13 @@ function GlobalSearch() {
                 setQuery('');
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg)]"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--bg)]"
             >
               <div className="flex-1 min-w-0">
-                <p className="truncate text-xs font-600 text-[var(--black)]">{r.label}</p>
-                <p className="truncate text-[10px] text-[var(--light)]">{r.sub}</p>
+                <p className="truncate text-sm font-600 text-[var(--black)]">{r.label}</p>
+                <p className="truncate text-xs text-[var(--light)]">{r.sub}</p>
               </div>
-              <span className={`rounded px-1.5 py-0.5 text-[9px] font-700 uppercase tracking-wider ${TYPE_COLORS[r.type]}`}>
+              <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-700 uppercase tracking-wider ${TYPE_COLORS[r.type]}`}>
                 {r.type}
               </span>
             </button>

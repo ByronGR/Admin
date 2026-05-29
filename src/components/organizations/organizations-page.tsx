@@ -635,7 +635,8 @@ function OrgDetail({
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'organizations', org.id), data);
-      onUpdated({ ...org, ...data } as Organization);
+      const { updatedAt: _ts, ...dataWithoutTs } = data;
+      onUpdated({ ...org, ...dataWithoutTs } as Organization);
       showToast('Saved', 'success');
       setEditing(false);
       await onRefresh();

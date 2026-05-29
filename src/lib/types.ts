@@ -416,6 +416,7 @@ export interface Placement {
   salaryAmount: number;
   salaryCurrency?: string;
   salaryFrequency?: 'monthly' | 'biweekly' | 'weekly' | 'hourly';
+  engagementType?: EngagementType;
   ncrRate?: number;
   ncrCurrency?: string;
   status?: 'active' | 'ended' | 'on_hold';
@@ -631,6 +632,16 @@ export interface OrgInvite {
 
 // ─── Contractor / Hired Profile ───────────────────────────────────────────────
 
+// How a hire is engaged commercially
+export type EngagementType = 'eor' | 'managed' | 'spp' | 'direct';
+
+export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
+  eor: 'EOR',
+  managed: 'Managed Team',
+  spp: 'Strategic Partner',
+  direct: 'Direct Placement',
+};
+
 export interface PerformanceReview {
   id: string;
   period: string; // e.g. "Q1 2026"
@@ -654,6 +665,7 @@ export interface ContractorProfile {
   salaryAmount: number;
   salaryCurrency?: string;
   salaryFrequency?: 'monthly' | 'biweekly' | 'weekly' | 'hourly';
+  engagementType?: EngagementType;
   // PTO
   ptoDaysPerYear?: number;
   ptoUsed?: number;

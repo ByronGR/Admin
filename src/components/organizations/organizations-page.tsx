@@ -695,6 +695,9 @@ function OrgDetail({
   // Action-needed state
   const [savingAction, setSavingAction] = useState(false);
 
+  // Detail tab navigation
+  const [tab, setTab] = useState<'overview' | 'hiring' | 'people'>('overview');
+
   // Openings/Pipelines view toggles
   const [showInactiveOpenings, setShowInactiveOpenings] = useState(false);
   const [showInactivePipelines, setShowInactivePipelines] = useState(false);
@@ -1276,12 +1279,26 @@ function OrgDetail({
         ))}
       </div>
 
-      {/* Two-column content */}
+      {/* Tab nav */}
+      <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
+        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['people', 'People']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`relative shrink-0 px-4 py-2.5 text-xs font-600 transition-colors ${tab === key ? 'text-[var(--green)]' : 'text-[var(--light)] hover:text-[var(--mid)]'}`}
+          >
+            {label}
+            {tab === key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[var(--green)]" />}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Overview tab ── */}
+      {tab === 'overview' && (
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
-        {/* Left: Package + Pipelines */}
         <div className="space-y-5">
           {/* Package card */}
-          {pkg && (
+          {pkg ? (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
               <div className="px-5 py-4" style={{ background: pkg.bg }}>
                 <div className="flex items-center justify-between">
@@ -1311,8 +1328,39 @@ function OrgDetail({
                 </div>
               )}
             </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-6 text-center">
+              <p className="text-xs text-[var(--light)]">No plan selected. Use Edit to assign a package.</p>
+            </div>
           )}
+        </div>
 
+        {/* Overview right: quick facts */}
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-4 text-sm font-700 text-[var(--black)]">Quick facts</h3>
+            <dl className="space-y-2.5 text-xs">
+              {([
+                ['Status', org.status ?? 'active'],
+                ['Contract type', org.contractType ?? '—'],
+                ['Industry', org.industry ?? '—'],
+                ['Location', [org.city, org.country].filter(Boolean).join(', ') || '—'],
+                ['Org ID', org.shortId ?? '—'],
+              ] as const).map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-3">
+                  <dt className="text-[var(--light)]">{k}</dt>
+                  <dd className="truncate font-600 capitalize text-[var(--black)]">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* ── Hiring tab ── */}
+      {tab === 'hiring' && (
+      <div className="space-y-5">
           {/* Openings */}
           <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
             <div className="mb-4 flex items-center justify-between gap-2">
@@ -1428,7 +1476,11 @@ function OrgDetail({
               </h3>
               <div className="space-y-2">
                 {placements.slice(0, 5).map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
+                  <a
+                    key={p.id}
+                    href={`/hired/${p.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+                  >
                     <div
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white"
                       style={{ background: 'var(--green)' }}
@@ -1442,15 +1494,18 @@ function OrgDetail({
                       </p>
                     </div>
                     <Badge label={p.status ?? 'active'} variant="status" className="text-[9px]" />
-                  </div>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+                  </a>
                 ))}
               </div>
             </div>
           )}
-        </div>
+      </div>
+      )}
 
-        {/* Right column */}
-        <div className="space-y-5">
+      {/* ── People tab ── */}
+      {tab === 'people' && (
+      <div className="grid gap-5 items-start lg:grid-cols-2">
         {/* Nearwork staff */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
@@ -1608,8 +1663,8 @@ function OrgDetail({
             </div>
           )}
         </div>
-        </div>
       </div>
+      )}
 
       {/* Update health modal */}
       <Modal open={healthModal} onClose={() => setHealthModal(false)} title="Update Account Health" size="md">

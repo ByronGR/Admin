@@ -86,6 +86,7 @@ export interface OrgUser {
 export interface Organization {
   id: string;
   name: string;
+  shortId?: string;
   industry?: string;
   website?: string;
   country?: string;

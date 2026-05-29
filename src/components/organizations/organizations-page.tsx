@@ -25,7 +25,6 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId } from '@/lib/utils';
 import type { Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser } from '@/lib/types';
-import { buildInviteEmail } from './invite-email';
 import {
   Search, Plus, Building2, ExternalLink, ChevronRight, X,
   Edit3, Trash2, Mail, UserPlus, UserMinus, RefreshCw,
@@ -89,35 +88,20 @@ async function sendInviteEmail(
     console.warn('[Nearwork] Could not store org_invite:', e);
   }
 
-  // Send via Resend — never throws
-  const key = process.env.NEXT_PUBLIC_RESEND_API_KEY;
-  if (!key || key === 're_your_key_here') {
-    console.warn('[Nearwork] NEXT_PUBLIC_RESEND_API_KEY not set — add it in Vercel env vars');
-    return { token, emailSent: false, stored };
-  }
-
+  // Send via our server-side API route (uses RESEND_API_KEY, never exposed to browser)
   try {
-    const html = buildInviteEmail(firstName1, orgName, setupLink);
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('/api/send-invite', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        from: 'Nearwork <noreply@nearwork.co>',
-        to: [email],
-        subject: `Set up your Nearwork account — ${orgName}`,
-        html,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, firstName: firstName1, orgName, setupLink }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      console.warn('[Nearwork] Resend error:', err);
+      console.warn('[Nearwork] /api/send-invite failed:', err);
     }
     return { token, emailSent: res.ok, stored };
   } catch (e) {
-    console.warn('[Nearwork] Resend fetch failed:', e);
+    console.warn('[Nearwork] /api/send-invite fetch failed:', e);
     return { token, emailSent: false, stored };
   }
 }

@@ -24,11 +24,15 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId } from '@/lib/utils';
-import type { Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser } from '@/lib/types';
+import type {
+  Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
+  AccountHealthGrade, HealthHistoryEntry, OrgTier,
+} from '@/lib/types';
 import {
   Search, Plus, Building2, ExternalLink, ChevronRight, X,
   Edit3, Trash2, Mail, UserPlus, UserMinus, RefreshCw,
   Link2, Camera, Briefcase, Trophy, Users, TrendingUp,
+  AlertTriangle, Activity, History, DollarSign,
 } from 'lucide-react';
 
 // ─── Package definitions (from nearwork.co/pricing) ───────────────────────────
@@ -55,6 +59,84 @@ const PACKAGES: Record<string, PkgInfo> = {
 function getPkg(key?: string | null): PkgInfo | null {
   if (!key) return null;
   return PACKAGES[key] ?? null;
+}
+
+// ─── Tier (spend-based, internal only — partner never sees this) ───────────────
+// Future: totalSpend will be pulled from Stripe in real time. For now it's a manual
+// field on the org; the tier is derived from it so the logic stays in one place.
+
+const TIER_BANDS: { tier: OrgTier; min: number; label: string }[] = [
+  { tier: 'A', min: 250000, label: '$250k+' },
+  { tier: 'B', min: 100000, label: '$100k–249k' },
+  { tier: 'C', min: 50000,  label: '$50k–99k' },
+  { tier: 'D', min: 25000,  label: '$25k–49k' },
+  { tier: 'E', min: 10000,  label: '$10k–24k' },
+  { tier: 'F', min: 1,      label: '$1–9.9k' },
+  { tier: 'Z', min: 0,      label: '$0' },
+];
+
+function getTier(spend?: number): { tier: OrgTier; label: string } {
+  const s = spend ?? 0;
+  for (const b of TIER_BANDS) if (s >= b.min) return { tier: b.tier, label: b.label };
+  return { tier: 'Z', label: '$0' };
+}
+
+function fmtSpend(spend?: number): string {
+  const s = spend ?? 0;
+  if (s === 0) return '$0';
+  if (s >= 1000) return `$${(s / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k`;
+  return `$${s.toLocaleString()}`;
+}
+
+function TierBadge({ spend }: { spend?: number }) {
+  const t = getTier(spend);
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[10px] font-700 text-[var(--mid)]"
+      title={`Tier ${t.tier} · ${t.label} lifetime spend (internal)`}
+    >
+      <span className="font-800 text-[var(--black)]">Tier {t.tier}</span>
+      <span className="text-[var(--light)]">{fmtSpend(spend)}</span>
+    </span>
+  );
+}
+
+// ─── Account Health (internal only — partner never sees this) ──────────────────
+// A Excellent · B Healthy · C Stable/Watchlist · D At Risk · F Critical · Z Inactive
+
+interface HealthInfo { grade: AccountHealthGrade; label: string; color: string; bg: string; }
+
+const HEALTH: Record<AccountHealthGrade, HealthInfo> = {
+  A: { grade: 'A', label: 'Excellent',            color: '#16A085', bg: '#E8F8F5' },
+  B: { grade: 'B', label: 'Healthy',              color: '#27AE60', bg: '#EAFBF0' },
+  C: { grade: 'C', label: 'Stable / Watchlist',   color: '#D68910', bg: '#FEF9E7' },
+  D: { grade: 'D', label: 'At Risk',              color: '#E67E22', bg: '#FDF2E9' },
+  F: { grade: 'F', label: 'Critical',             color: '#C0392B', bg: '#FDEDEC' },
+  Z: { grade: 'Z', label: 'Inactive / No Signal', color: '#9E9E9E', bg: '#F5F5F5' },
+};
+
+function getHealth(grade?: AccountHealthGrade): HealthInfo {
+  return HEALTH[grade ?? 'Z'];
+}
+
+const HEALTH_GRADES: AccountHealthGrade[] = ['A', 'B', 'C', 'D', 'F', 'Z'];
+
+function HealthGrade({ grade, size = 'md' }: { grade?: AccountHealthGrade; size?: 'sm' | 'md' | 'lg' }) {
+  const h = getHealth(grade);
+  const sizes = {
+    sm: 'h-9 w-9 text-base rounded-lg',
+    md: 'h-12 w-12 text-xl rounded-xl',
+    lg: 'h-20 w-20 text-5xl rounded-2xl',
+  };
+  return (
+    <div
+      className={`${sizes[size]} flex shrink-0 items-center justify-center font-800`}
+      style={{ background: h.bg, color: h.color }}
+      title={`Account Health: ${h.label}`}
+    >
+      {h.grade}
+    </div>
+  );
 }
 
 // ─── Resend invite ────────────────────────────────────────────────────────────
@@ -344,11 +426,12 @@ export default function OrganizationsPage() {
               <div className="flex h-40 items-center justify-center"><Spinner /></div>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-                <div className="grid grid-cols-[auto_2fr_1fr_1fr_auto] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-5 py-3 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+                <div className="grid grid-cols-[auto_2fr_1fr_auto_auto_auto] items-center gap-3 border-b border-[var(--border)] bg-[var(--bg)] px-5 py-3 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
                   <div className="w-12"></div>
                   <div>Organization</div>
                   <div>Package</div>
-                  <div>Status</div>
+                  <div>Tier</div>
+                  <div className="text-center">Health</div>
                   <div></div>
                 </div>
                 {filtered.length === 0 ? (
@@ -360,13 +443,25 @@ export default function OrganizationsPage() {
                       <div
                         key={o.id}
                         onClick={() => selectOrg(o)}
-                        className="grid cursor-pointer grid-cols-[auto_2fr_1fr_1fr_auto] items-center gap-0 border-b border-[var(--border)] px-5 py-3.5 last:border-0 transition-colors hover:bg-[var(--bg)]"
+                        className="grid cursor-pointer grid-cols-[auto_2fr_1fr_auto_auto_auto] items-center gap-3 border-b border-[var(--border)] px-5 py-3.5 last:border-0 transition-colors hover:bg-[var(--bg)]"
                       >
                         <div className="w-12">
                           <OrgAvatar org={o} size="sm" />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-600 text-[var(--black)]">{o.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-600 text-[var(--black)]">{o.name}</p>
+                            <Badge label={o.status ?? 'active'} variant={orgStatusVariant(o.status ?? 'active') as 'green' | 'amber' | 'red'} />
+                            {o.actionNeeded && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-700 text-amber-700"
+                                title={o.actionNote || 'Action needed'}
+                              >
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                Action needed
+                              </span>
+                            )}
+                          </div>
                           <p className="truncate text-[11px] text-[var(--light)]">
                             {[o.city, o.country].filter(Boolean).join(', ') || o.website || o.industry || '—'}
                           </p>
@@ -384,7 +479,10 @@ export default function OrganizationsPage() {
                           )}
                         </div>
                         <div>
-                          <Badge label={o.status ?? 'active'} variant={orgStatusVariant(o.status ?? 'active') as 'green' | 'amber' | 'red'} />
+                          <TierBadge spend={o.totalSpend} />
+                        </div>
+                        <div className="flex justify-center">
+                          <HealthGrade grade={o.healthGrade} size="sm" />
                         </div>
                         <div>
                           <ChevronRight className="h-4 w-4 text-[var(--light)]" />
@@ -582,6 +680,20 @@ function OrgDetail({
   const [addingUser, setAddingUser] = useState(false);
   const [invitesSending, setInvitesSending] = useState<Set<string>>(new Set());
 
+  // Account Health state
+  const [healthModal, setHealthModal] = useState(false);
+  const [healthGradePick, setHealthGradePick] = useState<AccountHealthGrade>(org.healthGrade ?? 'Z');
+  const [healthNote, setHealthNote] = useState('');
+  const [savingHealth, setSavingHealth] = useState(false);
+
+  // Tier (spend) state
+  const [spendModal, setSpendModal] = useState(false);
+  const [spendInput, setSpendInput] = useState(String(org.totalSpend ?? 0));
+  const [savingSpend, setSavingSpend] = useState(false);
+
+  // Action-needed state
+  const [savingAction, setSavingAction] = useState(false);
+
   useEffect(() => {
     Promise.all([
       getDocs(query(collection(db, 'pipelines'), where('orgId', '==', org.id))),
@@ -727,6 +839,78 @@ function OrgDetail({
       setInvitesSending((s) => { const n = new Set(s); n.delete(email); return n; });
     }
   }
+
+  // ── Account Health ───────────────────────────────────────────────────────────
+
+  async function saveHealth() {
+    const note = healthNote.trim();
+    if (!note) { showToast('A note is required when changing health', 'error'); return; }
+    setSavingHealth(true);
+    try {
+      const now = new Date().toISOString();
+      const entry: HealthHistoryEntry = { grade: healthGradePick, note, at: now };
+      const history = [entry, ...(org.healthHistory ?? [])];
+      await updateDoc(doc(db, 'organizations', org.id), {
+        healthGrade: healthGradePick,
+        healthUpdatedAt: now,
+        healthHistory: history,
+        updatedAt: serverTimestamp(),
+      });
+      onUpdated({ ...org, healthGrade: healthGradePick, healthUpdatedAt: now, healthHistory: history });
+      showToast('Account health updated', 'success');
+      setHealthModal(false);
+      setHealthNote('');
+      await onRefresh();
+    } catch {
+      showToast('Failed to update health', 'error');
+    } finally {
+      setSavingHealth(false);
+    }
+  }
+
+  // ── Tier / spend ─────────────────────────────────────────────────────────────
+
+  async function saveSpend() {
+    const value = Number(spendInput.replace(/[^0-9.]/g, ''));
+    if (Number.isNaN(value) || value < 0) { showToast('Enter a valid amount', 'error'); return; }
+    setSavingSpend(true);
+    try {
+      await updateDoc(doc(db, 'organizations', org.id), { totalSpend: value, updatedAt: serverTimestamp() });
+      onUpdated({ ...org, totalSpend: value });
+      showToast('Lifetime spend updated', 'success');
+      setSpendModal(false);
+      await onRefresh();
+    } catch {
+      showToast('Failed to update spend', 'error');
+    } finally {
+      setSavingSpend(false);
+    }
+  }
+
+  // ── Action needed ────────────────────────────────────────────────────────────
+
+  async function toggleActionNeeded() {
+    const next = !org.actionNeeded;
+    const note = next ? (window.prompt('What action is needed? (optional)') ?? '') : '';
+    setSavingAction(true);
+    try {
+      await updateDoc(doc(db, 'organizations', org.id), {
+        actionNeeded: next,
+        actionNote: note,
+        updatedAt: serverTimestamp(),
+      });
+      onUpdated({ ...org, actionNeeded: next, actionNote: note });
+      showToast(next ? 'Flagged: action needed' : 'Action cleared', 'success');
+      await onRefresh();
+    } catch {
+      showToast('Failed to update flag', 'error');
+    } finally {
+      setSavingAction(false);
+    }
+  }
+
+  const health = getHealth(org.healthGrade);
+  const tier = getTier(org.totalSpend);
 
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -892,6 +1076,102 @@ function OrgDetail({
           )}
         </div>
       </div>
+
+      {/* Account Intelligence — internal only (partner never sees this) */}
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
+        {/* Account Health — big & proud */}
+        <div className="rounded-2xl border bg-white p-5" style={{ borderColor: health.bg }}>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+              <Activity className="h-3.5 w-3.5" />Account Health
+            </div>
+            <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[9px] font-600 text-[var(--light)]">Internal</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <HealthGrade grade={org.healthGrade} size="lg" />
+            <div className="min-w-0">
+              <p className="text-xl font-800 tracking-tight" style={{ color: health.color }}>{health.label}</p>
+              <p className="mt-0.5 text-[11px] text-[var(--light)]">
+                {org.healthUpdatedAt ? `Updated ${fmtDate(org.healthUpdatedAt)}` : 'Not yet set'}
+              </p>
+              <button
+                onClick={() => { setHealthGradePick(org.healthGrade ?? 'Z'); setHealthNote(''); setHealthModal(true); }}
+                className="mt-2 rounded-lg px-3 py-1.5 text-[11px] font-600 text-white"
+                style={{ background: 'var(--green)' }}
+              >
+                Update health
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tier (spend) */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+              <DollarSign className="h-3.5 w-3.5" />Tier
+            </div>
+            <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[9px] font-600 text-[var(--light)]">Internal</span>
+          </div>
+          <p className="text-3xl font-800 tracking-tight text-[var(--black)]">Tier {tier.tier}</p>
+          <p className="mt-0.5 text-xs text-[var(--mid)]">{fmtSpend(org.totalSpend)} lifetime · {tier.label}</p>
+          <button
+            onClick={() => { setSpendInput(String(org.totalSpend ?? 0)); setSpendModal(true); }}
+            className="mt-2 text-[11px] font-600 text-[var(--green)] hover:underline"
+          >
+            Edit spend
+          </button>
+        </div>
+
+        {/* Action needed */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <div className="mb-3 flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+            <AlertTriangle className="h-3.5 w-3.5" />Action needed
+          </div>
+          {org.actionNeeded ? (
+            <>
+              <p className="text-sm font-700 text-amber-700">● Flagged</p>
+              <p className="mt-1 line-clamp-2 text-[11px] text-[var(--mid)]">{org.actionNote || 'No detail provided'}</p>
+            </>
+          ) : (
+            <p className="text-sm font-600 text-[var(--light)]">○ Clear</p>
+          )}
+          <button
+            onClick={toggleActionNeeded}
+            disabled={savingAction}
+            className="mt-2 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
+          >
+            {org.actionNeeded ? 'Clear flag' : 'Flag action'}
+          </button>
+        </div>
+      </div>
+
+      {/* Health trend history */}
+      {(org.healthHistory?.length ?? 0) > 0 && (
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-4 flex items-center gap-1.5 text-sm font-700 text-[var(--black)]">
+            <History className="h-4 w-4 text-[var(--light)]" />Health trend
+          </h3>
+          <div className="space-y-3">
+            {org.healthHistory!.map((h, i) => {
+              const hi = getHealth(h.grade);
+              return (
+                <div key={`${h.at}-${i}`} className="flex gap-3">
+                  <HealthGrade grade={h.grade} size="sm" />
+                  <div className="min-w-0 flex-1 border-b border-[var(--border)] pb-3 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-700" style={{ color: hi.color }}>{hi.label}</span>
+                      <span className="text-[10px] text-[var(--light)]">{fmtDate(h.at)}</span>
+                      {h.by && <span className="text-[10px] text-[var(--light)]">· {h.by}</span>}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-[var(--mid)]">{h.note}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -1077,6 +1357,89 @@ function OrgDetail({
           )}
         </div>
       </div>
+
+      {/* Update health modal */}
+      <Modal open={healthModal} onClose={() => setHealthModal(false)} title="Update Account Health" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Grade</label>
+            <div className="flex flex-wrap gap-2">
+              {HEALTH_GRADES.map((g) => {
+                const hi = HEALTH[g];
+                const isSel = healthGradePick === g;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setHealthGradePick(g)}
+                    className="flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all"
+                    style={isSel
+                      ? { borderColor: hi.color, background: hi.bg }
+                      : { borderColor: 'var(--border)' }}
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-800" style={{ background: hi.bg, color: hi.color }}>{g}</span>
+                    <span className="text-[11px] font-600" style={{ color: isSel ? hi.color : 'var(--mid)' }}>{hi.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Why this grade? <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={healthNote}
+              onChange={(e) => setHealthNote(e.target.value)}
+              rows={3}
+              placeholder="e.g. Pipeline stalled 3 weeks, client unresponsive on 2 open roles…"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+            <p className="mt-1 text-[10px] text-[var(--light)]">A note is required every time health changes — it builds the trend history.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveHealth}
+              disabled={savingHealth || !healthNote.trim()}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingHealth && <Spinner size="sm" />}Save health
+            </button>
+            <button onClick={() => setHealthModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit spend modal */}
+      <Modal open={spendModal} onClose={() => setSpendModal(false)} title="Lifetime spend" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Total spend (USD)</label>
+            <input
+              value={spendInput}
+              onChange={(e) => setSpendInput(e.target.value)}
+              inputMode="decimal"
+              placeholder="0"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+            <p className="mt-1 text-[10px] text-[var(--light)]">
+              Tier {getTier(Number(spendInput.replace(/[^0-9.]/g, '')) || 0).tier} · {getTier(Number(spendInput.replace(/[^0-9.]/g, '')) || 0).label}. Later this will sync from Stripe automatically.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveSpend}
+              disabled={savingSpend}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingSpend && <Spinner size="sm" />}Save
+            </button>
+            <button onClick={() => setSpendModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

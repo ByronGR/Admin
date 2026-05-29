@@ -83,6 +83,23 @@ export interface OrgUser {
   invitedAt?: string;
 }
 
+// ─── Account Health (internal — never shown to the partner) ────────────────────
+// A = Excellent · B = Healthy · C = Stable/Watchlist · D = At Risk
+// F = Critical · Z = Inactive / No Signal
+export type AccountHealthGrade = 'A' | 'B' | 'C' | 'D' | 'F' | 'Z';
+
+export interface HealthHistoryEntry {
+  grade: AccountHealthGrade;
+  note: string;        // why the account is at this grade — required on each change
+  by?: string;         // staff name/email who set it
+  at: string;          // ISO timestamp
+}
+
+// ─── Tier (spend-based — never shown to the partner) ───────────────────────────
+// A $250k+ · B $100k–249,999 · C $50k–99,999 · D $25k–49,999
+// E $10k–24,999 · F $1–9,999 · Z $0
+export type OrgTier = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'Z';
+
 export interface Organization {
   id: string;
   name: string;
@@ -102,6 +119,13 @@ export interface Organization {
   source?: string;
   orgUsers?: OrgUser[];
   cacEntries?: CACEntry[];
+  // ─── Account Intelligence (internal — never shown to the partner) ───────────
+  totalSpend?: number;                    // lifetime spend; later pulled from Stripe → drives Tier
+  healthGrade?: AccountHealthGrade;       // current Account Health
+  healthUpdatedAt?: string;               // ISO timestamp of last health change
+  healthHistory?: HealthHistoryEntry[];   // trend log; a note is required on every change
+  actionNeeded?: boolean;                 // surfaced on the main list (pipeline movement, client msg…)
+  actionNote?: string;                    // what action is needed
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

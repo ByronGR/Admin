@@ -64,30 +64,36 @@ async function sendInviteEmail(
   email: string,
   orgId: string,
   orgName: string
-): Promise<{ token: string; success: boolean }> {
+): Promise<{ token: string; emailSent: boolean; stored: boolean }> {
   const token = crypto.randomUUID();
   const firstName = email.split('@')[0].split('.')[0];
   const firstName1 = firstName.charAt(0).toUpperCase() + firstName.slice(1);
   const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}`;
-
-  // Store invite in Firestore (even if email fails)
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  await setDoc(doc(db, 'org_invites', token), {
-    token,
-    email,
-    orgId,
-    orgName,
-    status: 'pending',
-    createdAt: serverTimestamp(),
-    expiresAt,
-    setupLink,
-  });
 
-  // Send via Resend
+  // Store invite in Firestore — never throws, failures are logged only
+  let stored = false;
+  try {
+    await setDoc(doc(db, 'org_invites', token), {
+      token,
+      email,
+      orgId,
+      orgName,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      expiresAt,
+      setupLink,
+    });
+    stored = true;
+  } catch (e) {
+    console.warn('[Nearwork] Could not store org_invite:', e);
+  }
+
+  // Send via Resend — never throws
   const key = process.env.NEXT_PUBLIC_RESEND_API_KEY;
   if (!key || key === 're_your_key_here') {
-    console.warn('[Nearwork] Resend API key not set — invite stored in Firestore only');
-    return { token, success: false };
+    console.warn('[Nearwork] NEXT_PUBLIC_RESEND_API_KEY not set — add it in Vercel env vars');
+    return { token, emailSent: false, stored };
   }
 
   try {
@@ -105,9 +111,14 @@ async function sendInviteEmail(
         html,
       }),
     });
-    return { token, success: res.ok };
-  } catch {
-    return { token, success: false };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('[Nearwork] Resend error:', err);
+    }
+    return { token, emailSent: res.ok, stored };
+  } catch (e) {
+    console.warn('[Nearwork] Resend fetch failed:', e);
+    return { token, emailSent: false, stored };
   }
 }
 
@@ -172,7 +183,8 @@ export default function OrganizationsPage() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
     if (id && !selected) {
-      const org = orgs.find((o) => o.id === id);
+      // Match by shortId first (new URLs), fall back to Firestore doc id (old URLs)
+      const org = orgs.find((o) => o.shortId === id || o.id === id);
       if (org) selectOrg(org);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,7 +205,9 @@ export default function OrganizationsPage() {
   function selectOrg(org: Organization | null) {
     setSelected(org);
     if (org) {
-      window.history.pushState(null, '', `/organizations?id=${org.id}`);
+      // Use shortId in URL so the ID in the header matches the shareable link
+      const urlId = org.shortId ?? org.id;
+      window.history.pushState(null, '', `/organizations?id=${urlId}`);
     } else {
       window.history.pushState(null, '', '/organizations');
     }
@@ -230,21 +244,25 @@ export default function OrganizationsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      // Send invite if email provided
-      if (form.inviteEmail.trim()) {
-        const { success } = await sendInviteEmail(form.inviteEmail.trim(), docRef.id, form.name.trim());
-        // Add to orgUsers
-        await updateDoc(doc(db, 'organizations', docRef.id), {
-          orgUsers: [{ email: form.inviteEmail.trim(), status: 'invited', invitedAt: new Date().toISOString() }],
-        });
-        showToast(success ? 'Organization created · Invite email sent ✓' : 'Organization created · Invite stored (check Resend API key)', success ? 'success' : 'info');
-      } else {
-        showToast('Organization created', 'success');
-      }
-
+      // Close modal & refresh immediately — don't let invite delays block this
       setNewModal(false);
       setForm({ name: '', website: '', country: '', city: '', industry: '', package: '', contractType: '', hubspotLink: '', status: 'active', inviteEmail: '' });
+      showToast('Organization created', 'success');
       await load();
+
+      // Send invite in background (after modal closed)
+      if (form.inviteEmail.trim()) {
+        const inviteEmail = form.inviteEmail.trim();
+        const orgName = form.name.trim();
+        await updateDoc(doc(db, 'organizations', docRef.id), {
+          orgUsers: [{ email: inviteEmail, status: 'invited', invitedAt: new Date().toISOString() }],
+        });
+        const { emailSent } = await sendInviteEmail(inviteEmail, docRef.id, orgName);
+        showToast(
+          emailSent ? `Invite email sent to ${inviteEmail} ✓` : 'User added — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails',
+          emailSent ? 'success' : 'info',
+        );
+      }
     } catch (err) {
       console.error(err);
       showToast('Failed to create organization', 'error');
@@ -674,20 +692,29 @@ function OrgDetail({
     }
     setAddingUser(true);
     try {
+      // Step 1: add user to org — this must succeed
       const newUser: OrgUser = { email, status: 'invited', invitedAt: new Date().toISOString() };
       const updatedUsers = [...orgUsers, newUser];
       await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
-
-      // Send invite
-      const { success } = await sendInviteEmail(email, org.id, org.name);
-      showToast(
-        success ? `Invite sent to ${email}` : `User added · check Resend API key to send email`,
-        success ? 'success' : 'info'
-      );
       setAddUserEmail('');
+      showToast('User added', 'success');
     } catch {
       showToast('Failed to add user', 'error');
+      setAddingUser(false);
+      return;
+    }
+
+    // Step 2: send invite — separate try/catch so it never blocks step 1
+    try {
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
+      if (emailSent) {
+        showToast(`Invite email sent to ${email} ✓`, 'success');
+      } else {
+        showToast('User added — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails', 'info');
+      }
+    } catch {
+      // invite failure is non-critical
     } finally {
       setAddingUser(false);
     }
@@ -707,8 +734,11 @@ function OrgDetail({
   async function resendInvite(email: string) {
     setInvitesSending((s) => new Set(s).add(email));
     try {
-      const { success } = await sendInviteEmail(email, org.id, org.name);
-      showToast(success ? `Invite resent to ${email}` : 'Invite token created (check Resend API key)', success ? 'success' : 'info');
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
+      showToast(
+        emailSent ? `Invite resent to ${email} ✓` : 'Invite stored — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails',
+        emailSent ? 'success' : 'info',
+      );
     } finally {
       setInvitesSending((s) => { const n = new Set(s); n.delete(email); return n; });
     }

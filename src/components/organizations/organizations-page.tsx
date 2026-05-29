@@ -795,7 +795,7 @@ function OrgDetail({
                 ))}
                 <div>
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Status</label>
-                  <select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                  <select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as Organization['status'] ?? 'active' }))}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)]">
                     <option value="active">Active</option>
                     <option value="prospect">Prospect</option>
@@ -804,7 +804,7 @@ function OrgDetail({
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Contract type</label>
-                  <select value={editForm.contractType} onChange={(e) => setEditForm((f) => ({ ...f, contractType: e.target.value }))}
+                  <select value={editForm.contractType} onChange={(e) => setEditForm((f) => ({ ...f, contractType: e.target.value as OrgContractType | '' }))}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)]">
                     <option value="">None</option>
                     <option value="managed_team">Managed Team</option>

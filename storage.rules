@@ -62,6 +62,14 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    // ── Client portal user avatars ───────────────────────────────────────
+    // Path: userAvatars/{uid}/avatar.{ext}  (uploaded from app.nearwork.co)
+    match /userAvatars/{uid}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid) || isAdmin();
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
     // ── Assessment uploads (if used in the future) ───────────────────────
     // Path: assessment-files/{assessmentId}/{filename}
     match /assessment-files/{assessmentId}/{fileName} {

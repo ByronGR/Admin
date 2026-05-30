@@ -100,6 +100,9 @@ export interface HealthHistoryEntry {
 // E $10k–24,999 · F $1–9,999 · Z $0
 export type OrgTier = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'Z';
 
+// ─── SPP (Strategic Partner Program) — parent/child org relationships ──────────
+// A Strategic Partner org sits above its own sub-client orgs. Hires & spend roll up.
+
 export interface Organization {
   id: string;
   name: string;
@@ -130,6 +133,11 @@ export interface Organization {
   pocContacts?: OrgPOC[];                 // client-side decision-makers (one or more)
   accountManager?: string;                // Nearwork AM — owns the relationship (most important)
   salesCloser?: string;                   // Nearwork rep who closed the deal
+  teamLead?: string;                      // Nearwork-side lead for this org's managed team
+  // ─── SPP (Strategic Partner Program) — parent/child orgs ────────────────────
+  isStrategicPartner?: boolean;           // this org is an SPP parent with sub-client orgs
+  parentOrgId?: string;                   // if set, this org is a sub-client under a parent SPP org
+  parentOrgName?: string;                 // denormalized parent name for display
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -642,6 +650,16 @@ export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
   direct: 'Direct Placement',
 };
 
+// EOR (Employer of Record) compliance / onboarding lifecycle
+export type EORComplianceStatus = 'pending' | 'onboarding' | 'compliant' | 'issue';
+
+export const EOR_COMPLIANCE_LABELS: Record<EORComplianceStatus, string> = {
+  pending: 'Pending setup',
+  onboarding: 'Onboarding',
+  compliant: 'Compliant',
+  issue: 'Compliance issue',
+};
+
 export interface PerformanceReview {
   id: string;
   period: string; // e.g. "Q1 2026"
@@ -669,10 +687,14 @@ export interface ContractorProfile {
   // PTO
   ptoDaysPerYear?: number;
   ptoUsed?: number;
-  // EOR
+  // EOR (Employer of Record)
   isEOR?: boolean;
-  eorProvider?: string;
-  eorBenefits?: string[];
+  eorProvider?: string;                   // EOR provider name (e.g. Deel, Remote, Oyster)
+  eorBenefits?: string[];                 // benefits provided through the EOR
+  eorCountry?: string;                    // country of legal employment
+  eorComplianceStatus?: EORComplianceStatus;
+  eorMonthlyCost?: number;                // monthly EOR fee (USD)
+  eorContractUrl?: string;                // link to the signed EOR contract
   // ROL Score (Retention, Opportunity, Loyalty)
   rolScore?: number; // 0-100
   rolFeedback?: string;

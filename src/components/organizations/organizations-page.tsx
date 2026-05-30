@@ -26,15 +26,25 @@ import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId } from '@/lib/utils';
 import type {
   Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
-  AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC,
+  AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC, EngagementType,
 } from '@/lib/types';
+import { ENGAGEMENT_LABELS } from '@/lib/types';
 import {
   Search, Plus, Building2, ExternalLink, ChevronRight, X,
   Edit3, Trash2, Mail, UserPlus, UserMinus, RefreshCw,
   Link2, Camera, Briefcase, Trophy, Users, TrendingUp,
   AlertTriangle, Activity, History, DollarSign,
   Phone, Star, GitBranch, UserCog, Crown, Plus as PlusIcon,
+  Network, Layers,
 } from 'lucide-react';
+
+// Engagement-type colours (shared with the Hired module)
+const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
+  eor: { color: '#C0392B', bg: '#FEF0F0' },
+  managed: { color: '#16A085', bg: '#E8F8F5' },
+  spp: { color: '#D35400', bg: '#FEF5EB' },
+  direct: { color: '#555555', bg: '#F5F5F5' },
+};
 
 // ─── Package definitions (from nearwork.co/pricing) ───────────────────────────
 
@@ -393,6 +403,8 @@ export default function OrganizationsPage() {
           <OrgDetail
             key={selected.id}
             org={selected}
+            allOrgs={orgs}
+            onSelectOrg={selectOrg}
             onClose={() => selectOrg(null)}
             onRefresh={async () => { await load(); }}
             onUpdated={(updated) => setSelected(updated)}
@@ -638,11 +650,15 @@ export default function OrganizationsPage() {
 
 function OrgDetail({
   org,
+  allOrgs,
+  onSelectOrg,
   onClose,
   onRefresh,
   onUpdated,
 }: {
   org: Organization;
+  allOrgs: Organization[];
+  onSelectOrg: (org: Organization) => void;
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onUpdated: (updated: Organization) => void;
@@ -696,7 +712,7 @@ function OrgDetail({
   const [savingAction, setSavingAction] = useState(false);
 
   // Detail tab navigation
-  const [tab, setTab] = useState<'overview' | 'hiring' | 'people'>('overview');
+  const [tab, setTab] = useState<'overview' | 'hiring' | 'team' | 'people'>('overview');
 
   // Openings/Pipelines view toggles
   const [showInactiveOpenings, setShowInactiveOpenings] = useState(false);
@@ -707,8 +723,17 @@ function OrgDetail({
   const [staffForm, setStaffForm] = useState({
     accountManager: org.accountManager ?? '',
     salesCloser: org.salesCloser ?? '',
+    teamLead: org.teamLead ?? '',
   });
   const [savingStaff, setSavingStaff] = useState(false);
+
+  // SPP / partnership state
+  const [sppModal, setSppModal] = useState(false);
+  const [sppForm, setSppForm] = useState({
+    isStrategicPartner: org.isStrategicPartner ?? false,
+    parentOrgId: org.parentOrgId ?? '',
+  });
+  const [savingSpp, setSavingSpp] = useState(false);
 
   // POC (decision-makers) state
   const [pocModal, setPocModal] = useState(false);
@@ -739,6 +764,18 @@ function OrgDetail({
   const inactivePipelinesCount = pipelines.filter((p) => !isPipelineActive(p)).length;
   const orgUsers: OrgUser[] = org.orgUsers ?? [];
 
+  // ── Managed Team breakdown (by engagement type) ──────────────────────────────
+  const activeTeam = placements.filter((p) => (p.status ?? 'active') === 'active');
+  const engagementCounts = (['eor', 'managed', 'spp', 'direct'] as EngagementType[]).map((type) => ({
+    type,
+    count: activeTeam.filter((p) => (p.engagementType ?? 'direct') === type).length,
+  })).filter((e) => e.count > 0);
+
+  // ── SPP / partnership relationships ──────────────────────────────────────────
+  const childOrgs = allOrgs.filter((o) => o.parentOrgId === org.id);
+  const parentOrg = org.parentOrgId ? allOrgs.find((o) => o.id === org.parentOrgId) ?? null : null;
+  const partnershipSpend = (org.totalSpend ?? 0) + childOrgs.reduce((sum, o) => sum + (o.totalSpend ?? 0), 0);
+
   // ── Save Nearwork staff ──────────────────────────────────────────────────────
 
   async function saveStaff() {
@@ -747,6 +784,7 @@ function OrgDetail({
       const data = {
         accountManager: staffForm.accountManager.trim() || null,
         salesCloser: staffForm.salesCloser.trim() || null,
+        teamLead: staffForm.teamLead.trim() || null,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'organizations', org.id), data);
@@ -754,6 +792,7 @@ function OrgDetail({
         ...org,
         accountManager: data.accountManager ?? undefined,
         salesCloser: data.salesCloser ?? undefined,
+        teamLead: data.teamLead ?? undefined,
       });
       showToast('Nearwork staff updated', 'success');
       setStaffModal(false);
@@ -761,6 +800,35 @@ function OrgDetail({
       showToast('Failed to save', 'error');
     } finally {
       setSavingStaff(false);
+    }
+  }
+
+  // ── Save SPP / partnership ────────────────────────────────────────────────────
+
+  async function savePartnership() {
+    setSavingSpp(true);
+    try {
+      const parent = sppForm.parentOrgId ? allOrgs.find((o) => o.id === sppForm.parentOrgId) : null;
+      const data = {
+        isStrategicPartner: sppForm.isStrategicPartner,
+        parentOrgId: sppForm.parentOrgId || null,
+        parentOrgName: parent?.name ?? null,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(doc(db, 'organizations', org.id), data);
+      onUpdated({
+        ...org,
+        isStrategicPartner: data.isStrategicPartner,
+        parentOrgId: data.parentOrgId ?? undefined,
+        parentOrgName: data.parentOrgName ?? undefined,
+      });
+      showToast('Partnership updated', 'success');
+      setSppModal(false);
+      await onRefresh();
+    } catch {
+      showToast('Failed to save partnership', 'error');
+    } finally {
+      setSavingSpp(false);
     }
   }
 
@@ -1281,7 +1349,7 @@ function OrgDetail({
 
       {/* Tab nav */}
       <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
-        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['people', 'People']] as const).map(([key, label]) => (
+        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['team', 'Team'], ['people', 'People']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -1353,6 +1421,76 @@ function OrgDetail({
                 </div>
               ))}
             </dl>
+          </div>
+
+          {/* Partnership (SPP) */}
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+                <Network className="h-4 w-4 text-[var(--green)]" />Partnership
+              </h3>
+              <button
+                onClick={() => { setSppForm({ isStrategicPartner: org.isStrategicPartner ?? false, parentOrgId: org.parentOrgId ?? '' }); setSppModal(true); }}
+                className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+                title="Edit partnership"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {org.isStrategicPartner && (
+              <div className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: ENGAGEMENT_STYLE.spp.bg }}>
+                <Layers className="h-4 w-4" style={{ color: ENGAGEMENT_STYLE.spp.color }} />
+                <span className="text-xs font-700" style={{ color: ENGAGEMENT_STYLE.spp.color }}>Strategic Partner</span>
+              </div>
+            )}
+
+            {parentOrg ? (
+              <button
+                onClick={() => onSelectOrg(parentOrg)}
+                className="flex w-full items-center gap-2 rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+              >
+                <OrgAvatar org={parentOrg} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Sub-client of</p>
+                  <p className="truncate text-xs font-600 text-[var(--black)]">{parentOrg.name}</p>
+                </div>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+              </button>
+            ) : org.isStrategicPartner ? (
+              childOrgs.length === 0 ? (
+                <p className="rounded-xl bg-[var(--bg)] px-4 py-5 text-center text-xs text-[var(--light)]">
+                  No sub-clients yet. Open a sub-client org and set this org as its parent.
+                </p>
+              ) : (
+                <>
+                  <div className="mb-3 flex items-center justify-between rounded-xl bg-[var(--bg)] px-3 py-2 text-xs">
+                    <span className="text-[var(--light)]">{childOrgs.length} sub-client{childOrgs.length !== 1 ? 's' : ''}</span>
+                    <span className="font-700 text-[var(--black)]">{fmtSpend(partnershipSpend)} combined</span>
+                  </div>
+                  <div className="space-y-2">
+                    {childOrgs.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => onSelectOrg(c)}
+                        className="flex w-full items-center gap-2 rounded-xl border border-[var(--border)] p-2.5 text-left transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+                      >
+                        <OrgAvatar org={c} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-600 text-[var(--black)]">{c.name}</p>
+                          <p className="text-[10px] text-[var(--light)]">{fmtSpend(c.totalSpend)} lifetime</p>
+                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )
+            ) : (
+              <p className="rounded-xl bg-[var(--bg)] px-4 py-5 text-center text-xs text-[var(--light)]">
+                Standalone org. Mark as a Strategic Partner or link it under a parent.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -1503,6 +1641,107 @@ function OrgDetail({
       </div>
       )}
 
+      {/* ── Team tab ── */}
+      {tab === 'team' && (
+      <div className="space-y-5">
+        {/* Team summary */}
+        <div className="grid gap-4 sm:grid-cols-[1fr_1.4fr]">
+          {/* Headcount + team lead */}
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+                <Users className="h-4 w-4 text-[var(--green)]" />Managed team
+              </h3>
+              <button
+                onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '', teamLead: org.teamLead ?? '' }); setStaffModal(true); }}
+                className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+                title="Edit team lead"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-3xl font-800 tracking-tight text-[var(--black)]">{activeTeam.length}</p>
+            <p className="mt-0.5 text-xs text-[var(--mid)]">active team member{activeTeam.length !== 1 ? 's' : ''}</p>
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white" style={{ background: 'var(--green)' }}>
+                <Crown className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Team lead</p>
+                <p className="truncate text-xs font-600 text-[var(--black)]">{org.teamLead || <span className="font-400 text-[var(--light)]">Unassigned</span>}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Engagement breakdown */}
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+              <Layers className="h-4 w-4 text-[var(--green)]" />Engagement mix
+            </h3>
+            {engagementCounts.length === 0 ? (
+              <p className="py-6 text-center text-xs text-[var(--light)]">No active team members to break down.</p>
+            ) : (
+              <div className="space-y-3">
+                {engagementCounts.map(({ type, count }) => {
+                  const s = ENGAGEMENT_STYLE[type];
+                  const pct = Math.round((count / activeTeam.length) * 100);
+                  return (
+                    <div key={type}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-600" style={{ color: s.color }}>{ENGAGEMENT_LABELS[type]}</span>
+                        <span className="text-[var(--light)]">{count} · {pct}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg)]">
+                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: s.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Team roster */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-4 text-sm font-700 text-[var(--black)]">
+            Roster <span className="text-[var(--light)]">({activeTeam.length} active)</span>
+          </h3>
+          {dataLoading ? (
+            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+          ) : activeTeam.length === 0 ? (
+            <p className="py-6 text-center text-xs text-[var(--light)]">No active team members for this org.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeTeam.map((p) => {
+                const eng = p.engagementType ?? 'direct';
+                const s = ENGAGEMENT_STYLE[eng];
+                return (
+                  <a
+                    key={p.id}
+                    href={`/hired/${p.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--green)] hover:bg-[var(--bg)]"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white" style={{ background: 'var(--green)' }}>
+                      {initials(p.candidateName ?? '?')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-600 text-[var(--black)]">{p.candidateName ?? '—'}</p>
+                      <p className="truncate text-[10px] text-[var(--light)]">{p.openingTitle ?? 'Contractor'} · since {p.startDate}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-700" style={{ color: s.color, background: s.bg }}>
+                      {ENGAGEMENT_LABELS[eng]}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)]" />
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
       {/* ── People tab ── */}
       {tab === 'people' && (
       <div className="grid gap-5 items-start lg:grid-cols-2">
@@ -1513,7 +1752,7 @@ function OrgDetail({
               <UserCog className="h-4 w-4 text-[var(--green)]" />Nearwork staff
             </h3>
             <button
-              onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '' }); setStaffModal(true); }}
+              onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '', teamLead: org.teamLead ?? '' }); setStaffModal(true); }}
               className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
               title="Edit Nearwork staff"
             >
@@ -1774,6 +2013,17 @@ function OrgDetail({
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
             />
           </div>
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              <Users className="h-3 w-3" />Team lead
+            </label>
+            <input
+              value={staffForm.teamLead}
+              onChange={(e) => setStaffForm((f) => ({ ...f, teamLead: e.target.value }))}
+              placeholder="Leads this org's managed team"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
           <div className="flex gap-2">
             <button
               onClick={saveStaff}
@@ -1784,6 +2034,57 @@ function OrgDetail({
               {savingStaff && <Spinner size="sm" />}Save
             </button>
             <button onClick={() => setStaffModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Partnership (SPP) modal */}
+      <Modal open={sppModal} onClose={() => setSppModal(false)} title="Partnership (SPP)" size="md">
+        <div className="space-y-4">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] p-3 hover:border-[var(--green)]">
+            <input
+              type="checkbox"
+              checked={sppForm.isStrategicPartner}
+              onChange={(e) => setSppForm((f) => ({ ...f, isStrategicPartner: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 accent-[var(--green)]"
+            />
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-700 text-[var(--black)]">
+                <Layers className="h-3.5 w-3.5" style={{ color: ENGAGEMENT_STYLE.spp.color }} />Strategic Partner
+              </p>
+              <p className="mt-0.5 text-[11px] text-[var(--light)]">
+                This org is an SPP parent — other orgs can be linked beneath it as sub-clients, and their spend rolls up here.
+              </p>
+            </div>
+          </label>
+
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Parent organization (sub-client of)</label>
+            <select
+              value={sppForm.parentOrgId}
+              onChange={(e) => setSppForm((f) => ({ ...f, parentOrgId: e.target.value }))}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            >
+              <option value="">None (standalone)</option>
+              {allOrgs
+                .filter((o) => o.id !== org.id && o.parentOrgId !== org.id)
+                .map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+            </select>
+            <p className="mt-1 text-[10px] text-[var(--light)]">Link this org under a Strategic Partner parent. Leave as standalone if it has no parent.</p>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={savePartnership}
+              disabled={savingSpp}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingSpp && <Spinner size="sm" />}Save partnership
+            </button>
+            <button onClick={() => setSppModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
           </div>
         </div>
       </Modal>

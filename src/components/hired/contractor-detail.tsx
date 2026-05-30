@@ -17,11 +17,19 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, fmtCurrency } from '@/lib/utils';
-import type { Placement, ContractorProfile, PerformanceReview, EngagementType } from '@/lib/types';
-import { ENGAGEMENT_LABELS } from '@/lib/types';
+import type { Placement, ContractorProfile, PerformanceReview, EngagementType, EORComplianceStatus } from '@/lib/types';
+import { ENGAGEMENT_LABELS, EOR_COMPLIANCE_LABELS } from '@/lib/types';
 import {
   Shield, Calendar, Star, Briefcase, Heart, ChevronRight, Edit3, Plus, Building2,
+  Globe, FileText, DollarSign,
 } from 'lucide-react';
+
+const EOR_COMPLIANCE_STYLE: Record<EORComplianceStatus, { color: string; bg: string }> = {
+  pending: { color: '#9E9E9E', bg: '#F5F5F5' },
+  onboarding: { color: '#D68910', bg: '#FEF9E7' },
+  compliant: { color: '#16A085', bg: '#E8F8F5' },
+  issue: { color: '#C0392B', bg: '#FDEDEC' },
+};
 
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
   eor: { color: '#C0392B', bg: '#FEF0F0' },
@@ -57,6 +65,11 @@ export function ContractorDetail({ placement }: { placement: Placement }) {
     rolFeedback: '',
     isEOR: false,
     eorProvider: '',
+    eorCountry: '',
+    eorComplianceStatus: 'pending' as EORComplianceStatus,
+    eorMonthlyCost: '',
+    eorContractUrl: '',
+    eorBenefits: '',
     engagementType: 'direct' as EngagementType,
     status: 'active',
   });
@@ -80,6 +93,11 @@ export function ContractorDetail({ placement }: { placement: Placement }) {
           rolFeedback: data.rolFeedback ?? '',
           isEOR: data.isEOR ?? false,
           eorProvider: data.eorProvider ?? '',
+          eorCountry: data.eorCountry ?? '',
+          eorComplianceStatus: data.eorComplianceStatus ?? 'pending',
+          eorMonthlyCost: data.eorMonthlyCost != null ? String(data.eorMonthlyCost) : '',
+          eorContractUrl: data.eorContractUrl ?? '',
+          eorBenefits: (data.eorBenefits ?? []).join(', '),
           engagementType: data.engagementType ?? placement.engagementType ?? 'direct',
           status: data.status ?? 'active',
         });
@@ -138,6 +156,14 @@ export function ContractorDetail({ placement }: { placement: Placement }) {
         rolFeedback: editForm.rolFeedback,
         isEOR: editForm.isEOR,
         eorProvider: editForm.eorProvider,
+        eorCountry: editForm.eorCountry,
+        eorComplianceStatus: editForm.eorComplianceStatus,
+        eorMonthlyCost: editForm.eorMonthlyCost ? Number(editForm.eorMonthlyCost) : null,
+        eorContractUrl: editForm.eorContractUrl,
+        eorBenefits: editForm.eorBenefits
+          .split(',')
+          .map((b) => b.trim())
+          .filter(Boolean),
         engagementType: editForm.engagementType,
         status: editForm.status,
         updatedAt: serverTimestamp(),
@@ -311,12 +337,44 @@ export function ContractorDetail({ placement }: { placement: Placement }) {
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-700 ${profile.isEOR ? 'bg-green-100 text-green-700' : 'bg-[var(--bg)] text-[var(--light)]'}`}>
                   {profile.isEOR ? 'EOR Active' : 'Not EOR'}
                 </span>
+                {profile.isEOR && profile.eorComplianceStatus && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-700"
+                    style={{
+                      color: EOR_COMPLIANCE_STYLE[profile.eorComplianceStatus].color,
+                      background: EOR_COMPLIANCE_STYLE[profile.eorComplianceStatus].bg,
+                    }}
+                  >
+                    {EOR_COMPLIANCE_LABELS[profile.eorComplianceStatus]}
+                  </span>
+                )}
               </div>
-              {profile.isEOR && profile.eorProvider && (
-                <p className="text-xs text-[var(--mid)]">Provider: {profile.eorProvider}</p>
-              )}
-              {!profile.isEOR && (
+              {!profile.isEOR ? (
                 <p className="text-[10px] text-[var(--light)]">Employer of Record not set up</p>
+              ) : (
+                <div className="space-y-1.5 text-[11px] text-[var(--mid)]">
+                  {profile.eorProvider && (
+                    <p className="flex items-center gap-1.5"><Building2 className="h-3 w-3 text-[var(--light)]" />{profile.eorProvider}</p>
+                  )}
+                  {profile.eorCountry && (
+                    <p className="flex items-center gap-1.5"><Globe className="h-3 w-3 text-[var(--light)]" />{profile.eorCountry}</p>
+                  )}
+                  {typeof profile.eorMonthlyCost === 'number' && profile.eorMonthlyCost > 0 && (
+                    <p className="flex items-center gap-1.5"><DollarSign className="h-3 w-3 text-[var(--light)]" />{fmtCurrency(profile.eorMonthlyCost, 'USD')}/mo fee</p>
+                  )}
+                  {profile.eorContractUrl && (
+                    <a href={profile.eorContractUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 font-600 text-[var(--green)] hover:underline">
+                      <FileText className="h-3 w-3" />View contract
+                    </a>
+                  )}
+                  {(profile.eorBenefits?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {profile.eorBenefits!.map((b) => (
+                        <span key={b} className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[9px] font-600 text-[var(--mid)]">{b}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -365,15 +423,55 @@ export function ContractorDetail({ placement }: { placement: Placement }) {
                   <textarea value={editForm.rolFeedback} onChange={(e) => setEditForm((f) => ({ ...f, rolFeedback: e.target.value }))}
                     rows={2} className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
                 </div>
-                <div className="flex items-center gap-3 sm:col-span-2">
+                {/* EOR module */}
+                <div className="sm:col-span-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
                   <label className="flex cursor-pointer items-center gap-2">
                     <input type="checkbox" checked={editForm.isEOR} onChange={(e) => setEditForm((f) => ({ ...f, isEOR: e.target.checked }))} className="rounded" />
-                    <span className="text-xs font-600 text-[var(--black)]">EOR active</span>
+                    <span className="flex items-center gap-1.5 text-xs font-700 text-[var(--black)]"><Shield className="h-3.5 w-3.5 text-[var(--light)]" />Employer of Record (EOR)</span>
                   </label>
                   {editForm.isEOR && (
-                    <input value={editForm.eorProvider} onChange={(e) => setEditForm((f) => ({ ...f, eorProvider: e.target.value }))}
-                      placeholder="EOR provider name"
-                      className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Provider</label>
+                        <input value={editForm.eorProvider} onChange={(e) => setEditForm((f) => ({ ...f, eorProvider: e.target.value }))}
+                          placeholder="Deel, Remote, Oyster…"
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Country of employment</label>
+                        <input value={editForm.eorCountry} onChange={(e) => setEditForm((f) => ({ ...f, eorCountry: e.target.value }))}
+                          placeholder="Colombia"
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Compliance status</label>
+                        <select value={editForm.eorComplianceStatus} onChange={(e) => setEditForm((f) => ({ ...f, eorComplianceStatus: e.target.value as EORComplianceStatus }))}
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]">
+                          <option value="pending">Pending setup</option>
+                          <option value="onboarding">Onboarding</option>
+                          <option value="compliant">Compliant</option>
+                          <option value="issue">Compliance issue</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Monthly EOR fee (USD)</label>
+                        <input type="number" value={editForm.eorMonthlyCost} onChange={(e) => setEditForm((f) => ({ ...f, eorMonthlyCost: e.target.value }))}
+                          placeholder="599"
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Benefits (comma-separated)</label>
+                        <input value={editForm.eorBenefits} onChange={(e) => setEditForm((f) => ({ ...f, eorBenefits: e.target.value }))}
+                          placeholder="Health insurance, Pension, 13th salary"
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Contract link</label>
+                        <input value={editForm.eorContractUrl} onChange={(e) => setEditForm((f) => ({ ...f, eorContractUrl: e.target.value }))}
+                          placeholder="https://…"
+                          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]" />
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

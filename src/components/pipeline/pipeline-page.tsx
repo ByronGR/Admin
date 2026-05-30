@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   DndContext,
   DragEndEvent,
@@ -99,6 +100,16 @@ function stageRank(s: string): number {
   return PROGRESS_STAGES.indexOf(normalizeStage(s));
 }
 
+// Card display name: first name + last initial (e.g. "John D.") — keeps cards
+// compact and avoids exposing full surnames on the board.
+function formatCardName(name: string): string {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return name || 'Unknown';
+  if (parts.length === 1) return parts[0];
+  const last = parts[parts.length - 1];
+  return `${parts[0]} ${last.charAt(0).toUpperCase()}.`;
+}
+
 const DROP_OFF_REASONS: DropOffReason[] = [
   'mia',
   'english',
@@ -117,6 +128,9 @@ export default function PipelinePage() {
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
+  // candidateId → Nearwork Score, loaded from the assessments collection so the
+  // board cards can surface each candidate's score at a glance (spec 4d).
+  const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activePipelineCode, setActivePipelineCode] = useState<string | null>(null);
@@ -176,6 +190,28 @@ export default function PipelinePage() {
       setLoading(false);
     });
     return unsub;
+  }, []);
+
+  // Load Nearwork Scores once for all candidates that have an assessment, keyed
+  // by candidateId. We keep the highest score per candidate.
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, 'assessments'));
+        const map: Record<string, number> = {};
+        snap.docs.forEach((d) => {
+          const a = d.data() as { candidateId?: string; nearworkScore?: number };
+          if (a.candidateId && typeof a.nearworkScore === 'number') {
+            if (map[a.candidateId] === undefined || a.nearworkScore > map[a.candidateId]) {
+              map[a.candidateId] = a.nearworkScore;
+            }
+          }
+        });
+        setScoreMap(map);
+      } catch (e) {
+        console.error('Pipeline: failed to load assessment scores', e);
+      }
+    })();
   }, []);
 
   // Deep-link: /pipeline?focus=<code> opens that pipeline's workspace directly
@@ -506,6 +542,7 @@ export default function PipelinePage() {
           /* Full workspace */
           <PipelineWorkspace
             pipeline={activePipeline}
+            scoreMap={scoreMap}
             onDragEnd={(e) => handleDragEnd(e, activePipeline.code)}
             onDragStart={(e) => {
               const candidateCode = String(e.active.id).replace('cand-', '');
@@ -536,6 +573,7 @@ export default function PipelinePage() {
               <PipelineRow
                 key={p.code}
                 pipeline={p}
+                scoreMap={scoreMap}
                 expanded={expandedRows.has(p.code)}
                 onToggle={() => toggleRow(p.code)}
                 onOpen={() => setActivePipelineCode(p.code)}
@@ -842,6 +880,7 @@ export default function PipelinePage() {
 
 function PipelineRow({
   pipeline,
+  scoreMap,
   expanded,
   onToggle,
   onOpen,
@@ -856,6 +895,7 @@ function PipelineRow({
   onOpenBrief,
 }: {
   pipeline: Pipeline;
+  scoreMap: Record<string, number>;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -957,6 +997,7 @@ function PipelineRow({
         <div className="border-t border-[var(--border)] px-5 pb-5 pt-4">
           <KanbanBoard
             pipeline={pipeline}
+            scoreMap={scoreMap}
             onDragEnd={onDragEnd}
             onDragStart={onDragStart}
             dragging={dragging}
@@ -976,6 +1017,7 @@ function PipelineRow({
 
 function PipelineWorkspace({
   pipeline,
+  scoreMap,
   onDragEnd,
   onDragStart,
   dragging,
@@ -986,6 +1028,7 @@ function PipelineWorkspace({
   onOpenBrief,
 }: {
   pipeline: Pipeline;
+  scoreMap: Record<string, number>;
   onDragEnd: (e: DragEndEvent) => void;
   onDragStart: (e: DragStartEvent) => void;
   dragging: PipelineCandidate | null;
@@ -998,6 +1041,12 @@ function PipelineWorkspace({
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'kanban' | 'chat'>('kanban');
   const [showEdit, setShowEdit] = useState(false);
+
+  // The deal (spec 4g): how many candidates have been hired/placed in this
+  // pipeline, alongside the partner (organization) name.
+  const hiredCount = (pipeline.candidates ?? []).filter(
+    (c) => normalizeStage(c.stage) === 'hired'
+  ).length;
   const [editRecruiter, setEditRecruiter] = useState(pipeline.recruiter ?? '');
   const [editManager, setEditManager] = useState(pipeline.accountManager ?? '');
   const [editStatus, setEditStatus] = useState(pipeline.status);
@@ -1030,15 +1079,35 @@ function PipelineWorkspace({
           </div>
           <div>
             <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Organization
+              Partner
             </p>
             <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.orgName ?? '—'}</p>
+          </div>
+          <div>
+            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
+              Recruiter
+            </p>
+            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.recruiter || '—'}</p>
+          </div>
+          <div>
+            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
+              Account Manager
+            </p>
+            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.accountManager || '—'}</p>
           </div>
           <div>
             <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
               Candidates
             </p>
             <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.candidates?.length ?? 0}</p>
+          </div>
+          <div>
+            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
+              Placements
+            </p>
+            <p className="mt-0.5 font-600 text-[var(--black)]">
+              {hiredCount > 0 ? `${hiredCount} hired` : '—'}
+            </p>
           </div>
           <div>
             <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
@@ -1146,6 +1215,7 @@ function PipelineWorkspace({
       {activeTab === 'kanban' ? (
         <KanbanBoard
           pipeline={pipeline}
+          scoreMap={scoreMap}
           onDragEnd={onDragEnd}
           onDragStart={onDragStart}
           dragging={dragging}
@@ -1165,6 +1235,7 @@ function PipelineWorkspace({
 
 function KanbanBoard({
   pipeline,
+  scoreMap,
   onDragEnd,
   onDragStart,
   dragging,
@@ -1175,6 +1246,7 @@ function KanbanBoard({
   compact,
 }: {
   pipeline: Pipeline;
+  scoreMap: Record<string, number>;
   onDragEnd: (e: DragEndEvent) => void;
   onDragStart: (e: DragStartEvent) => void;
   dragging: PipelineCandidate | null;
@@ -1207,6 +1279,7 @@ function KanbanBoard({
               stage={stage}
               candidates={stageCandidates}
               pipelineCode={pipeline.code}
+              scoreMap={scoreMap}
               onRemove={onRemove}
               onAddCandidate={onAddCandidate}
               onOpenBrief={onOpenBrief}
@@ -1233,6 +1306,7 @@ function KanbanColumn({
   stage,
   candidates,
   pipelineCode,
+  scoreMap,
   onRemove,
   onAddCandidate,
   onOpenBrief,
@@ -1242,6 +1316,7 @@ function KanbanColumn({
   stage: (typeof PIPELINE_STAGES)[number];
   candidates: PipelineCandidate[];
   pipelineCode: string;
+  scoreMap: Record<string, number>;
   onRemove: (candidateCode: string, pipelineCode: string) => Promise<void>;
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
@@ -1284,6 +1359,7 @@ function KanbanColumn({
               key={c.candidateId}
               candidate={c}
               pipelineCode={pipelineCode}
+              nearworkScore={scoreMap[c.candidateId]}
               onRemove={onRemove}
               onOpenBrief={onOpenBrief}
               compact={compact}
@@ -1306,16 +1382,19 @@ function KanbanColumn({
 function CandidateCard({
   candidate,
   pipelineCode,
+  nearworkScore,
   onRemove,
   onOpenBrief,
   compact,
 }: {
   candidate: PipelineCandidate;
   pipelineCode: string;
+  nearworkScore?: number;
   onRemove: (candidateCode: string, pipelineCode: string) => Promise<void>;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
   compact?: boolean;
 }) {
+  const router = useRouter();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `cand-${candidate.candidateId}`, data: { type: 'candidate' } });
 
@@ -1325,8 +1404,8 @@ function CandidateCard({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const score = candidate.score ?? 0;
-  const hasEngScore = !!candidate.englishScore;
+  const score = nearworkScore ?? candidate.score ?? 0;
+  const engLevel = candidate.englishScore?.level;
 
   return (
     <div
@@ -1334,44 +1413,68 @@ function CandidateCard({
       style={style}
       {...attributes}
       {...listeners}
-      onClick={() => onOpenBrief(candidate, pipelineCode)}
+      onClick={() => router.push(`/candidates/${candidate.candidateId}`)}
       className="cursor-pointer rounded-lg border border-[var(--border)] bg-white p-2.5 shadow-sm hover:border-[var(--green)] hover:shadow-md transition-all"
+      title="Open candidate profile"
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-600 text-[var(--black)] leading-tight truncate">
-          {candidate.name}
-        </p>
-        <div className="flex shrink-0 items-center gap-1">
-          {hasEngScore && (
-            <span className="rounded bg-blue-100 px-1 text-[9px] font-700 text-blue-700" title={`English: ${candidate.englishScore!.level}`}>
-              {candidate.englishScore!.level}
-            </span>
-          )}
-          {score > 0 && (
-            <span
-              className={`rounded-full px-1.5 text-[9px] font-800 ${
-                score >= 80 ? 'bg-green-100 text-green-700' : score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
-              }`}
-            >
-              {score}
-            </span>
-          )}
-        </div>
+      {/* Top: Nearwork Score */}
+      <div className="flex items-center justify-between gap-2">
+        {score > 0 ? (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-800 ${
+              score >= 80
+                ? 'bg-green-100 text-green-700'
+                : score >= 60
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-red-100 text-red-600'
+            }`}
+            title={`Nearwork Score: ${score}`}
+          >
+            NW {score}
+          </span>
+        ) : (
+          <span className="rounded-full bg-[var(--bg)] px-1.5 py-0.5 text-[9px] font-700 text-[var(--light)]" title="No assessment yet">
+            No score
+          </span>
+        )}
+        {engLevel && (
+          <span
+            className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-700 text-blue-700"
+            title={`English: ${engLevel}`}
+          >
+            {engLevel}
+          </span>
+        )}
       </div>
-      {!compact && candidate.email && (
-        <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">{candidate.email}</p>
-      )}
+
+      {/* Name: first name + last initial */}
+      <p className="mt-1.5 truncate text-xs font-600 leading-tight text-[var(--black)]">
+        {formatCardName(candidate.name)}
+      </p>
+
       {!compact && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(candidate.candidateId, pipelineCode);
-          }}
-          className="mt-2 flex w-full items-center justify-center gap-1 rounded py-1 text-[9px] font-600 text-red-400 hover:bg-red-50 hover:text-red-600"
-        >
-          <Trash2 className="h-2.5 w-2.5" />
-          Remove
-        </button>
+        <div className="mt-2 flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenBrief(candidate, pipelineCode);
+            }}
+            className="flex flex-1 items-center justify-center gap-1 rounded py-1 text-[9px] font-600 text-[var(--mid)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+          >
+            <ClipboardList className="h-2.5 w-2.5" />
+            Brief
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(candidate.candidateId, pipelineCode);
+            }}
+            className="flex flex-1 items-center justify-center gap-1 rounded py-1 text-[9px] font-600 text-red-400 hover:bg-red-50 hover:text-red-600"
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+            Remove
+          </button>
+        </div>
       )}
     </div>
   );

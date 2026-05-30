@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,28 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.6.0',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Pipeline cards redesigned — each candidate card now leads with their Nearwork Score (colour-coded) and English level, and shows the name as first name + last initial (Pipeline rebuild: cards)',
+          'Click any pipeline card to jump straight to that candidate’s full profile (/candidates/<id>); a “Brief” button keeps the quick stage/English/drop-off summary one tap away',
+          'Pipeline workspace header now shows the Recruiter and Account Manager on the opening',
+          'Pipeline workspace header now shows the deal — the Partner (organization) and how many candidates have been placed (Hired count)',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Pipeline page loads Nearwork Scores from the assessments collection keyed by candidateId (highest score per candidate) and threads them down to the board cards',
+          'Placements count derived from candidates currently in the Hired stage',
+        ],
+      },
+    ],
+  },
   {
     version: '0.5.0',
     date: '2026-05-30',

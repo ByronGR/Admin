@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   db,
   collection,
   getDocs,
   serverTimestamp,
-  query,
-  where,
   addDoc,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
@@ -15,9 +14,9 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, fmtRelative, initials, sortByTimestamp } from '@/lib/utils';
+import { initials, sortByTimestamp } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
-import { Search, Plus, Download, Mail, Phone, MapPin, ExternalLink, X } from 'lucide-react';
+import { Search, Plus, Download } from 'lucide-react';
 
 // ─── Smart match config ───────────────────────────────────────────────────────
 
@@ -34,12 +33,12 @@ const ROLES = [
 
 export default function CandidatesPage() {
   const { showToast } = useToast();
+  const router = useRouter();
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [selected, setSelected] = useState<Candidate | null>(null);
 
   // New candidate modal
   const [newModal, setNewModal] = useState(false);
@@ -167,24 +166,13 @@ export default function CandidatesPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              {selected ? selected.name : 'Candidates'}
+              Candidates
             </h1>
             <p className="mt-0.5 text-xs text-[var(--light)]">
-              {selected
-                ? 'Candidate profile'
-                : `Full ATS — ${candidates.length} candidates`}
+              Full ATS — {candidates.length} candidates
             </p>
           </div>
           <div className="flex gap-2">
-            {selected && (
-              <button
-                onClick={() => setSelected(null)}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-              >
-                <X className="h-3.5 w-3.5" />
-                All candidates
-              </button>
-            )}
             <button
               onClick={exportCSV}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
@@ -203,12 +191,8 @@ export default function CandidatesPage() {
           </div>
         </div>
 
-        {selected ? (
-          <CandidateProfile candidate={selected} onClose={() => setSelected(null)} onRefresh={load} />
-        ) : (
-          <>
-            {/* Smart match */}
-            <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+        {/* Smart match */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <p className="mb-1 text-sm font-700 text-[var(--black)]">Smart candidate match</p>
@@ -316,7 +300,7 @@ export default function CandidatesPage() {
                     <div
                       key={c.id}
                       className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer"
-                      onClick={() => setSelected(c)}
+                      onClick={() => router.push(`/candidates/${c.id}`)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
@@ -357,7 +341,7 @@ export default function CandidatesPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelected(c);
+                            router.push(`/candidates/${c.id}`);
                           }}
                           className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
                         >
@@ -369,8 +353,6 @@ export default function CandidatesPage() {
                 )}
               </div>
             )}
-          </>
-        )}
       </div>
 
       {/* New candidate modal */}
@@ -419,192 +401,5 @@ export default function CandidatesPage() {
         </div>
       </Modal>
     </MainLayout>
-  );
-}
-
-// ─── Candidate profile ────────────────────────────────────────────────────────
-
-function CandidateProfile({
-  candidate,
-  onClose,
-  onRefresh,
-}: {
-  candidate: Candidate;
-  onClose: () => void;
-  onRefresh: () => void;
-}) {
-  const { showToast } = useToast();
-  const [notes, setNotes] = useState<Array<{ id: string; body: string; authorName?: string; createdAt?: unknown }>>([]);
-  const [noteText, setNoteText] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
-
-  useEffect(() => {
-    getDocs(
-      query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-    ).then((snap) => {
-      setNotes(
-        snap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as { id: string; body: string; authorName?: string; createdAt?: unknown }))
-          .sort((a, b) => {
-            const ta = (a.createdAt as { seconds?: number })?.seconds ?? 0;
-            const tb = (b.createdAt as { seconds?: number })?.seconds ?? 0;
-            return tb - ta;
-          })
-      );
-    });
-  }, [candidate.id]);
-
-  async function addNote() {
-    if (!noteText.trim()) return;
-    setSavingNote(true);
-    try {
-      await addDoc(collection(db, 'candidateNotes'), {
-        candidateId: candidate.id,
-        body: noteText,
-        createdAt: serverTimestamp(),
-      });
-      setNoteText('');
-      showToast('Note added', 'success');
-      // Reload notes
-      const snap = await getDocs(
-        query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-      );
-      setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; body: string; authorName?: string; createdAt?: unknown })));
-    } catch {
-      showToast('Failed to save note', 'error');
-    } finally {
-      setSavingNote(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      {/* Left: details */}
-      <div className="space-y-5">
-        {/* Bio card */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <div className="flex items-start gap-4">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-800 text-white"
-              style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-            >
-              {initials(candidate.name)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-700 text-[var(--black)]">{candidate.name}</h2>
-              <p className="text-xs text-[var(--mid)]">
-                {candidate.currentRole ?? '—'}
-                {candidate.currentCompany ? ` at ${candidate.currentCompany}` : ''}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--light)]">
-                {candidate.email && (
-                  <span className="flex items-center gap-1">
-                    <Mail className="h-3 w-3" />
-                    {candidate.email}
-                  </span>
-                )}
-                {candidate.phone && (
-                  <span className="flex items-center gap-1">
-                    <Phone className="h-3 w-3" />
-                    {candidate.phone}
-                  </span>
-                )}
-                {candidate.location && (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {candidate.location}
-                  </span>
-                )}
-                {candidate.linkedIn && (
-                  <a
-                    href={candidate.linkedIn.startsWith('http') ? candidate.linkedIn : `https://${candidate.linkedIn}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-[var(--green)] hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    LinkedIn
-                  </a>
-                )}
-              </div>
-            </div>
-            {candidate.status && (
-              <Badge label={candidate.status} variant="status" />
-            )}
-          </div>
-
-          {candidate.skills && candidate.skills.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {candidate.skills.map((s, i) => (
-                <span
-                  key={i}
-                  className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs font-500 text-[var(--mid)]"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Experience / details */}
-        {(candidate.experience || candidate.expectedSalary) && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Details</h3>
-            <div className="grid gap-3 sm:grid-cols-2 text-xs">
-              {candidate.experience && (
-                <div>
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Experience</p>
-                  <p className="mt-0.5 text-[var(--black)]">{candidate.experience} years</p>
-                </div>
-              )}
-              {candidate.expectedSalary && (
-                <div>
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Expected salary</p>
-                  <p className="mt-0.5 text-[var(--black)]">
-                    ${candidate.expectedSalary.toLocaleString()}/mo
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Right: notes */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-        <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Notes</h3>
-        <textarea
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          placeholder="Add a note... Use @name to mention someone"
-          rows={3}
-          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
-        />
-        <button
-          onClick={addNote}
-          disabled={savingNote || !noteText.trim()}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-600 text-white disabled:opacity-50"
-          style={{ background: 'var(--green)' }}
-        >
-          {savingNote && <Spinner size="sm" />}
-          Add note
-        </button>
-
-        <div className="mt-4 space-y-3">
-          {notes.map((n) => (
-            <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
-              <p className="text-xs text-[var(--black)]">{n.body}</p>
-              <p className="mt-1.5 text-[10px] text-[var(--light)]">
-                {n.authorName ?? 'Nearwork team'} · {fmtRelative(n.createdAt as import('@/lib/types').Timestamp | string | undefined)}
-              </p>
-            </div>
-          ))}
-          {notes.length === 0 && (
-            <p className="text-center text-xs text-[var(--light)]">No notes yet.</p>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

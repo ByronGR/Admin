@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   db,
   collection,
@@ -26,6 +26,67 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   >([]);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+
+  // ── @-mentions: Nearwork staff only on the candidate page ──────────────────
+  type MentionUser = { id: string; name: string; handle: string; initials: string };
+  const [staff, setStaff] = useState<MentionUser[]>([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const mentionStart = useRef(-1);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    getDocs(collection(db, 'users'))
+      .then((snap) => {
+        const users: MentionUser[] = snap.docs
+          .map((d) => {
+            const data = d.data() as { name?: string; email?: string };
+            return { id: d.id, name: data.name ?? data.email ?? '', email: (data.email ?? '').toLowerCase() };
+          })
+          // Nearwork team members only
+          .filter((u) => u.email.endsWith('@nearwork.co'))
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            handle: (u.name || u.email).split(' ')[0].toLowerCase(),
+            initials: initials(u.name || u.email),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setStaff(users);
+      })
+      .catch(() => setStaff([]));
+  }, []);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionOpen) return [];
+    const q = mentionQuery.toLowerCase();
+    return staff
+      .filter((u) => u.handle.startsWith(q) || u.name.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [mentionOpen, mentionQuery, staff]);
+
+  function onNoteChange(value: string, caret: number) {
+    setNoteText(value);
+    const upto = value.slice(0, caret);
+    const m = /@(\w*)$/.exec(upto);
+    if (m) {
+      mentionStart.current = caret - m[0].length;
+      setMentionQuery(m[1]);
+      setMentionOpen(true);
+    } else {
+      setMentionOpen(false);
+    }
+  }
+
+  function pickMention(u: MentionUser) {
+    const start = mentionStart.current;
+    if (start < 0) return;
+    const caret = noteRef.current?.selectionStart ?? noteText.length;
+    const next = `${noteText.slice(0, start)}@${u.handle} ${noteText.slice(caret)}`;
+    setNoteText(next);
+    setMentionOpen(false);
+    requestAnimationFrame(() => noteRef.current?.focus());
+  }
 
   useEffect(() => {
     getDocs(
@@ -55,9 +116,13 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     if (!noteText.trim()) return;
     setSavingNote(true);
     try {
+      // Resolve @handles in the note to staff user ids
+      const handles = Array.from(noteText.matchAll(/@(\w+)/g)).map((m) => m[1].toLowerCase());
+      const mentions = staff.filter((u) => handles.includes(u.handle)).map((u) => u.id);
       await addDoc(collection(db, 'candidateNotes'), {
         candidateId: candidate.id,
         body: noteText,
+        mentions,
         createdAt: serverTimestamp(),
       });
       setNoteText('');
@@ -251,13 +316,46 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       {/* Right: notes */}
       <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
         <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Notes</h3>
-        <textarea
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          placeholder="Add a note... Use @name to mention someone"
-          rows={3}
-          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
-        />
+        <div className="relative">
+          <textarea
+            ref={noteRef}
+            value={noteText}
+            onChange={(e) => onNoteChange(e.target.value, e.target.selectionStart)}
+            onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+            placeholder="Add a note... type @ to mention a Nearwork teammate"
+            rows={3}
+            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+          />
+          {mentionOpen && mentionMatches.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-lg">
+              <p className="border-b border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+                Nearwork team
+              </p>
+              {mentionMatches.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickMention(u);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-[var(--bg)]"
+                >
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white"
+                    style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+                  >
+                    {u.initials}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-600 text-[var(--black)]">{u.name}</span>
+                    <span className="block truncate text-[10px] text-[var(--light)]">@{u.handle}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           onClick={addNote}
           disabled={savingNote || !noteText.trim()}

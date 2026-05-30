@@ -80,6 +80,7 @@ interface MentionUser {
   initials: string;
   handle: string;
   role?: string;
+  kind: 'nearwork' | 'partner';
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '🎉', '🙌', '👀', '🚀'];
@@ -201,23 +202,41 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
   // ── Load staff for @mention autocomplete ──────────────────────────────────
 
   useEffect(() => {
+    const orgIds = [pipeline.orgId].filter(Boolean) as string[];
     getDocs(collection(db, 'users'))
       .then((snap) => {
-        const users: MentionUser[] = snap.docs.map((d) => {
-          const data = d.data();
+        const users: MentionUser[] = [];
+        snap.docs.forEach((d) => {
+          const data = d.data() as {
+            name?: string;
+            email?: string;
+            staffRole?: string;
+            role?: string;
+            orgId?: string;
+            organizationId?: string;
+          };
           const name = data.name ?? data.email ?? '';
-          return {
+          if (!name) return;
+          const email = (data.email ?? '').toLowerCase();
+          const isStaff = email.endsWith('@nearwork.co');
+          const userOrg = data.orgId ?? data.organizationId;
+          const isPartnerOfThisOrg = !!userOrg && orgIds.includes(userOrg);
+          // Nearwork staff are always mentionable; partner users only if they
+          // belong to this pipeline's organization.
+          if (!isStaff && !isPartnerOfThisOrg) return;
+          users.push({
             id: d.id,
             name,
             initials: getInitialsStr(name),
-            handle: (data.name ?? data.email ?? '').split(' ')[0].toLowerCase(),
-            role: data.staffRole ?? data.role,
-          };
+            handle: name.split(' ')[0].toLowerCase(),
+            role: isStaff ? (data.staffRole ?? data.role) : (pipeline.orgName ?? 'Partner'),
+            kind: isStaff ? 'nearwork' : 'partner',
+          });
         });
         setMentionUsers(users);
       })
       .catch(() => {});
-  }, []);
+  }, [pipeline.orgId, pipeline.orgName]);
 
   // ── Real-time messages ────────────────────────────────────────────────────
 
@@ -808,9 +827,11 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
                       <span
                         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white"
                         style={{
-                          background: isMention
-                            ? 'linear-gradient(135deg, var(--green), var(--gd))'
-                            : 'linear-gradient(135deg, #6366f1, #818cf8)',
+                          background: !isMention
+                            ? 'linear-gradient(135deg, #6366f1, #818cf8)'
+                            : (item as MentionUser).kind === 'partner'
+                            ? 'linear-gradient(135deg, #AF7AC5, #E74C7C)'
+                            : 'linear-gradient(135deg, var(--green), var(--gd))',
                         }}
                       >
                         {getInitialsStr(label)}
@@ -820,8 +841,14 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
                         <p className="truncate text-[10px] text-[var(--light)]">{sub}</p>
                       </div>
                       {isMention && (
-                        <span className="shrink-0 text-[10px] text-[var(--light)]">
-                          {(item as MentionUser).role}
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 ${
+                            (item as MentionUser).kind === 'partner'
+                              ? 'bg-[#FEF0F5] text-[#E74C7C]'
+                              : 'bg-[#E8F8F5] text-[var(--green)]'
+                          }`}
+                        >
+                          {(item as MentionUser).kind === 'partner' ? 'Partner' : 'Nearwork'}
                         </span>
                       )}
                     </button>

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,29 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.3.0',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profiles now have their own shareable URL (/candidates/<id>) — open or share a direct link to any candidate (Candidate rebuild Sprint 1)',
+          'Candidate profile shows photo (or initials), email, phone, location, LinkedIn, skills, joined date, CV view/download, and a WhatsApp action (enabled once Twilio goes live)',
+          'Real @-mentions in candidate notes — type @ to pick from Nearwork team members; mentioned users are recorded on the note',
+          'Pipeline chat @-mentions now include the client/partner users of that pipeline’s organization (clearly labelled Partner vs Nearwork), not just Nearwork staff',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New /candidates/[id] route mirrors the /hired/[id] deep-link pattern (useParams + getDoc)',
+          'Shared CandidateDetail component; candidate list now navigates by route instead of inline state',
+          'Mention autocomplete distinguishes Nearwork staff (@nearwork.co) from partner users (matched by orgId)',
+        ],
+      },
+    ],
+  },
   {
     version: '0.2.0',
     date: '2026-05-28',

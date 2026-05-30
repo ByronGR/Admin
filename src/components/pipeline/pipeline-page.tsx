@@ -38,7 +38,8 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle } from '@/lib/utils';
-import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel } from '@/lib/types';
+import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason } from '@/lib/types';
+import { DROP_OFF_REASON_LABELS } from '@/lib/types';
 import {
   Search,
   ChevronDown,
@@ -82,6 +83,32 @@ function normalizeStage(stage: string): StageKey {
 
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+// Ordered progress stages (excludes the terminal "Not Selected"). Used to track
+// the furthest stage a candidate has reached, so a drop to Not Selected still
+// records how far they got.
+const PROGRESS_STAGES: StageKey[] = [
+  'applied',
+  'background-check',
+  'interview',
+  'assessment',
+  'partner-review',
+  'partner-interview',
+  'hired',
+];
+function stageRank(s: string): number {
+  return PROGRESS_STAGES.indexOf(normalizeStage(s));
+}
+
+const DROP_OFF_REASONS: DropOffReason[] = [
+  'mia',
+  'english',
+  'assessment',
+  'interview',
+  'partner',
+  'candidate-withdrew',
+  'other',
+];
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
@@ -124,6 +151,16 @@ export default function PipelinePage() {
   const [engFeedback, setEngFeedback] = useState('');
   const [engSaving, setEngSaving] = useState(false);
 
+  // Drop-off reason — shown when moving a candidate to Not Selected
+  const [dropModal, setDropModal] = useState<{
+    open: boolean;
+    candidateId: string;
+    pipelineCode: string;
+  }>({ open: false, candidateId: '', pipelineCode: '' });
+  const [dropReason, setDropReason] = useState<DropOffReason>('mia');
+  const [dropNote, setDropNote] = useState('');
+  const [dropSaving, setDropSaving] = useState(false);
+
   useEffect(() => {
     // Real-time listener
     const unsub = onSnapshot(collection(db, 'pipelines'), (snap) => {
@@ -139,6 +176,14 @@ export default function PipelinePage() {
       setLoading(false);
     });
     return unsub;
+  }, []);
+
+  // Deep-link: /pipeline?focus=<code> opens that pipeline's workspace directly
+  // (used by the "open pipeline" links on the candidate profile).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const focus = new URLSearchParams(window.location.search).get('focus');
+    if (focus) setActivePipelineCode(focus);
   }, []);
 
   // Filter pipelines
@@ -176,15 +221,35 @@ export default function PipelinePage() {
     pipelineCode: string,
     candidateCode: string,
     toStage: StageKey,
-    englishScore?: { level: CEFRLevel; feedback: string }
+    opts?: {
+      englishScore?: { level: CEFRLevel; feedback: string };
+      dropOff?: { reason: DropOffReason; note: string };
+    }
   ) {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
-    const newCandidates = (pipeline.candidates ?? []).map((c) =>
-      c.candidateId === candidateCode
-        ? { ...c, stage: toStage, ...(englishScore ? { englishScore: { ...englishScore, assessedAt: new Date().toISOString() } } : {}) }
-        : c
-    );
+    const newCandidates = (pipeline.candidates ?? []).map((c) => {
+      if (c.candidateId !== candidateCode) return c;
+      // Track the furthest (most advanced) stage reached. A drop to Not Selected
+      // keeps the stage they were in before the drop.
+      const consideredStage = toStage === 'not-selected' ? c.stage : toStage;
+      const prevFurthest = c.furthestStage ?? c.stage;
+      const furthestStage =
+        stageRank(consideredStage) >= stageRank(prevFurthest)
+          ? normalizeStage(consideredStage)
+          : normalizeStage(prevFurthest);
+      return {
+        ...c,
+        stage: toStage,
+        furthestStage,
+        ...(opts?.englishScore
+          ? { englishScore: { ...opts.englishScore, assessedAt: new Date().toISOString() } }
+          : {}),
+        ...(opts?.dropOff
+          ? { dropOffReason: opts.dropOff.reason, dropOffNote: opts.dropOff.note }
+          : {}),
+      };
+    });
     await updateDoc(doc(db, 'pipelines', pipeline.id), {
       candidates: newCandidates,
       updatedAt: serverTimestamp(),
@@ -209,8 +274,17 @@ export default function PipelinePage() {
     const fromStage = pipeline.candidates![candIndex].stage;
     if (fromStage === toStage) return;
 
+    // Moving a candidate to Not Selected → capture why they fell off first.
+    if (toStage === 'not-selected') {
+      const cand = pipeline.candidates![candIndex];
+      setDropModal({ open: true, candidateId: candidateCode, pipelineCode });
+      setDropReason(cand.dropOffReason ?? 'mia');
+      setDropNote(cand.dropOffNote ?? '');
+      return;
+    }
+
     // English score gate: required when advancing from interview stage
-    if (fromStage === 'interview' && toStage !== 'not-selected' && toStage !== 'applied' && toStage !== 'background-check') {
+    if (fromStage === 'interview' && toStage !== 'applied' && toStage !== 'background-check') {
       const cand = pipeline.candidates![candIndex];
       if (!cand.englishScore) {
         setEngModal({
@@ -251,14 +325,28 @@ export default function PipelinePage() {
     setEngSaving(true);
     try {
       await moveCandidateToStage(engModal.pipelineCode, engModal.candidateId, engModal.pendingStage, {
-        level: engLevel,
-        feedback: engFeedback.trim(),
+        englishScore: { level: engLevel, feedback: engFeedback.trim() },
       });
       setEngModal({ open: false, candidateId: '', pipelineId: '', pipelineCode: '', pendingStage: 'assessment' });
     } catch {
       showToast('Failed to save English score', 'error');
     } finally {
       setEngSaving(false);
+    }
+  }
+
+  async function saveDropOff() {
+    setDropSaving(true);
+    try {
+      await moveCandidateToStage(dropModal.pipelineCode, dropModal.candidateId, 'not-selected', {
+        dropOff: { reason: dropReason, note: dropNote.trim() },
+      });
+      setDropModal({ open: false, candidateId: '', pipelineCode: '' });
+      setDropNote('');
+    } catch {
+      showToast('Failed to update candidate', 'error');
+    } finally {
+      setDropSaving(false);
     }
   }
 
@@ -554,11 +642,24 @@ export default function PipelinePage() {
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Score</p>
-                <p className="mt-0.5 font-700 text-[var(--black)]">
-                  {briefModal.candidate.score ?? '—'}
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Furthest stage</p>
+                <p className="mt-0.5 font-500 capitalize text-[var(--black)]">
+                  {PIPELINE_STAGES.find(
+                    (s) => s.key === normalizeStage(briefModal.candidate!.furthestStage ?? briefModal.candidate!.stage)
+                  )?.label ?? '—'}
                 </p>
               </div>
+              {normalizeStage(briefModal.candidate.stage) === 'not-selected' && briefModal.candidate.dropOffReason && (
+                <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-[10px] font-700 uppercase tracking-wider text-red-600">Not selected</p>
+                  <p className="mt-0.5 text-sm font-600 text-[var(--black)]">
+                    {DROP_OFF_REASON_LABELS[briefModal.candidate.dropOffReason]}
+                  </p>
+                  {briefModal.candidate.dropOffNote && (
+                    <p className="mt-1 text-xs text-[var(--mid)]">{briefModal.candidate.dropOffNote}</p>
+                  )}
+                </div>
+              )}
               {briefModal.candidate.email && (
                 <div className="col-span-2">
                   <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Email</p>
@@ -665,6 +766,70 @@ export default function PipelinePage() {
             >
               {engSaving && <Spinner size="sm" />}
               Save & advance
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Drop-off reason modal — captured when moving to Not Selected */}
+      <Modal
+        open={dropModal.open}
+        onClose={() => setDropModal({ open: false, candidateId: '', pipelineCode: '' })}
+        title="Why is this candidate not selected?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--light)]">
+            Record where the candidate fell off so it shows on their profile and in reports.
+          </p>
+          <div>
+            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Reason *
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {DROP_OFF_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setDropReason(r)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
+                    dropReason === r
+                      ? 'text-white'
+                      : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                  }`}
+                  style={dropReason === r ? { background: 'var(--green)' } : {}}
+                >
+                  {DROP_OFF_REASON_LABELS[r]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Notes (optional)
+            </label>
+            <textarea
+              value={dropNote}
+              onChange={(e) => setDropNote(e.target.value)}
+              rows={3}
+              placeholder="e.g. Called the candidate for 2 days with no response, no-showed the interview…"
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDropModal({ open: false, candidateId: '', pipelineCode: '' })}
+              className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveDropOff}
+              disabled={dropSaving}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
+              style={{ background: 'var(--green)' }}
+            >
+              {dropSaving && <Spinner size="sm" />}
+              Mark not selected
             </button>
           </div>
         </div>

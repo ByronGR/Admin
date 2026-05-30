@@ -339,11 +339,34 @@ export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
   'not-selected': 'Not Selected',
 };
 
+// Why a candidate fell out of a pipeline (structured, paired with a free-text note).
+export type DropOffReason =
+  | 'mia'
+  | 'english'
+  | 'assessment'
+  | 'interview'
+  | 'partner'
+  | 'candidate-withdrew'
+  | 'other';
+
+export const DROP_OFF_REASON_LABELS: Record<DropOffReason, string> = {
+  'mia': 'Went MIA / unresponsive',
+  'english': 'English level',
+  'assessment': 'Assessment',
+  'interview': 'Interview',
+  'partner': 'Partner declined',
+  'candidate-withdrew': 'Candidate withdrew',
+  'other': 'Other',
+};
+
 export interface PipelineCandidate {
   candidateId: string;
   name: string;
   email?: string;
   stage: PipelineStage;
+  furthestStage?: PipelineStage; // most advanced stage ever reached (survives a drop to Not Selected)
+  dropOffReason?: DropOffReason; // why they fell off (only meaningful when stage = not-selected)
+  dropOffNote?: string;          // recruiter free-text context for the drop-off
   score?: number;
   englishScore?: EnglishScore;
   addedAt?: Timestamp;

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.3.3';
+export const APP_VERSION = '0.4.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,28 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.4.0',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profile now shows every pipeline & opening the candidate is in — current stage, furthest stage reached, and pipeline status, sorted with active pipelines first (Candidate rebuild Sprint 2)',
+          'Drop-off reasons: when a candidate is moved to Not Selected on the board, you now pick why (MIA, English, Assessment, Interview, Partner declined, Withdrew, Other) plus an optional recruiter note',
+          'That drop-off reason and note surface on the candidate profile (“Fell off · …”) and in the pipeline candidate brief',
+          'Each pipeline on the candidate profile is a one-click deep link straight into that pipeline’s board (/pipeline?focus=<code>)',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'PipelineCandidate gains furthestStage, dropOffReason, and dropOffNote; the board tracks the furthest stage automatically on every move',
+          'New DropOffReason type + DROP_OFF_REASON_LABELS for consistent labelling',
+        ],
+      },
+    ],
+  },
   {
     version: '0.3.3',
     date: '2026-05-30',

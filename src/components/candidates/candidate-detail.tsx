@@ -15,9 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, fmtRelative, initials } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
-import { STAFF_ROLE_LABELS } from '@/lib/types';
-import type { Candidate, Timestamp } from '@/lib/types';
-import { Mail, Phone, MapPin, ExternalLink, FileText, MessageCircle } from 'lucide-react';
+import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
+import type { Candidate, Timestamp, Pipeline, PipelineCandidate, PipelineStage } from '@/lib/types';
+import { Mail, Phone, MapPin, ExternalLink, FileText, MessageCircle, GitBranch, ArrowRight } from 'lucide-react';
 
 // ─── Candidate detail (shared by the /candidates/[id] route) ───────────────────
 
@@ -121,6 +121,42 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       );
     });
   }, [candidate.id]);
+
+  // ── Pipelines & openings this candidate is in ──────────────────────────────
+  const [pipelineEntries, setPipelineEntries] = useState<
+    Array<{ pipeline: Pipeline; entry: PipelineCandidate }>
+  >([]);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+
+  useEffect(() => {
+    setPipelinesLoading(true);
+    getDocs(collection(db, 'pipelines'))
+      .then((snap) => {
+        const matches: Array<{ pipeline: Pipeline; entry: PipelineCandidate }> = [];
+        snap.docs.forEach((d) => {
+          const p = { id: d.id, ...d.data() } as Pipeline;
+          const entry = (p.candidates ?? []).find((c) => c.candidateId === candidate.id);
+          if (entry) matches.push({ pipeline: p, entry });
+        });
+        // Active pipelines first, then by most recently updated
+        matches.sort((a, b) => {
+          const aActive = a.pipeline.status === 'active' ? 0 : 1;
+          const bActive = b.pipeline.status === 'active' ? 0 : 1;
+          if (aActive !== bActive) return aActive - bActive;
+          const ta = (a.pipeline.updatedAt as { seconds?: number })?.seconds ?? 0;
+          const tb = (b.pipeline.updatedAt as { seconds?: number })?.seconds ?? 0;
+          return tb - ta;
+        });
+        setPipelineEntries(matches);
+      })
+      .catch(() => setPipelineEntries([]))
+      .finally(() => setPipelinesLoading(false));
+  }, [candidate.id]);
+
+  function stageLabel(stage?: PipelineStage): string {
+    if (!stage) return '—';
+    return PIPELINE_STAGE_LABELS[stage] ?? stage;
+  }
 
   async function addNote() {
     if (!noteText.trim()) return;
@@ -275,6 +311,81 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                   {s}
                 </span>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pipelines & openings */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
+            <GitBranch className="h-4 w-4 text-[var(--green)]" />
+            Pipelines &amp; openings
+          </h3>
+
+          {pipelinesLoading ? (
+            <div className="flex h-16 items-center justify-center">
+              <Spinner size="sm" />
+            </div>
+          ) : pipelineEntries.length === 0 ? (
+            <p className="py-4 text-center text-xs text-[var(--light)]">
+              Not in any pipeline yet.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {pipelineEntries.map(({ pipeline, entry }) => {
+                const notSelected = entry.stage === 'not-selected';
+                const furthest = entry.furthestStage ?? entry.stage;
+                return (
+                  <a
+                    key={pipeline.id}
+                    href={`/pipeline?focus=${encodeURIComponent(pipeline.code)}`}
+                    className="group block rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 transition-colors hover:border-[var(--green)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-700 text-[var(--black)]">
+                          {pipeline.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">
+                          {pipeline.orgName ?? '—'} · {pipeline.code}
+                        </p>
+                      </div>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)] transition-colors group-hover:text-[var(--green)]" />
+                    </div>
+
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {notSelected ? (
+                        <Badge label="Not Selected" variant="neutral" />
+                      ) : (
+                        <Badge label={stageLabel(entry.stage)} variant="green" />
+                      )}
+                      <span className="text-[10px] text-[var(--light)]">
+                        Furthest: <span className="font-600 text-[var(--mid)]">{stageLabel(furthest)}</span>
+                      </span>
+                      {pipeline.status && pipeline.status !== 'active' && (
+                        <span className="text-[10px] capitalize text-[var(--light)]">· {pipeline.status}</span>
+                      )}
+                    </div>
+
+                    {notSelected && entry.dropOffReason && (
+                      <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-2.5 py-2">
+                        <p className="text-[10px] font-700 uppercase tracking-wider text-red-600">
+                          Fell off · {DROP_OFF_REASON_LABELS[entry.dropOffReason]}
+                        </p>
+                        {entry.dropOffNote && (
+                          <p className="mt-0.5 text-[11px] text-[var(--mid)]">{entry.dropOffNote}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {entry.englishScore && (
+                      <p className="mt-2 text-[10px] text-[var(--light)]">
+                        English: <span className="font-600 text-[var(--mid)]">{entry.englishScore.level}</span>
+                      </p>
+                    )}
+                  </a>
+                );
+              })}
             </div>
           )}
         </div>

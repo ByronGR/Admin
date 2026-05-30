@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.3.2';
+export const APP_VERSION = '0.3.3';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.3.3',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Dashboard metric cards (active organizations, active openings, candidates in ATS, hires) showed 0 when any one data source failed to load — each source is now loaded independently so a single hiccup no longer blanks the whole dashboard',
+        ],
+      },
+    ],
+  },
   {
     version: '0.3.2',
     date: '2026-05-30',

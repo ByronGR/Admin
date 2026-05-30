@@ -221,8 +221,10 @@ export default function DashboardPage() {
   async function loadDashboard() {
     setLoading(true);
     try {
-      const [orgsSnap, openingsSnap, candidatesSnap, pipelinesSnap, placementsSnap, staffSnap] =
-        await Promise.all([
+      // Use allSettled so one failing/empty collection (e.g. a permissions
+      // hiccup on `placements`) doesn't zero out the entire dashboard.
+      const [orgsRes, openingsRes, candidatesRes, pipelinesRes, placementsRes, staffRes] =
+        await Promise.allSettled([
           getDocs(collection(db, 'organizations')),
           getDocs(collection(db, 'openings')),
           getDocs(collection(db, 'candidates')),
@@ -231,12 +233,24 @@ export default function DashboardPage() {
           getDocs(collection(db, 'users')),
         ]);
 
-      const orgs = orgsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization));
-      const openings = openingsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening));
-      const candidates = candidatesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate));
-      const pipelines = pipelinesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Pipeline));
-      const placements = placementsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement));
-      const staff = staffSnap.docs.map((d) => d.data());
+      function docsOf<T>(
+        res: PromiseSettledResult<Awaited<ReturnType<typeof getDocs>>>,
+        label: string
+      ): T[] {
+        if (res.status !== 'fulfilled') {
+          console.error(`Dashboard: failed to load ${label}:`, res.reason);
+          return [];
+        }
+        return res.value.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as T));
+      }
+
+      const orgs = docsOf<Organization>(orgsRes, 'organizations');
+      const openings = docsOf<Opening>(openingsRes, 'openings');
+      const candidates = docsOf<Candidate>(candidatesRes, 'candidates');
+      const pipelines = docsOf<Pipeline>(pipelinesRes, 'pipelines');
+      const placements = docsOf<Placement>(placementsRes, 'placements');
+      const staff =
+        staffRes.status === 'fulfilled' ? staffRes.value.docs.map((d) => d.data()) : [];
 
       // Save raw for report builder
       setRawCandidates(candidates);

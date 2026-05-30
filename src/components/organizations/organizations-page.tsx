@@ -35,7 +35,7 @@ import {
   Link2, Camera, Briefcase, Trophy, Users, TrendingUp,
   AlertTriangle, Activity, History, DollarSign,
   Phone, Star, GitBranch, UserCog, Crown, Plus as PlusIcon,
-  Network, Layers,
+  Network, Layers, Ban, Power,
 } from 'lucide-react';
 
 // Engagement-type colours (shared with the Hired module)
@@ -676,6 +676,7 @@ function OrgDetail({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [suspending, setSuspending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
 
@@ -922,14 +923,50 @@ function OrgDetail({
   async function handleDelete() {
     setDeleting(true);
     try {
+      // Cascade: remove every client profile tied to this org so deleting the
+      // organization also revokes portal access for all of its users. We match on
+      // both orgId and organizationId since profiles use either field.
+      const orgKeys = [org.id, org.shortId].filter(Boolean) as string[];
+      const userDocIds = new Set<string>();
+      for (const field of ['orgId', 'organizationId']) {
+        for (const key of orgKeys) {
+          try {
+            const snap = await getDocs(query(collection(db, 'users'), where(field, '==', key)));
+            snap.docs.forEach((d) => userDocIds.add(d.id));
+          } catch { /* ignore individual query failures */ }
+        }
+      }
+      await Promise.allSettled([...userDocIds].map((id) => deleteDoc(doc(db, 'users', id))));
       await deleteDoc(doc(db, 'organizations', org.id));
-      showToast('Organization deleted', 'success');
+      showToast(`Organization deleted — ${userDocIds.size} user${userDocIds.size === 1 ? '' : 's'} removed`, 'success');
       onClose();
       await onRefresh();
     } catch {
       showToast('Failed to delete', 'error');
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  }
+
+  // Suspend / reactivate: flips organizations/{id}.status. The client portal watches
+  // this field live and immediately logs out anyone currently signed in, and blocks
+  // new logins with a "contact support" message until the org is reactivated.
+  async function toggleSuspend() {
+    const suspend = (org.status ?? 'active') !== 'suspended';
+    setSuspending(true);
+    try {
+      await updateDoc(doc(db, 'organizations', org.id), {
+        status: suspend ? 'suspended' : 'active',
+        updatedAt: serverTimestamp(),
+      });
+      const updated = { ...org, status: (suspend ? 'suspended' : 'active') as Organization['status'] };
+      onUpdated(updated);
+      setEditForm((f) => ({ ...f, status: updated.status ?? 'active' }));
+      showToast(suspend ? 'Organization suspended — users logged out' : 'Organization reactivated', 'success');
+    } catch {
+      showToast('Failed to update status', 'error');
+    } finally {
+      setSuspending(false);
     }
   }
 
@@ -1154,6 +1191,7 @@ function OrgDetail({
                     <option value="active">Active</option>
                     <option value="prospect">Prospect</option>
                     <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
                   </select>
                 </div>
                 <div>
@@ -1213,9 +1251,20 @@ function OrgDetail({
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]">
                 <Edit3 className="h-3.5 w-3.5" />Edit
               </button>
+              {(org.status ?? 'active') === 'suspended' ? (
+                <button onClick={toggleSuspend} disabled={suspending}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-500 text-amber-700 hover:bg-amber-100 disabled:opacity-60">
+                  <Power className="h-3.5 w-3.5" />{suspending ? 'Working…' : 'Reactivate'}
+                </button>
+              ) : (
+                <button onClick={toggleSuspend} disabled={suspending}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-500 text-amber-600 hover:bg-amber-50 disabled:opacity-60">
+                  <Ban className="h-3.5 w-3.5" />{suspending ? 'Working…' : 'Suspend'}
+                </button>
+              )}
               {confirmDelete ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-500 text-red-600">Delete org?</span>
+                  <span className="text-xs font-500 text-red-600">Delete org + all its users?</span>
                   <button onClick={handleDelete} disabled={deleting}
                     className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60">
                     {deleting ? 'Deleting…' : 'Yes'}

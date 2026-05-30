@@ -113,7 +113,7 @@ export interface Organization {
   city?: string;
   address?: string;
   logo?: string;
-  status?: 'active' | 'inactive' | 'prospect';
+  status?: 'active' | 'inactive' | 'prospect' | 'suspended';
   package?: OrgPackage;
   contractType?: OrgContractType;
   hubspotLink?: string;

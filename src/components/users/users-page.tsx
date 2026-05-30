@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   db,
   collection,
@@ -11,6 +11,8 @@ import {
   serverTimestamp,
   query,
   where,
+  isNearworkEmail,
+  HARD_CODED_SUPER_ADMINS,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -43,6 +45,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [selectedMember, setSelectedMember] = useState<UserProfile | null>(null);
 
   // Invite modal
   const [inviteModal, setInviteModal] = useState(false);
@@ -62,7 +65,12 @@ export default function UsersPage() {
         getDocs(collection(db, 'users')),
         getDocs(query(collection(db, 'staffInvites'), where('status', '==', 'pending'))),
       ]);
-      setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as UserProfile)));
+      // Team = Nearwork staff only (the shared `users` collection also holds
+      // client/partner accounts, which must not appear here).
+      const staff = usersSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as UserProfile))
+        .filter((u) => isNearworkEmail(u.email ?? ''));
+      setUsers(staff);
       setInvites(invitesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as StaffInvite)));
     } catch {
       showToast('Failed to load users', 'error');
@@ -73,7 +81,51 @@ export default function UsersPage() {
 
   const isSuperAdmin = currentProfile?.role === 'super_admin';
 
-  const filtered = users.filter((u) => {
+  // Always surface the signed-in user and the hardcoded super admins, even if
+  // their Firestore `users` doc doesn't exist yet (e.g. never logged into Admin).
+  const staffMembers = useMemo(() => {
+    const byEmail = new Map<string, UserProfile>();
+    for (const u of users) {
+      const e = (u.email ?? '').toLowerCase();
+      if (e) byEmail.set(e, u);
+    }
+    if (currentProfile?.email) {
+      const e = currentProfile.email.toLowerCase();
+      if (!byEmail.has(e)) {
+        byEmail.set(e, {
+          ...currentProfile,
+          id: currentUser?.uid ?? currentProfile.id ?? e,
+        } as UserProfile);
+      }
+    }
+    for (const email of HARD_CODED_SUPER_ADMINS) {
+      const e = email.toLowerCase();
+      const existing = byEmail.get(e);
+      if (!existing) {
+        const name = e
+          .split('@')[0]
+          .split('.')
+          .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+          .join(' ');
+        byEmail.set(e, {
+          id: `sa:${e}`,
+          email: e,
+          name,
+          role: 'super_admin',
+          staffRole: 'super_admin',
+          status: 'active',
+        } as UserProfile);
+      } else {
+        // Hardcoded super admins are always super_admin regardless of doc value
+        byEmail.set(e, { ...existing, role: 'super_admin', staffRole: 'super_admin' });
+      }
+    }
+    return Array.from(byEmail.values()).sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '')
+    );
+  }, [users, currentProfile, currentUser]);
+
+  const filtered = staffMembers.filter((u) => {
     const q = search.toLowerCase();
     const matchSearch = !q || [u.name, u.email].join(' ').toLowerCase().includes(q);
     const matchRole = !roleFilter || u.role === roleFilter;
@@ -160,7 +212,7 @@ export default function UsersPage() {
           <div>
             <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Team</h1>
             <p className="mt-0.5 text-xs text-[var(--light)]">
-              {users.length} staff member{users.length !== 1 ? 's' : ''} · invite-only access
+              {staffMembers.length} staff member{staffMembers.length !== 1 ? 's' : ''} · invite-only access
             </p>
           </div>
           {isSuperAdmin && (
@@ -218,7 +270,8 @@ export default function UsersPage() {
               filtered.map((u) => (
                 <div
                   key={u.id}
-                  className="grid grid-cols-[auto_2fr_1fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)]"
+                  onClick={() => setSelectedMember(u)}
+                  className="grid grid-cols-[auto_2fr_1fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer"
                 >
                   <div className="w-10">
                     {u.photoUrl ? (
@@ -245,6 +298,7 @@ export default function UsersPage() {
                     {isSuperAdmin && u.role !== 'super_admin' ? (
                       <select
                         value={u.role}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => changeRole(u.id, e.target.value as StaffRole)}
                         className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[10px] outline-none focus:border-[var(--green)]"
                       >
@@ -274,7 +328,10 @@ export default function UsersPage() {
                     <span className="text-[10px] text-[var(--light)]">{fmtDate(u.createdAt)}</span>
                     {isSuperAdmin && u.role !== 'super_admin' && u.id !== currentUser?.uid && (
                       <button
-                        onClick={() => toggleSuspend(u)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSuspend(u);
+                        }}
                         title={u.status === 'suspended' ? 'Reactivate' : 'Suspend'}
                         className="rounded p-1 text-[var(--light)] hover:text-red-500"
                       >
@@ -403,6 +460,114 @@ export default function UsersPage() {
               >
                 Done
               </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Member profile */}
+      <Modal
+        open={!!selectedMember}
+        onClose={() => setSelectedMember(null)}
+        title="Team member"
+        size="md"
+      >
+        {selectedMember && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-4">
+              {selectedMember.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedMember.photoUrl}
+                  alt={selectedMember.name}
+                  className="h-16 w-16 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-16 w-16 items-center justify-center rounded-full text-xl font-800 text-white"
+                  style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+                >
+                  {initials(selectedMember.name)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-lg font-700 text-[var(--black)]">
+                  {selectedMember.name}
+                  {selectedMember.id === currentUser?.uid && (
+                    <span className="ml-1.5 text-[10px] text-[var(--light)]">(you)</span>
+                  )}
+                </p>
+                <div className="mt-1">
+                  <Badge
+                    label={STAFF_ROLE_LABELS[selectedMember.role] ?? selectedMember.role}
+                    variant={roleBadgeVariant(selectedMember.role)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 text-xs">
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+                <span className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                  Email
+                </span>
+                <a
+                  href={`mailto:${selectedMember.email}`}
+                  className="font-600 text-[var(--green)] hover:underline"
+                >
+                  {selectedMember.email}
+                </a>
+              </div>
+              {selectedMember.calendlyLink && (
+                <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+                  <span className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    Calendly
+                  </span>
+                  <a
+                    href={
+                      selectedMember.calendlyLink.startsWith('http')
+                        ? selectedMember.calendlyLink
+                        : `https://${selectedMember.calendlyLink}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-600 text-[var(--green)] hover:underline"
+                  >
+                    Book time →
+                  </a>
+                </div>
+              )}
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+                <span className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                  Status
+                </span>
+                <span
+                  className={`font-600 ${
+                    selectedMember.status === 'suspended' ? 'text-red-500' : 'text-emerald-600'
+                  }`}
+                >
+                  {selectedMember.status === 'suspended' ? 'Suspended' : 'Active'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+                <span className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                  Joined
+                </span>
+                <span className="font-600 text-[var(--black)]">
+                  {fmtDate(selectedMember.createdAt) || '—'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <a
+                href={`mailto:${selectedMember.email}`}
+                className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white"
+                style={{ background: 'var(--green)' }}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Reach out
+              </a>
             </div>
           </div>
         )}

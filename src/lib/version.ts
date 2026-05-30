@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.3.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.3.1',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Team page now shows everyone, including the super admins (Byron & Stephany) even before they’ve logged into Admin — they’re always listed',
+          'Team page no longer mixes in client/partner accounts — it shows Nearwork staff only',
+        ],
+      },
+      {
+        title: 'Added',
+        items: [
+          'Click any team member to open their profile — photo, role, email (one-click Reach out), Calendly link, status, and join date',
+          '@-mention pickers now show each person’s role next to their name (candidate notes and pipeline chat)',
+        ],
+      },
+    ],
+  },
   {
     version: '0.3.0',
     date: '2026-05-30',

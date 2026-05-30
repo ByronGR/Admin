@@ -14,6 +14,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, fmtRelative, initials } from '@/lib/utils';
+import { normalizeStaffRole } from '@/lib/firebase';
+import { STAFF_ROLE_LABELS } from '@/lib/types';
 import type { Candidate, Timestamp } from '@/lib/types';
 import { Mail, Phone, MapPin, ExternalLink, FileText, MessageCircle } from 'lucide-react';
 
@@ -28,7 +30,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const [savingNote, setSavingNote] = useState(false);
 
   // ── @-mentions: Nearwork staff only on the candidate page ──────────────────
-  type MentionUser = { id: string; name: string; handle: string; initials: string };
+  type MentionUser = { id: string; name: string; handle: string; initials: string; role: string };
   const [staff, setStaff] = useState<MentionUser[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -40,8 +42,13 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       .then((snap) => {
         const users: MentionUser[] = snap.docs
           .map((d) => {
-            const data = d.data() as { name?: string; email?: string };
-            return { id: d.id, name: data.name ?? data.email ?? '', email: (data.email ?? '').toLowerCase() };
+            const data = d.data() as { name?: string; email?: string; staffRole?: string; role?: string };
+            return {
+              id: d.id,
+              name: data.name ?? data.email ?? '',
+              email: (data.email ?? '').toLowerCase(),
+              role: STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')],
+            };
           })
           // Nearwork team members only
           .filter((u) => u.email.endsWith('@nearwork.co'))
@@ -50,6 +57,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             name: u.name,
             handle: (u.name || u.email).split(' ')[0].toLowerCase(),
             initials: initials(u.name || u.email),
+            role: u.role,
           }))
           .sort((a, b) => a.name.localeCompare(b.name));
         setStaff(users);
@@ -347,9 +355,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                   >
                     {u.initials}
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate font-600 text-[var(--black)]">{u.name}</span>
-                    <span className="block truncate text-[10px] text-[var(--light)]">@{u.handle}</span>
+                    <span className="block truncate text-[10px] text-[var(--light)]">
+                      @{u.handle} · {u.role}
+                    </span>
                   </span>
                 </button>
               ))}

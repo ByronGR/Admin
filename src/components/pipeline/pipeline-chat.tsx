@@ -21,11 +21,13 @@ import {
   getDocs,
   onSnapshot,
   serverTimestamp,
+  normalizeStaffRole,
 } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Spinner } from '@/components/ui/spinner';
+import { STAFF_ROLE_LABELS } from '@/lib/types';
 import type { Pipeline, PipelineCandidate } from '@/lib/types';
 import {
   Send,
@@ -229,7 +231,9 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
             name,
             initials: getInitialsStr(name),
             handle: name.split(' ')[0].toLowerCase(),
-            role: isStaff ? (data.staffRole ?? data.role) : (pipeline.orgName ?? 'Partner'),
+            role: isStaff
+              ? STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')]
+              : (pipeline.orgName ?? 'Partner'),
             kind: isStaff ? 'nearwork' : 'partner',
           });
         });
@@ -810,7 +814,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
                   const isMention = 'handle' in item;
                   const label = item.name;
                   const sub = isMention
-                    ? `@${(item as MentionUser).handle}`
+                    ? `@${(item as MentionUser).handle} · ${(item as MentionUser).role}`
                     : `${(item as { stage: string }).stage}`;
                   return (
                     <button

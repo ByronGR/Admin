@@ -62,7 +62,7 @@ const STAFF_ROLES: StaffRole[] = [
   'super_admin', 'admin', 'recruiter', 'sales', 'hr', 'employee', 'user',
 ];
 
-const HARD_CODED_SUPER_ADMINS = [
+export const HARD_CODED_SUPER_ADMINS = [
   'byron.giraldo@nearwork.co',
   'stephany.picos@nearwork.co',
 ];

@@ -160,7 +160,7 @@ async function sendInviteEmail(
   const token = crypto.randomUUID();
   const firstName = email.split('@')[0].split('.')[0];
   const firstName1 = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}`;
+  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}&firstName=${encodeURIComponent(firstName1)}`;
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Store invite in Firestore — never throws, failures are logged only

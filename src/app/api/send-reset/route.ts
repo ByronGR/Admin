@@ -79,11 +79,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true }, { headers: CORS });
     }
     console.error('[send-reset] could not generate reset link:', e);
-    const diag = new URL(req.url).searchParams.get('diag') === 'wifcheck1';
     return NextResponse.json(
-      diag
-        ? { error: 'diag', detail: (e as Error)?.message ?? String(e), hasOidcEnv: !!process.env.VERCEL_OIDC_TOKEN, hasOidcHeader: !!req.headers.get('x-vercel-oidc-token'), hasAud: !!process.env.GCP_WIF_AUDIENCE }
-        : { error: 'Password reset is not available right now. Please try again later.' },
+      { error: 'Password reset is not available right now. Please try again later.' },
       { status: 503, headers: CORS },
     );
   }

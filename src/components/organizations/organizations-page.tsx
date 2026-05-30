@@ -745,10 +745,30 @@ function OrgDetail({
   const [staffModal, setStaffModal] = useState(false);
   const [staffForm, setStaffForm] = useState({
     accountManager: org.accountManager ?? '',
+    accountManagerEmail: org.accountManagerEmail ?? '',
     salesCloser: org.salesCloser ?? '',
+    salesCloserEmail: org.salesCloserEmail ?? '',
     teamLead: org.teamLead ?? '',
+    teamLeadEmail: org.teamLeadEmail ?? '',
   });
   const [savingStaff, setSavingStaff] = useState(false);
+  const [staffUsers, setStaffUsers] = useState<{ name: string; email: string }[]>([]);
+
+  // Load the Nearwork staff (anyone with an Admin account) so the staff modal can
+  // offer a real dropdown instead of free text. Selecting a person captures both
+  // their name and email, which then flow down to app.nearwork.co.
+  useEffect(() => {
+    getDocs(collection(db, 'users'))
+      .then((snap) => {
+        const staff = snap.docs
+          .map((d) => d.data() as { name?: string; email?: string })
+          .filter((u) => (u.email || '').toLowerCase().endsWith('@nearwork.co'))
+          .map((u) => ({ name: u.name || u.email || '', email: (u.email || '').toLowerCase() }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setStaffUsers(staff);
+      })
+      .catch(() => null);
+  }, []);
 
   // SPP / partnership state
   const [sppModal, setSppModal] = useState(false);
@@ -834,16 +854,24 @@ function OrgDetail({
     try {
       const data = {
         accountManager: staffForm.accountManager.trim() || null,
+        accountManagerEmail: staffForm.accountManagerEmail.trim() || null,
+        // app.nearwork.co reads these denormalized fields for the support card
+        accountManagerName: staffForm.accountManager.trim() || null,
         salesCloser: staffForm.salesCloser.trim() || null,
+        salesCloserEmail: staffForm.salesCloserEmail.trim() || null,
         teamLead: staffForm.teamLead.trim() || null,
+        teamLeadEmail: staffForm.teamLeadEmail.trim() || null,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'organizations', org.id), data);
       onUpdated({
         ...org,
         accountManager: data.accountManager ?? undefined,
+        accountManagerEmail: data.accountManagerEmail ?? undefined,
         salesCloser: data.salesCloser ?? undefined,
+        salesCloserEmail: data.salesCloserEmail ?? undefined,
         teamLead: data.teamLead ?? undefined,
+        teamLeadEmail: data.teamLeadEmail ?? undefined,
       });
       showToast('Nearwork staff updated', 'success');
       setStaffModal(false);
@@ -1816,7 +1844,7 @@ function OrgDetail({
                 <Users className="h-4 w-4 text-[var(--green)]" />Managed team
               </h3>
               <button
-                onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '', teamLead: org.teamLead ?? '' }); setStaffModal(true); }}
+                onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', accountManagerEmail: org.accountManagerEmail ?? '', salesCloser: org.salesCloser ?? '', salesCloserEmail: org.salesCloserEmail ?? '', teamLead: org.teamLead ?? '', teamLeadEmail: org.teamLeadEmail ?? '' }); setStaffModal(true); }}
                 className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
                 title="Edit team lead"
               >
@@ -1915,7 +1943,7 @@ function OrgDetail({
               <UserCog className="h-4 w-4 text-[var(--green)]" />Nearwork staff
             </h3>
             <button
-              onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', salesCloser: org.salesCloser ?? '', teamLead: org.teamLead ?? '' }); setStaffModal(true); }}
+              onClick={() => { setStaffForm({ accountManager: org.accountManager ?? '', accountManagerEmail: org.accountManagerEmail ?? '', salesCloser: org.salesCloser ?? '', salesCloserEmail: org.salesCloserEmail ?? '', teamLead: org.teamLead ?? '', teamLeadEmail: org.teamLeadEmail ?? '' }); setStaffModal(true); }}
               className="rounded-lg p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
               title="Edit Nearwork staff"
             >
@@ -2237,34 +2265,65 @@ function OrgDetail({
             <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
               <Crown className="h-3 w-3" />Account Manager
             </label>
-            <input
-              value={staffForm.accountManager}
-              onChange={(e) => setStaffForm((f) => ({ ...f, accountManager: e.target.value }))}
-              placeholder="Owns the relationship"
+            <select
+              value={staffForm.accountManagerEmail || (staffForm.accountManager ? '__legacy__' : '')}
+              onChange={(e) => {
+                const picked = staffUsers.find((u) => u.email === e.target.value);
+                setStaffForm((f) => ({ ...f, accountManager: picked?.name ?? '', accountManagerEmail: picked?.email ?? '' }));
+              }}
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-            />
+            >
+              <option value="">Unassigned</option>
+              {staffForm.accountManager && !staffForm.accountManagerEmail && (
+                <option value="__legacy__">{staffForm.accountManager} (no email on file)</option>
+              )}
+              {staffUsers.map((u) => (
+                <option key={u.email} value={u.email}>{u.name} — {u.email}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-[var(--light)]">Shown to the client in app.nearwork.co.</p>
           </div>
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
               <Star className="h-3 w-3" />Sales closer
             </label>
-            <input
-              value={staffForm.salesCloser}
-              onChange={(e) => setStaffForm((f) => ({ ...f, salesCloser: e.target.value }))}
-              placeholder="Who closed the deal"
+            <select
+              value={staffForm.salesCloserEmail || (staffForm.salesCloser ? '__legacy__' : '')}
+              onChange={(e) => {
+                const picked = staffUsers.find((u) => u.email === e.target.value);
+                setStaffForm((f) => ({ ...f, salesCloser: picked?.name ?? '', salesCloserEmail: picked?.email ?? '' }));
+              }}
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-            />
+            >
+              <option value="">Unassigned</option>
+              {staffForm.salesCloser && !staffForm.salesCloserEmail && (
+                <option value="__legacy__">{staffForm.salesCloser} (no email on file)</option>
+              )}
+              {staffUsers.map((u) => (
+                <option key={u.email} value={u.email}>{u.name} — {u.email}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
               <Users className="h-3 w-3" />Team lead
             </label>
-            <input
-              value={staffForm.teamLead}
-              onChange={(e) => setStaffForm((f) => ({ ...f, teamLead: e.target.value }))}
-              placeholder="Leads this org's managed team"
+            <select
+              value={staffForm.teamLeadEmail || (staffForm.teamLead ? '__legacy__' : '')}
+              onChange={(e) => {
+                const picked = staffUsers.find((u) => u.email === e.target.value);
+                setStaffForm((f) => ({ ...f, teamLead: picked?.name ?? '', teamLeadEmail: picked?.email ?? '' }));
+              }}
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-            />
+            >
+              <option value="">Unassigned</option>
+              {staffForm.teamLead && !staffForm.teamLeadEmail && (
+                <option value="__legacy__">{staffForm.teamLead} (no email on file)</option>
+              )}
+              {staffUsers.map((u) => (
+                <option key={u.email} value={u.email}>{u.name} — {u.email}</option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2">
             <button

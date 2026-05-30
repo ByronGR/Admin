@@ -150,8 +150,12 @@ export interface Organization {
   // ─── People ─────────────────────────────────────────────────────────────────
   pocContacts?: OrgPOC[];                 // client-side decision-makers (one or more)
   accountManager?: string;                // Nearwork AM — owns the relationship (most important)
+  accountManagerEmail?: string;           // AM email — surfaced to the client in app.nearwork.co
+  accountManagerPhone?: string;           // AM phone — surfaced to the client in app.nearwork.co
   salesCloser?: string;                   // Nearwork rep who closed the deal
+  salesCloserEmail?: string;
   teamLead?: string;                      // Nearwork-side lead for this org's managed team
+  teamLeadEmail?: string;
   // ─── SPP (Strategic Partner Program) — parent/child orgs ────────────────────
   isStrategicPartner?: boolean;           // this org is an SPP parent with sub-client orgs
   parentOrgId?: string;                   // if set, this org is a sub-client under a parent SPP org

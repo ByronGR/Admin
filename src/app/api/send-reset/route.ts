@@ -89,7 +89,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true }, { headers: CORS });
   }
 
-  const from = process.env.RESEND_FROM_EMAIL || 'Nearwork <noreply@nearwork.co>';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
+  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
   const replyTo = process.env.RESEND_REPLY_TO_EMAIL;
   const html = buildResetEmail(firstName, resetLink);
 

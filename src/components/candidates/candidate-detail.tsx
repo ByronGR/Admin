@@ -16,8 +16,54 @@ import { useToast } from '@/components/ui/toast';
 import { fmtDate, fmtRelative, initials } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
-import type { Candidate, Timestamp, Pipeline, PipelineCandidate, PipelineStage } from '@/lib/types';
-import { Mail, Phone, MapPin, ExternalLink, FileText, MessageCircle, GitBranch, ArrowRight } from 'lucide-react';
+import type {
+  Candidate,
+  Timestamp,
+  Pipeline,
+  PipelineCandidate,
+  PipelineStage,
+  Assessment,
+  Placement,
+  CEFRLevel,
+} from '@/lib/types';
+import { DISC_LABELS } from '@/lib/question-bank';
+import {
+  Mail,
+  Phone,
+  MapPin,
+  ExternalLink,
+  FileText,
+  MessageCircle,
+  GitBranch,
+  ArrowRight,
+  Award,
+  Activity,
+  Briefcase,
+} from 'lucide-react';
+
+// CEFR → 0-100 for the Nearwork Score radar / display.
+const CEFR_TO_PCT: Record<CEFRLevel, number> = {
+  A1: 20,
+  A2: 35,
+  B1: 55,
+  B2: 75,
+  C1: 90,
+  C2: 100,
+};
+
+const NEARWORK_SCORE_VALID_DAYS = 90;
+
+function tsToDate(ts: unknown): Date | null {
+  if (!ts) return null;
+  if (typeof ts === 'object' && ts !== null && 'seconds' in ts) {
+    return new Date((ts as { seconds: number }).seconds * 1000);
+  }
+  if (typeof ts === 'string') {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
 
 // ─── Candidate detail (shared by the /candidates/[id] route) ───────────────────
 
@@ -157,6 +203,109 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     if (!stage) return '—';
     return PIPELINE_STAGE_LABELS[stage] ?? stage;
   }
+
+  // ── Assessment & Nearwork Score ────────────────────────────────────────────
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [assessmentLoading, setAssessmentLoading] = useState(true);
+
+  useEffect(() => {
+    setAssessmentLoading(true);
+    getDocs(query(collection(db, 'assessments'), where('candidateId', '==', candidate.id)))
+      .then((snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Assessment));
+        // Prefer the most recently completed/scored assessment.
+        const scored = list.filter(
+          (a) => a.technicalScore != null || a.nearworkScore != null || a.completedAt
+        );
+        const pool = scored.length ? scored : list;
+        pool.sort(
+          (a, b) =>
+            (tsToDate(b.completedAt ?? b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
+            (tsToDate(a.completedAt ?? a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
+        );
+        setAssessment(pool[0] ?? null);
+      })
+      .catch(() => setAssessment(null))
+      .finally(() => setAssessmentLoading(false));
+  }, [candidate.id]);
+
+  // ── Hired / placement ──────────────────────────────────────────────────────
+  const [placement, setPlacement] = useState<Placement | null>(null);
+
+  useEffect(() => {
+    getDocs(query(collection(db, 'placements'), where('candidateId', '==', candidate.id)))
+      .then((snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement));
+        list.sort(
+          (a, b) =>
+            new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime()
+        );
+        setPlacement(list[0] ?? null);
+      })
+      .catch(() => setPlacement(null));
+  }, [candidate.id]);
+
+  // Best English level recorded across this candidate's pipelines.
+  const bestEnglish = useMemo<CEFRLevel | null>(() => {
+    let best: CEFRLevel | null = null;
+    let bestPct = -1;
+    for (const { entry } of pipelineEntries) {
+      const lvl = entry.englishScore?.level;
+      if (lvl && CEFR_TO_PCT[lvl] > bestPct) {
+        bestPct = CEFR_TO_PCT[lvl];
+        best = lvl;
+      }
+    }
+    return best;
+  }, [pipelineEntries]);
+
+  // Nearwork Score + 90-day validity.
+  const nearworkScore = assessment?.nearworkScore ?? null;
+  const scoreDate = tsToDate(assessment?.completedAt);
+  const scoreValidUntil = scoreDate
+    ? new Date(scoreDate.getTime() + NEARWORK_SCORE_VALID_DAYS * 24 * 60 * 60 * 1000)
+    : null;
+  const scoreExpired = scoreValidUntil ? Date.now() > scoreValidUntil.getTime() : false;
+  const scoreDaysLeft = scoreValidUntil
+    ? Math.ceil((scoreValidUntil.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+    : null;
+
+  // Skills radar — auto-fed from real data (English, Technical, Experience,
+  // Communication & Culture). Communication/Culture are derived from DISC.
+  const radarData = useMemo(() => {
+    const technicalPct =
+      assessment?.technicalScore != null
+        ? Math.round((assessment.technicalScore / 50) * 100)
+        : 0;
+    const englishPct = bestEnglish ? CEFR_TO_PCT[bestEnglish] : 0;
+    const experiencePct =
+      candidate.experience != null
+        ? Math.min(100, Math.round((candidate.experience / 10) * 100))
+        : 0;
+
+    const disc = assessment?.discScores;
+    const total = disc ? (disc.D ?? 0) + (disc.I ?? 0) + (disc.S ?? 0) + (disc.C ?? 0) : 0;
+    // Influence + Steadiness lean toward strong communication; Steadiness +
+    // Conscientiousness lean toward team/culture fit. Scaled to 0-100.
+    const communicationPct =
+      disc && total > 0
+        ? Math.min(100, Math.round((((disc.I ?? 0) + (disc.S ?? 0) * 0.5) / total) * 200))
+        : 0;
+    const culturePct =
+      disc && total > 0
+        ? Math.min(100, Math.round((((disc.S ?? 0) + (disc.C ?? 0) * 0.5) / total) * 200))
+        : 0;
+
+    return [
+      { axis: 'English', value: englishPct },
+      { axis: 'Technical', value: technicalPct },
+      { axis: 'Experience', value: experiencePct },
+      { axis: 'Communication', value: communicationPct },
+      { axis: 'Culture', value: culturePct },
+    ];
+  }, [assessment, bestEnglish, candidate.experience]);
+
+  const hasRadarData = radarData.some((d) => d.value > 0);
 
   async function addNote() {
     if (!noteText.trim()) return;
@@ -314,6 +463,143 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             </div>
           )}
         </div>
+
+        {/* Hired banner — link to the placement / contractor profile */}
+        {placement && (
+          <a
+            href={`/hired/${placement.id}`}
+            className="group flex items-center justify-between gap-3 rounded-2xl border p-4 transition-colors hover:border-[var(--green)]"
+            style={{ borderColor: 'var(--green)', background: 'rgba(22,160,133,0.06)' }}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+              >
+                <Briefcase className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-700 text-[var(--black)]">
+                  Hired{placement.orgName ? ` at ${placement.orgName}` : ''}
+                </p>
+                <p className="truncate text-[10px] text-[var(--mid)]">
+                  {placement.openingTitle ?? 'Placement'}
+                  {placement.startDate ? ` · since ${fmtDate(placement.startDate)}` : ''}
+                </p>
+              </div>
+            </div>
+            <span className="flex items-center gap-1 text-xs font-600 text-[var(--green)]">
+              View hired profile
+              <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </a>
+        )}
+
+        {/* Nearwork Score & assessment */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
+            <Award className="h-4 w-4 text-[var(--green)]" />
+            Nearwork Score &amp; assessment
+          </h3>
+
+          {assessmentLoading ? (
+            <div className="flex h-16 items-center justify-center">
+              <Spinner size="sm" />
+            </div>
+          ) : !assessment ? (
+            <p className="py-4 text-center text-xs text-[var(--light)]">
+              No assessment on file yet.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {/* Score header */}
+              <div className="flex items-stretch gap-3">
+                <div className="flex flex-col items-center justify-center rounded-xl bg-[var(--bg)] px-5 py-3">
+                  <span className="text-3xl font-800 leading-none text-[var(--black)]">
+                    {nearworkScore != null ? nearworkScore : '—'}
+                  </span>
+                  <span className="mt-1 text-[9px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    Nearwork Score
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col justify-center gap-1.5">
+                  {nearworkScore != null && scoreValidUntil ? (
+                    scoreExpired ? (
+                      <Badge label="Score expired — re-assess" variant="amber" />
+                    ) : (
+                      <Badge
+                        label={`Valid ${scoreDaysLeft}d · until ${fmtDate(scoreValidUntil.toISOString())}`}
+                        variant="green"
+                      />
+                    )
+                  ) : (
+                    <span className="text-[10px] text-[var(--light)]">
+                      Not scored yet — scored after the assessment is completed
+                    </span>
+                  )}
+                  <p className="text-[10px] text-[var(--light)]">
+                    Nearwork Scores are valid for {NEARWORK_SCORE_VALID_DAYS} days from completion.
+                  </p>
+                </div>
+              </div>
+
+              {/* Technical + DISC */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl border border-[var(--border)] p-3">
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    Technical
+                  </p>
+                  <p className="mt-0.5 font-700 text-[var(--black)]">
+                    {assessment.technicalScore != null
+                      ? `${assessment.technicalScore}/50 · ${Math.round((assessment.technicalScore / 50) * 100)}%`
+                      : '—'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] p-3">
+                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    DISC style
+                  </p>
+                  <p className="mt-0.5 font-700 text-[var(--black)]">
+                    {assessment.discStyle
+                      ? `${assessment.discStyle} — ${DISC_LABELS[assessment.discStyle].name}`
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[var(--light)]">
+                  {assessment.completedAt
+                    ? `Completed ${fmtDate(assessment.completedAt as Timestamp | string)}`
+                    : 'Not completed yet'}
+                </span>
+                <a
+                  href="/assessments"
+                  className="flex items-center gap-1 text-[10px] font-600 text-[var(--green)] hover:underline"
+                >
+                  View in assessments
+                  <ArrowRight className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Skills radar */}
+        {hasRadarData && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
+              <Activity className="h-4 w-4 text-[var(--green)]" />
+              Skills radar
+            </h3>
+            <p className="mb-3 text-[10px] text-[var(--light)]">
+              Auto-generated from assessment, English &amp; experience data.
+            </p>
+            <div className="flex justify-center">
+              <RadarChart data={radarData} />
+            </div>
+          </div>
+        )}
 
         {/* Pipelines & openings */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
@@ -505,5 +791,76 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Skills radar (SVG, 5 axes) ────────────────────────────────────────────────
+
+function RadarChart({ data }: { data: { axis: string; value: number }[] }) {
+  const size = 240;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 78;
+  const n = data.length;
+  const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
+  const pointAt = (i: number, value: number): [number, number] => {
+    const rr = (Math.max(0, Math.min(100, value)) / 100) * r;
+    return [cx + rr * Math.cos(angle(i)), cy + rr * Math.sin(angle(i))];
+  };
+
+  const rings = [0.25, 0.5, 0.75, 1];
+  const polygon = data.map((d, i) => pointAt(i, d.value).join(',')).join(' ');
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+      {/* Grid rings */}
+      {rings.map((ring, ri) => (
+        <polygon
+          key={ri}
+          points={data
+            .map((_, i) => {
+              const [x, y] = pointAt(i, ring * 100);
+              return `${x},${y}`;
+            })
+            .join(' ')}
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth={1}
+        />
+      ))}
+      {/* Spokes */}
+      {data.map((_, i) => {
+        const [x, y] = pointAt(i, 100);
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--border)" strokeWidth={1} />;
+      })}
+      {/* Data polygon */}
+      <polygon points={polygon} fill="rgba(22,160,133,0.18)" stroke="var(--green)" strokeWidth={2} />
+      {/* Data points */}
+      {data.map((d, i) => {
+        const [x, y] = pointAt(i, d.value);
+        return <circle key={i} cx={x} cy={y} r={3} fill="var(--green)" />;
+      })}
+      {/* Axis labels */}
+      {data.map((d, i) => {
+        const [x, y] = pointAt(i, 118);
+        const anchor = Math.abs(x - cx) < 12 ? 'middle' : x > cx ? 'start' : 'end';
+        return (
+          <text
+            key={i}
+            x={x}
+            y={y}
+            textAnchor={anchor}
+            dominantBaseline="middle"
+            className="fill-[var(--mid)]"
+            style={{ fontSize: 10, fontWeight: 600 }}
+          >
+            {d.axis}
+            <tspan x={x} dy={12} className="fill-[var(--light)]" style={{ fontSize: 9, fontWeight: 500 }}>
+              {d.value}
+            </tspan>
+          </text>
+        );
+      })}
+    </svg>
   );
 }

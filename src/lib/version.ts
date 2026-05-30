@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,28 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.5.0',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profile now shows the Nearwork Score with 90-day validity — a clear “valid for N days” badge, or “expired — re-assess” once it lapses (Candidate rebuild Sprint 3)',
+          'Assessment results on the profile: technical score (x/50 + %), DISC style, completion date, and a link into Assessments',
+          'Skills radar — a 5-axis chart (English, Technical, Experience, Communication, Culture) auto-generated from assessment, English-gate and experience data',
+          'When a candidate has been placed, their profile shows a “Hired at …” banner that deep-links to their hired/contractor profile (Sprint 4)',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Candidate profile reads assessments + placements by candidateId; Nearwork Score validity computed from completedAt + 90 days',
+          'Communication & Culture radar axes are derived from DISC scores (Influence/Steadiness/Conscientiousness) until dedicated scoring exists',
+        ],
+      },
+    ],
+  },
   {
     version: '0.4.0',
     date: '2026-05-30',

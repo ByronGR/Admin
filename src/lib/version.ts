@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.3.1';
+export const APP_VERSION = '0.3.2';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,20 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.3.2',
+    date: '2026-05-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Team members now show their job title (CEO, Account Manager, …) instead of their access level — set or change it from the member profile',
+          'Job title flows everywhere: it’s what appears next to a person’s name in @-mention pickers (candidate notes and pipeline chat)',
+          'Member profile now has a separate “Access level” control (super admins only) so permissions stay independent from the displayed job title',
+        ],
+      },
+    ],
+  },
   {
     version: '0.3.1',
     date: '2026-05-30',

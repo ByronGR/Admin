@@ -42,12 +42,14 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       .then((snap) => {
         const users: MentionUser[] = snap.docs
           .map((d) => {
-            const data = d.data() as { name?: string; email?: string; staffRole?: string; role?: string };
+            const data = d.data() as { name?: string; email?: string; staffRole?: string; role?: string; jobTitle?: string };
             return {
               id: d.id,
               name: data.name ?? data.email ?? '',
               email: (data.email ?? '').toLowerCase(),
-              role: STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')],
+              role:
+                data.jobTitle?.trim() ||
+                STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')],
             };
           })
           // Nearwork team members only

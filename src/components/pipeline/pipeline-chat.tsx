@@ -214,6 +214,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
             email?: string;
             staffRole?: string;
             role?: string;
+            jobTitle?: string;
             orgId?: string;
             organizationId?: string;
           };
@@ -232,7 +233,8 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
             initials: getInitialsStr(name),
             handle: name.split(' ')[0].toLowerCase(),
             role: isStaff
-              ? STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')]
+              ? (data.jobTitle?.trim() ||
+                STAFF_ROLE_LABELS[normalizeStaffRole(data.staffRole ?? data.role ?? 'employee')])
               : (pipeline.orgName ?? 'Partner'),
             kind: isStaff ? 'nearwork' : 'partner',
           });

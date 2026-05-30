@@ -33,8 +33,9 @@ export interface UserProfile {
   name: string;
   firstName?: string;
   lastName?: string;
-  role: StaffRole;
+  role: StaffRole;        // permission/access level (controls what they can do)
   staffRole: StaffRole;
+  jobTitle?: string;      // human job title shown in the UI (CEO, Account Manager…) — editable
   photoUrl?: string;
   calendlyLink?: string;
   source?: string;

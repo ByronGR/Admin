@@ -46,6 +46,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [selectedMember, setSelectedMember] = useState<UserProfile | null>(null);
+  const [jobTitleDraft, setJobTitleDraft] = useState('');
+  const [savingJobTitle, setSavingJobTitle] = useState(false);
 
   // Invite modal
   const [inviteModal, setInviteModal] = useState(false);
@@ -57,6 +59,11 @@ export default function UsersPage() {
   useEffect(() => {
     load();
   }, []);
+
+  // Keep the editable job-title field in sync with whichever member is open.
+  useEffect(() => {
+    setJobTitleDraft(selectedMember?.jobTitle ?? '');
+  }, [selectedMember]);
 
   async function load() {
     setLoading(true);
@@ -181,6 +188,30 @@ export default function UsersPage() {
     }
   }
 
+  async function saveJobTitle() {
+    if (!selectedMember) return;
+    // Synthetic super-admin entries have no Firestore doc until they sign in.
+    if (selectedMember.id.startsWith('sa:')) {
+      showToast('This member hasn’t signed into Admin yet — a profile is created on first login', 'error');
+      return;
+    }
+    const next = jobTitleDraft.trim();
+    setSavingJobTitle(true);
+    try {
+      await updateDoc(doc(db, 'users', selectedMember.id), {
+        jobTitle: next,
+        updatedAt: serverTimestamp(),
+      });
+      showToast('Job title updated', 'success');
+      setSelectedMember({ ...selectedMember, jobTitle: next });
+      load();
+    } catch {
+      showToast('Failed to update job title', 'error');
+    } finally {
+      setSavingJobTitle(false);
+    }
+  }
+
   async function changeRole(userId: string, role: StaffRole) {
     try {
       await updateDoc(doc(db, 'users', userId), { role, staffRole: role, updatedAt: serverTimestamp() });
@@ -260,7 +291,7 @@ export default function UsersPage() {
             <div className="grid grid-cols-[auto_2fr_1fr_1fr_1fr] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
               <div className="w-10" />
               <div>Member</div>
-              <div>Role</div>
+              <div>Title</div>
               <div>Status</div>
               <div>Joined</div>
             </div>
@@ -295,25 +326,10 @@ export default function UsersPage() {
                     <p className="truncate text-[10px] text-[var(--light)]">{u.email}</p>
                   </div>
                   <div>
-                    {isSuperAdmin && u.role !== 'super_admin' ? (
-                      <select
-                        value={u.role}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => changeRole(u.id, e.target.value as StaffRole)}
-                        className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[10px] outline-none focus:border-[var(--green)]"
-                      >
-                        {(Object.keys(STAFF_ROLE_LABELS) as StaffRole[])
-                          .filter((r) => r !== 'super_admin')
-                          .map((r) => (
-                            <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
-                          ))}
-                      </select>
-                    ) : (
-                      <Badge
-                        label={STAFF_ROLE_LABELS[u.role] ?? u.role}
-                        variant={roleBadgeVariant(u.role)}
-                      />
-                    )}
+                    <Badge
+                      label={u.jobTitle?.trim() || STAFF_ROLE_LABELS[u.role] || u.role}
+                      variant={roleBadgeVariant(u.role)}
+                    />
                   </div>
                   <div>
                     <span
@@ -497,14 +513,69 @@ export default function UsersPage() {
                     <span className="ml-1.5 text-[10px] text-[var(--light)]">(you)</span>
                   )}
                 </p>
-                <div className="mt-1">
-                  <Badge
-                    label={STAFF_ROLE_LABELS[selectedMember.role] ?? selectedMember.role}
-                    variant={roleBadgeVariant(selectedMember.role)}
-                  />
-                </div>
+                <p className="mt-0.5 text-xs font-600 text-[var(--mid)]">
+                  {selectedMember.jobTitle?.trim() ||
+                    STAFF_ROLE_LABELS[selectedMember.role] ||
+                    selectedMember.role}
+                </p>
               </div>
             </div>
+
+            {/* Editable job title (super admins, or yourself) */}
+            {(isSuperAdmin || selectedMember.id === currentUser?.uid) &&
+              !selectedMember.id.startsWith('sa:') && (
+                <div>
+                  <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    Job title
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={jobTitleDraft}
+                      onChange={(e) => setJobTitleDraft(e.target.value)}
+                      placeholder="e.g. Account Manager"
+                      className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+                    />
+                    <button
+                      onClick={saveJobTitle}
+                      disabled={savingJobTitle || jobTitleDraft.trim() === (selectedMember.jobTitle ?? '').trim()}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-50"
+                      style={{ background: 'var(--green)' }}
+                    >
+                      {savingJobTitle && <Spinner size="sm" />}
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            {/* Access level (permission role) — super admins only */}
+            {isSuperAdmin &&
+              selectedMember.role !== 'super_admin' &&
+              !selectedMember.id.startsWith('sa:') && (
+                <div>
+                  <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                    Access level
+                  </label>
+                  <select
+                    value={selectedMember.role}
+                    onChange={(e) => {
+                      const role = e.target.value as StaffRole;
+                      changeRole(selectedMember.id, role);
+                      setSelectedMember({ ...selectedMember, role, staffRole: role });
+                    }}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)]"
+                  >
+                    {(Object.keys(STAFF_ROLE_LABELS) as StaffRole[])
+                      .filter((r) => r !== 'super_admin')
+                      .map((r) => (
+                        <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-[var(--light)]">
+                    Controls what this person can do in Admin — separate from their job title.
+                  </p>
+                </div>
+              )}
 
             <div className="grid gap-3 text-xs">
               <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">

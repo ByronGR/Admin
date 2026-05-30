@@ -12,7 +12,7 @@ export const INVITE_EMAIL_HTML = `<!DOCTYPE html>
 <body style="margin:0; padding:0; background-color:#F5F4F0; font-family:'Poppins', Arial, sans-serif; -webkit-font-smoothing:antialiased;">
 
   <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; color:#F5F4F0; line-height:1px;">
-    Your Nearwork workspace is ready, {{firstName}}. Create your password and get started.&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;
+    Your Nearwork workspace is ready. Create your password and get started.&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;
   </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F5F4F0;">
@@ -47,7 +47,7 @@ export const INVITE_EMAIL_HTML = `<!DOCTYPE html>
 
               <p style="font-family:'Poppins', Arial, sans-serif; font-size:40px; margin:0 0 16px 0; line-height:1;">&#127881;</p>
               <h1 style="font-family:'Poppins', Arial, sans-serif; font-size:26px; font-weight:700; color:#111111; letter-spacing:-0.02em; line-height:1.25; margin:0 0 14px 0;">
-                Welcome to Nearwork, {{firstName}}.
+                Welcome to Nearwork! Your account is almost ready.
               </h1>
 
               <p style="font-family:'Poppins', Arial, sans-serif; font-size:15px; color:#555555; line-height:1.7; margin:0 0 10px 0;">
@@ -147,7 +147,7 @@ export const INVITE_EMAIL_HTML = `<!DOCTYPE html>
               </table>
 
               <p style="font-family:'Poppins', Arial, sans-serif; font-size:13px; color:#9E9E9E; line-height:1.6; margin:0;">
-                &#129309; We&apos;re genuinely excited to work with {{companyName}}, {{firstName}}. Let&apos;s build something great together.
+                &#129309; We&apos;re genuinely excited to work with {{companyName}}. Let&apos;s build something great together.
               </p>
 
             </td>

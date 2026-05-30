@@ -163,11 +163,16 @@ async function sendInviteEmail(
 ): Promise<{ token: string; emailSent: boolean; stored: boolean }> {
   const token = crypto.randomUUID();
   const fallback = email.split('@')[0].split('.')[0];
-  const firstName1 = (details?.firstName?.trim())
-    || (fallback.charAt(0).toUpperCase() + fallback.slice(1));
+  const emailName = fallback.charAt(0).toUpperCase() + fallback.slice(1);
+  // The client now fills in their own name + role on the create-account screen, so
+  // we only seed the link with name/title when explicitly provided. The email
+  // greeting still uses a friendly email-derived name as a fallback.
+  const providedFirst = details?.firstName?.trim() || '';
   const lastName = details?.lastName?.trim() || '';
   const jobTitle = details?.jobTitle?.trim() || '';
-  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}&firstName=${encodeURIComponent(firstName1)}`
+  const greetingName = providedFirst || emailName;
+  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}`
+    + (providedFirst ? `&firstName=${encodeURIComponent(providedFirst)}` : '')
     + (lastName ? `&lastName=${encodeURIComponent(lastName)}` : '')
     + (jobTitle ? `&title=${encodeURIComponent(jobTitle)}` : '');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -195,7 +200,7 @@ async function sendInviteEmail(
     const res = await fetch('/api/send-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, firstName: firstName1, orgName, setupLink }),
+      body: JSON.stringify({ email, firstName: greetingName, orgName, setupLink }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -704,9 +709,6 @@ function OrgDetail({
 
   // Users state
   const [addUserEmail, setAddUserEmail] = useState('');
-  const [addUserFirst, setAddUserFirst] = useState('');
-  const [addUserLast, setAddUserLast] = useState('');
-  const [addUserTitle, setAddUserTitle] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [invitesSending, setInvitesSending] = useState<Set<string>>(new Set());
   // Real client accounts from the App's `users` collection (keyed by lowercase email)
@@ -1027,26 +1029,15 @@ function OrgDetail({
       showToast('User already added', 'info');
       return;
     }
-    const firstName = addUserFirst.trim();
-    const lastName = addUserLast.trim();
-    const jobTitle = addUserTitle.trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(' ');
     setAddingUser(true);
     try {
-      // Step 1: add user to org — this must succeed
-      const newUser: OrgUser = {
-        email,
-        status: 'invited',
-        invitedAt: new Date().toISOString(),
-        ...(fullName ? { name: fullName } : {}),
-        ...(firstName ? { firstName } : {}),
-        ...(lastName ? { lastName } : {}),
-        ...(jobTitle ? { jobTitle } : {}),
-      };
+      // Step 1: add user to org — this must succeed. Name + role are collected from
+      // the client on the create-account screen, so we only store the email here.
+      const newUser: OrgUser = { email, status: 'invited', invitedAt: new Date().toISOString() };
       const updatedUsers = [...orgUsers, newUser];
       await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
-      setAddUserEmail(''); setAddUserFirst(''); setAddUserLast(''); setAddUserTitle('');
+      setAddUserEmail('');
       showToast('User added', 'success');
     } catch {
       showToast('Failed to add user', 'error');
@@ -1056,7 +1047,7 @@ function OrgDetail({
 
     // Step 2: send invite — separate try/catch so it never blocks step 1
     try {
-      const { emailSent } = await sendInviteEmail(email, org.id, org.name, { firstName, lastName, jobTitle });
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
       if (emailSent) {
         showToast(`Invite email sent to ${email} ✓`, 'success');
       } else {
@@ -1146,10 +1137,7 @@ function OrgDetail({
   async function resendInvite(email: string) {
     setInvitesSending((s) => new Set(s).add(email));
     try {
-      const u = orgUsers.find((x) => x.email === email);
-      const { emailSent } = await sendInviteEmail(email, org.id, org.name, {
-        firstName: u?.firstName, lastName: u?.lastName, jobTitle: u?.jobTitle,
-      });
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
       showToast(
         emailSent ? `Invite resent to ${email} ✓` : 'Invite stored — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails',
         emailSent ? 'success' : 'info',
@@ -2012,47 +2000,25 @@ function OrgDetail({
             </h3>
           </div>
 
-          {/* Add user */}
-          <div className="mb-4 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={addUserFirst}
-                onChange={(e) => setAddUserFirst(e.target.value)}
-                placeholder="First name"
-                className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-              />
-              <input
-                value={addUserLast}
-                onChange={(e) => setAddUserLast(e.target.value)}
-                placeholder="Last name"
-                className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-              />
-            </div>
+          {/* Add user — just an email; the client fills in their name + role on signup */}
+          <div className="mb-4 flex gap-2">
             <input
-              value={addUserTitle}
-              onChange={(e) => setAddUserTitle(e.target.value)}
-              placeholder="Job title (e.g. CEO, Hiring Manager)"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+              value={addUserEmail}
+              onChange={(e) => setAddUserEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addUser()}
+              placeholder="email@client.com"
+              type="email"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
             />
-            <div className="flex gap-2">
-              <input
-                value={addUserEmail}
-                onChange={(e) => setAddUserEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addUser()}
-                placeholder="email@client.com"
-                type="email"
-                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-              />
-              <button
-                onClick={addUser}
-                disabled={addingUser || !addUserEmail.trim()}
-                className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-50"
-                style={{ background: 'var(--green)' }}
-              >
-                {addingUser ? <Spinner size="sm" /> : <UserPlus className="h-3.5 w-3.5" />}
-                Invite
-              </button>
-            </div>
+            <button
+              onClick={addUser}
+              disabled={addingUser || !addUserEmail.trim()}
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {addingUser ? <Spinner size="sm" /> : <UserPlus className="h-3.5 w-3.5" />}
+              Invite
+            </button>
           </div>
 
           {orgUsers.length === 0 ? (

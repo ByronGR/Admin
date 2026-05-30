@@ -1,14 +1,16 @@
 import { getApps, initializeApp, applicationDefault, cert, type App, type Credential } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { ExternalAccountClient } from 'google-auth-library';
+import { getVercelOidcToken } from '@vercel/functions/oidc';
 
 // Server-only Firebase Admin SDK. Credentials are resolved at runtime, in order:
 //   1. FIREBASE_SERVICE_ACCOUNT — a service-account JSON string (only works if the
 //      GCP org policy that disables key creation is lifted; not the default path).
 //   2. Vercel OIDC → GCP Workload Identity Federation — no downloaded key. The org
 //      policy blocks key creation, so this is the intended production path. Active
-//      when VERCEL_OIDC_TOKEN + GCP_WIF_AUDIENCE are present (Vercel injects the
-//      token automatically once OIDC Federation is enabled on the project).
+//      when GCP_WIF_AUDIENCE is set; the per-invocation OIDC token is read from the
+//      Vercel request context via getVercelOidcToken() (on Fluid Compute it arrives
+//      as a request header, not a process.env var).
 //   3. Application Default Credentials — fallback for any environment that already
 //      has ADC (e.g. Cloud Run / Functions).
 // Until one of these is configured the SDK still initializes, but Auth calls throw;
@@ -24,7 +26,7 @@ let cachedApp: App | null = null;
 // No key material is ever stored; the OIDC token is read fresh on each refresh.
 function vercelWifCredential(): Credential | null {
   const audience = process.env.GCP_WIF_AUDIENCE;
-  if (!process.env.VERCEL_OIDC_TOKEN || !audience) return null;
+  if (!audience) return null;
 
   const saEmail = process.env.FIREBASE_SA_EMAIL || DEFAULT_SA_EMAIL;
   const client = ExternalAccountClient.fromJSON({
@@ -33,8 +35,12 @@ function vercelWifCredential(): Credential | null {
     subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
     token_url: 'https://sts.googleapis.com/v1/token',
     service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${saEmail}:generateAccessToken`,
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     subject_token_supplier: {
-      getSubjectToken: async () => process.env.VERCEL_OIDC_TOKEN as string,
+      // Read fresh per refresh from the active Vercel request context. On Fluid
+      // Compute the token is not in process.env — getVercelOidcToken() resolves
+      // it from the request-scoped header, so this is concurrency-safe.
+      getSubjectToken: async () => getVercelOidcToken(),
     },
   });
   if (!client) return null;

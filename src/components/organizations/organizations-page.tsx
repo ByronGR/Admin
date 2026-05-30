@@ -3,13 +3,16 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   db,
+  auth,
   collection,
   getDocs,
+  getDoc,
   doc,
   addDoc,
   updateDoc,
   deleteDoc,
   setDoc,
+  sendPasswordResetEmail,
   serverTimestamp,
   query,
   where,
@@ -26,7 +29,7 @@ import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId } from '@/lib/utils';
 import type {
   Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
-  AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC, EngagementType,
+  AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC, EngagementType, ClientAccount,
 } from '@/lib/types';
 import { ENGAGEMENT_LABELS } from '@/lib/types';
 import {
@@ -35,7 +38,7 @@ import {
   Link2, Camera, Briefcase, Trophy, Users, TrendingUp,
   AlertTriangle, Activity, History, DollarSign,
   Phone, Star, GitBranch, UserCog, Crown, Plus as PlusIcon,
-  Network, Layers, Ban, Power,
+  Network, Layers, Ban, Power, KeyRound, CheckCircle2,
 } from 'lucide-react';
 
 // Engagement-type colours (shared with the Hired module)
@@ -155,12 +158,18 @@ function HealthGrade({ grade, size = 'md' }: { grade?: AccountHealthGrade; size?
 async function sendInviteEmail(
   email: string,
   orgId: string,
-  orgName: string
+  orgName: string,
+  details?: { firstName?: string; lastName?: string; jobTitle?: string }
 ): Promise<{ token: string; emailSent: boolean; stored: boolean }> {
   const token = crypto.randomUUID();
-  const firstName = email.split('@')[0].split('.')[0];
-  const firstName1 = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}&firstName=${encodeURIComponent(firstName1)}`;
+  const fallback = email.split('@')[0].split('.')[0];
+  const firstName1 = (details?.firstName?.trim())
+    || (fallback.charAt(0).toUpperCase() + fallback.slice(1));
+  const lastName = details?.lastName?.trim() || '';
+  const jobTitle = details?.jobTitle?.trim() || '';
+  const setupLink = `https://app.nearwork.co/join?token=${token}&email=${encodeURIComponent(email)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}&firstName=${encodeURIComponent(firstName1)}`
+    + (lastName ? `&lastName=${encodeURIComponent(lastName)}` : '')
+    + (jobTitle ? `&title=${encodeURIComponent(jobTitle)}` : '');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Store invite in Firestore — never throws, failures are logged only
@@ -695,8 +704,19 @@ function OrgDetail({
 
   // Users state
   const [addUserEmail, setAddUserEmail] = useState('');
+  const [addUserFirst, setAddUserFirst] = useState('');
+  const [addUserLast, setAddUserLast] = useState('');
+  const [addUserTitle, setAddUserTitle] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [invitesSending, setInvitesSending] = useState<Set<string>>(new Set());
+  // Real client accounts from the App's `users` collection (keyed by lowercase email)
+  const [clientAccounts, setClientAccounts] = useState<Record<string, ClientAccount>>({});
+  const [userActionBusy, setUserActionBusy] = useState<Set<string>>(new Set());
+  // Update-position modal
+  const [positionModal, setPositionModal] = useState(false);
+  const [positionAccount, setPositionAccount] = useState<ClientAccount | null>(null);
+  const [positionInput, setPositionInput] = useState('');
+  const [savingPosition, setSavingPosition] = useState(false);
 
   // Account Health state
   const [healthModal, setHealthModal] = useState(false);
@@ -753,6 +773,34 @@ function OrgDetail({
       setDataLoading(false);
     }).catch(() => setDataLoading(false));
   }, [org.id]);
+
+  // Load the real client accounts (App `users` docs) for this org so we can show
+  // who has actually logged in vs. who is still just invited. Org membership is
+  // stored under either `orgId` or `organizationId`, against the org's full id or
+  // its short id, so we query all combinations and merge by email.
+  async function loadClientAccounts() {
+    const ids = [org.id, org.shortId].filter(Boolean) as string[];
+    const fields = ['orgId', 'organizationId'];
+    const queries = ids.flatMap((id) =>
+      fields.map((f) => getDocs(query(collection(db, 'users'), where(f, '==', id))))
+    );
+    const results = await Promise.allSettled(queries);
+    const map: Record<string, ClientAccount> = {};
+    results.forEach((r) => {
+      if (r.status !== 'fulfilled') return;
+      r.value.docs.forEach((d) => {
+        const data = d.data() as Omit<ClientAccount, 'id'>;
+        const email = (data.email || '').toLowerCase();
+        if (email) map[email] = { id: d.id, ...data, email };
+      });
+    });
+    setClientAccounts(map);
+  }
+
+  useEffect(() => {
+    loadClientAccounts().catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.id, org.shortId]);
 
   const pkg = getPkg(org.package);
   const isOpeningActive = (o: Opening) => o.status === 'open' || o.status === 'paused';
@@ -979,14 +1027,26 @@ function OrgDetail({
       showToast('User already added', 'info');
       return;
     }
+    const firstName = addUserFirst.trim();
+    const lastName = addUserLast.trim();
+    const jobTitle = addUserTitle.trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
     setAddingUser(true);
     try {
       // Step 1: add user to org — this must succeed
-      const newUser: OrgUser = { email, status: 'invited', invitedAt: new Date().toISOString() };
+      const newUser: OrgUser = {
+        email,
+        status: 'invited',
+        invitedAt: new Date().toISOString(),
+        ...(fullName ? { name: fullName } : {}),
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
+        ...(jobTitle ? { jobTitle } : {}),
+      };
       const updatedUsers = [...orgUsers, newUser];
       await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
-      setAddUserEmail('');
+      setAddUserEmail(''); setAddUserFirst(''); setAddUserLast(''); setAddUserTitle('');
       showToast('User added', 'success');
     } catch {
       showToast('Failed to add user', 'error');
@@ -996,7 +1056,7 @@ function OrgDetail({
 
     // Step 2: send invite — separate try/catch so it never blocks step 1
     try {
-      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name, { firstName, lastName, jobTitle });
       if (emailSent) {
         showToast(`Invite email sent to ${email} ✓`, 'success');
       } else {
@@ -1006,6 +1066,69 @@ function OrgDetail({
       // invite failure is non-critical
     } finally {
       setAddingUser(false);
+    }
+  }
+
+  // ── Per-user actions on real client accounts (item 5) ───────────────────────
+  function markUserBusy(email: string, busy: boolean) {
+    setUserActionBusy((s) => {
+      const next = new Set(s);
+      if (busy) next.add(email); else next.delete(email);
+      return next;
+    });
+  }
+
+  async function resetUserPassword(email: string) {
+    markUserBusy(email, true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast(`Password reset email sent to ${email} ✓`, 'success');
+    } catch {
+      showToast('Could not send password reset email', 'error');
+    } finally {
+      markUserBusy(email, false);
+    }
+  }
+
+  async function toggleUserSuspend(account: ClientAccount) {
+    const suspend = !account.suspended;
+    markUserBusy(account.email, true);
+    try {
+      await updateDoc(doc(db, 'users', account.id), { suspended: suspend, updatedAt: serverTimestamp() });
+      setClientAccounts((m) => ({ ...m, [account.email]: { ...account, suspended: suspend } }));
+      showToast(suspend ? `${account.email} suspended` : `${account.email} reactivated`, 'success');
+    } catch {
+      showToast('Could not update user', 'error');
+    } finally {
+      markUserBusy(account.email, false);
+    }
+  }
+
+  function openPositionModal(account: ClientAccount) {
+    setPositionAccount(account);
+    setPositionInput(account.jobTitle || account.displayRole || '');
+    setPositionModal(true);
+  }
+
+  async function saveUserPosition() {
+    if (!positionAccount) return;
+    const jobTitle = positionInput.trim();
+    setSavingPosition(true);
+    try {
+      await updateDoc(doc(db, 'users', positionAccount.id), {
+        jobTitle, displayRole: jobTitle, title: jobTitle, businessRole: jobTitle, updatedAt: serverTimestamp(),
+      });
+      setClientAccounts((m) => ({ ...m, [positionAccount.email]: { ...positionAccount, jobTitle, displayRole: jobTitle } }));
+      // Mirror onto the org's invited list so the title persists there too.
+      const updatedUsers = orgUsers.map((u) => u.email === positionAccount.email ? { ...u, jobTitle } : u);
+      updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() })
+        .then(() => onUpdated({ ...org, orgUsers: updatedUsers })).catch(() => null);
+      showToast('Position updated ✓', 'success');
+      setPositionModal(false);
+    } catch {
+      showToast('Could not update position', 'error');
+    } finally {
+      setSavingPosition(false);
     }
   }
 
@@ -1023,7 +1146,10 @@ function OrgDetail({
   async function resendInvite(email: string) {
     setInvitesSending((s) => new Set(s).add(email));
     try {
-      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
+      const u = orgUsers.find((x) => x.email === email);
+      const { emailSent } = await sendInviteEmail(email, org.id, org.name, {
+        firstName: u?.firstName, lastName: u?.lastName, jobTitle: u?.jobTitle,
+      });
       showToast(
         emailSent ? `Invite resent to ${email} ✓` : 'Invite stored — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails',
         emailSent ? 'success' : 'info',
@@ -1384,7 +1510,7 @@ function OrgDetail({
           { icon: <Briefcase className="h-4 w-4" />, label: 'Open positions', value: dataLoading ? '…' : activeOpenings, sub: `${openings.length} total openings` },
           { icon: <Users className="h-4 w-4" />, label: 'Active placements', value: dataLoading ? '…' : activePlacements, sub: `${placements.length} total hires` },
           { icon: <TrendingUp className="h-4 w-4" />, label: 'Pipelines', value: dataLoading ? '…' : pipelines.length, sub: `${pipelines.filter(p => p.status === 'active').length} active` },
-          { icon: <Users className="h-4 w-4" />, label: 'Portal users', value: orgUsers.length, sub: `${orgUsers.filter(u => u.status === 'active').length} active` },
+          { icon: <Users className="h-4 w-4" />, label: 'Portal users', value: orgUsers.length, sub: `${orgUsers.filter(u => clientAccounts[u.email.toLowerCase()]).length} logged in` },
         ].map(({ icon, label, value, sub }) => (
           <div key={label} className="rounded-2xl border border-[var(--border)] bg-white p-4">
             <div className="mb-2 flex items-center gap-1.5 text-xs text-[var(--light)]">
@@ -1887,24 +2013,46 @@ function OrgDetail({
           </div>
 
           {/* Add user */}
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={addUserFirst}
+                onChange={(e) => setAddUserFirst(e.target.value)}
+                placeholder="First name"
+                className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+              />
+              <input
+                value={addUserLast}
+                onChange={(e) => setAddUserLast(e.target.value)}
+                placeholder="Last name"
+                className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+              />
+            </div>
             <input
-              value={addUserEmail}
-              onChange={(e) => setAddUserEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addUser()}
-              placeholder="email@client.com"
-              type="email"
-              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+              value={addUserTitle}
+              onChange={(e) => setAddUserTitle(e.target.value)}
+              placeholder="Job title (e.g. CEO, Hiring Manager)"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
             />
-            <button
-              onClick={addUser}
-              disabled={addingUser || !addUserEmail.trim()}
-              className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-50"
-              style={{ background: 'var(--green)' }}
-            >
-              {addingUser ? <Spinner size="sm" /> : <UserPlus className="h-3.5 w-3.5" />}
-              Invite
-            </button>
+            <div className="flex gap-2">
+              <input
+                value={addUserEmail}
+                onChange={(e) => setAddUserEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addUser()}
+                placeholder="email@client.com"
+                type="email"
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+              />
+              <button
+                onClick={addUser}
+                disabled={addingUser || !addUserEmail.trim()}
+                className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-50"
+                style={{ background: 'var(--green)' }}
+              >
+                {addingUser ? <Spinner size="sm" /> : <UserPlus className="h-3.5 w-3.5" />}
+                Invite
+              </button>
+            </div>
           </div>
 
           {orgUsers.length === 0 ? (
@@ -1913,22 +2061,68 @@ function OrgDetail({
             </div>
           ) : (
             <div className="space-y-2">
-              {orgUsers.map((u) => (
+              {orgUsers.map((u) => {
+                const account = clientAccounts[u.email.toLowerCase()];
+                const loggedIn = !!account;
+                const suspended = !!account?.suspended;
+                const displayName = account?.name || u.name
+                  || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
+                const title = account?.jobTitle || account?.displayRole || u.jobTitle || '';
+                const busy = userActionBusy.has(u.email);
+                const last = account?.lastLoginAt;
+                const lastMs = typeof last === 'object' && last && 'seconds' in last
+                  ? last.seconds * 1000 : (typeof last === 'string' ? Date.parse(last) : NaN);
+                const lastStr = Number.isFinite(lastMs) ? fmtDate(new Date(lastMs).toISOString()) : '';
+                const dotColor = suspended ? '#DC2626' : loggedIn ? 'var(--green)' : '#9E9E9E';
+                return (
                 <div key={u.email} className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2.5">
                   <div
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-700 text-white"
-                    style={{ background: u.status === 'active' ? 'var(--green)' : '#9E9E9E' }}
+                    style={{ background: dotColor }}
                   >
-                    {u.email.charAt(0).toUpperCase()}
+                    {(displayName || u.email).charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-500 text-[var(--black)]">{u.email}</p>
-                    <p className={`text-[10px] font-600 ${u.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {u.status === 'active' ? '● Active' : '○ Invited'}
+                    <p className="truncate text-xs font-500 text-[var(--black)]">
+                      {displayName}{title ? <span className="font-400 text-[var(--light)]"> · {title}</span> : null}
+                    </p>
+                    <p className="truncate text-[10px] text-[var(--light)]">{u.email}</p>
+                    <p className={`text-[10px] font-600 ${suspended ? 'text-red-600' : loggedIn ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {suspended
+                        ? '● Suspended'
+                        : loggedIn
+                          ? `● Logged in${lastStr ? ` · ${lastStr}` : ''}`
+                          : '○ Invited'}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    {u.status !== 'active' && (
+                    {loggedIn ? (
+                      <>
+                        <button
+                          onClick={() => openPositionModal(account)}
+                          title="Update position"
+                          className="rounded-md p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+                        >
+                          <Briefcase className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => resetUserPassword(u.email)}
+                          disabled={busy}
+                          title="Send password reset email"
+                          className="rounded-md p-1.5 text-[var(--light)] hover:bg-[var(--bg)] hover:text-[var(--green)] disabled:opacity-50"
+                        >
+                          {busy ? <Spinner size="sm" /> : <KeyRound className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => toggleUserSuspend(account)}
+                          disabled={busy}
+                          title={suspended ? 'Reactivate user' : 'Suspend user'}
+                          className={`rounded-md p-1.5 disabled:opacity-50 ${suspended ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[var(--light)] hover:bg-amber-50 hover:text-amber-600'}`}
+                        >
+                          {suspended ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+                        </button>
+                      </>
+                    ) : (
                       <button
                         onClick={() => resendInvite(u.email)}
                         disabled={invitesSending.has(u.email)}
@@ -1947,7 +2141,8 @@ function OrgDetail({
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -2033,6 +2228,38 @@ function OrgDetail({
               {savingSpend && <Spinner size="sm" />}Save
             </button>
             <button onClick={() => setSpendModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Update position modal */}
+      <Modal open={positionModal} onClose={() => setPositionModal(false)} title="Update position" size="sm">
+        <div className="space-y-4">
+          {positionAccount && (
+            <p className="text-xs text-[var(--light)]">
+              Set the job title shown to <span className="font-600 text-[var(--black)]">{positionAccount.name || positionAccount.email}</span> in their portal.
+            </p>
+          )}
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Job title</label>
+            <input
+              value={positionInput}
+              onChange={(e) => setPositionInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveUserPosition()}
+              placeholder="e.g. CEO, Hiring Manager"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveUserPosition}
+              disabled={savingPosition}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-50"
+              style={{ background: 'var(--green)' }}
+            >
+              {savingPosition && <Spinner size="sm" />}Save
+            </button>
+            <button onClick={() => setPositionModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
           </div>
         </div>
       </Modal>

@@ -78,9 +78,27 @@ export type OrgContractType = 'managed_team' | 'eor' | 'spp' | 'direct';
 export interface OrgUser {
   email: string;
   name?: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
   role?: string;
   status?: 'invited' | 'active' | 'inactive';
   invitedAt?: string;
+}
+
+// A client account as it actually exists in the App's `users` collection.
+// Used by the Admin People tab to show real login status (vs. just "invited").
+export interface ClientAccount {
+  id: string;
+  email: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
+  displayRole?: string;
+  orgId?: string;
+  suspended?: boolean;
+  lastLoginAt?: { seconds: number } | string | null;
 }
 
 // ─── Account Health (internal — never shown to the partner) ────────────────────

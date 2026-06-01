@@ -17,9 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, sortByTimestamp, generateCode } from '@/lib/utils';
-import type { Opening, Organization } from '@/lib/types';
+import type { Opening, Organization, WorkMode } from '@/lib/types';
+import { WORK_MODE_LABELS } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { Search, Plus, X, Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle, ChevronRight } from 'lucide-react';
+import { Search, Plus, X, Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle, ChevronRight, FileText, Globe, ExternalLink } from 'lucide-react';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -74,8 +75,13 @@ export default function OpeningsPage() {
     setSaving(true);
     const org = orgs.find((o) => o.id === form.orgId);
     try {
+      // Generate the shared opening/pipeline code up front so Admin, Jobs and
+      // Talent all reference the same ID (and the kickoff brief can find it).
+      const pipelineCode = generateCode('NW');
+
       const openingRef = await addDoc(collection(db, 'openings'), {
         title: form.title,
+        code: pipelineCode,
         orgId: form.orgId,
         orgName: org?.name ?? '',
         department: form.department,
@@ -93,12 +99,12 @@ export default function OpeningsPage() {
         priority: form.priority,
         status: 'open',
         approvalStatus: 'draft',
+        published: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
       // Auto-create a linked pipeline for every new opening
-      const pipelineCode = generateCode('NW');
       await addDoc(collection(db, 'pipelines'), {
         code: pipelineCode,
         title: form.title,
@@ -461,9 +467,110 @@ function OpeningDetail({
   });
   const [saving, setSaving] = useState(false);
 
+  // ── Opening sheet (Stage 2) — candidate-facing content ────────────────────
+  const [sheet, setSheet] = useState({
+    publicSummary: opening.publicSummary ?? opening.description ?? '',
+    skills: (opening.skills ?? []).join(', '),
+    industry: opening.industry ?? '',
+    seniority: opening.seniority ?? '',
+    workMode: (opening.workMode ?? (opening.remote ? 'remote' : 'onsite')) as WorkMode,
+    city: opening.city ?? opening.location ?? '',
+    benefits: opening.benefits ?? '',
+  });
+  const [sheetSaving, setSheetSaving] = useState(false);
+
+  // Build the denormalized fields jobs.nearwork.co reads, from the sheet.
+  function buildSheetFields() {
+    const skills = sheet.skills.split(',').map((s) => s.trim()).filter(Boolean);
+    return {
+      publicSummary: sheet.publicSummary.trim(),
+      skills,
+      industry: sheet.industry.trim(),
+      seniority: sheet.seniority.trim(),
+      workMode: sheet.workMode,
+      city: sheet.city.trim(),
+      benefits: sheet.benefits.trim(),
+      // Jobs-schema mirrors:
+      currency: opening.salaryCurrency ?? 'USD',
+      wfh: WORK_MODE_LABELS[sheet.workMode],
+      exp: sheet.seniority.trim(),
+      'sb-exp': sheet.seniority.trim(),
+    };
+  }
+
+  const sheetReady =
+    sheet.publicSummary.trim().length > 0 &&
+    sheet.skills.split(',').some((s) => s.trim());
+
+  async function saveSheet() {
+    setSheetSaving(true);
+    try {
+      const fields = buildSheetFields();
+      await updateDoc(doc(db, 'openings', opening.id), {
+        ...fields,
+        updatedAt: serverTimestamp(),
+      });
+      showToast(
+        opening.published ? 'Opening sheet saved & live listing updated' : 'Opening sheet saved',
+        'success',
+      );
+      await onRefresh();
+    } catch {
+      showToast('Failed to save opening sheet', 'error');
+    } finally {
+      setSheetSaving(false);
+    }
+  }
+
+  // Publish → write the Jobs projection so jobs.nearwork.co shows the role.
+  async function publishToJobs() {
+    if (!sheetReady) {
+      showToast('Add a public summary and at least one skill before publishing', 'error');
+      return;
+    }
+    setApprovalSaving(true);
+    try {
+      await updateDoc(doc(db, 'openings', opening.id), {
+        ...buildSheetFields(),
+        published: true,
+        publishedAt: serverTimestamp(),
+        approvalStatus: 'published',
+        status: 'open',
+        code: opening.code ?? opening.id,
+        updatedAt: serverTimestamp(),
+      });
+      showToast('Published to jobs.nearwork.co', 'success');
+      await onRefresh();
+    } catch {
+      showToast('Failed to publish', 'error');
+    } finally {
+      setApprovalSaving(false);
+    }
+  }
+
+  // Unpublish → pull the role from jobs.nearwork.co (URL stays, Apply disabled).
+  async function unpublish() {
+    setApprovalSaving(true);
+    try {
+      await updateDoc(doc(db, 'openings', opening.id), {
+        published: false,
+        approvalStatus: 'approved',
+        updatedAt: serverTimestamp(),
+      });
+      showToast('Removed from jobs.nearwork.co', 'success');
+      await onRefresh();
+    } catch {
+      showToast('Failed to unpublish', 'error');
+    } finally {
+      setApprovalSaving(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     try {
+      // Paused / cancelled / filled openings must not stay live on Jobs.
+      const goneFromJobs = ['paused', 'cancelled', 'filled'].includes(editForm.status);
       await updateDoc(doc(db, 'openings', opening.id), {
         title: editForm.title,
         location: editForm.location,
@@ -476,9 +583,15 @@ function OpeningDetail({
         priority: editForm.priority,
         salaryMin: editForm.salaryMin ? Number(editForm.salaryMin) : null,
         salaryMax: editForm.salaryMax ? Number(editForm.salaryMax) : null,
+        ...(goneFromJobs && opening.published ? { published: false } : {}),
         updatedAt: serverTimestamp(),
       });
-      showToast('Opening updated', 'success');
+      showToast(
+        goneFromJobs && opening.published
+          ? 'Opening updated · removed from jobs.nearwork.co'
+          : 'Opening updated',
+        'success',
+      );
       setEditing(false);
       await onRefresh();
     } catch {
@@ -591,21 +704,41 @@ function OpeningDetail({
               <span className="text-xs text-[var(--light)]">Awaiting admin approval</span>
             )}
             {approvalStatus === 'approved' && (
-              <button
-                onClick={() => updateApproval('published')}
-                disabled={approvalSaving}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-60"
-                style={{ background: 'var(--green)' }}
-              >
-                {approvalSaving ? <Spinner size="sm" /> : <CheckCircle className="h-3.5 w-3.5" />}
-                Publish opening
-              </button>
+              <div className="flex items-center gap-2">
+                {!sheetReady && (
+                  <span className="text-[10px] text-[var(--light)]">Fill the opening sheet first</span>
+                )}
+                <button
+                  onClick={publishToJobs}
+                  disabled={approvalSaving || !sheetReady}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-50"
+                  style={{ background: 'var(--green)' }}
+                >
+                  {approvalSaving ? <Spinner size="sm" /> : <Globe className="h-3.5 w-3.5" />}
+                  Publish to Jobs
+                </button>
+              </div>
             )}
             {approvalStatus === 'published' && (
-              <span className="flex items-center gap-1.5 text-xs font-600 text-green-700">
-                <CheckCircle className="h-4 w-4" />
-                Published and active
-              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`https://jobs.nearwork.co/apply.html?code=${opening.code ?? opening.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  View on Jobs
+                </a>
+                <button
+                  onClick={unpublish}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-red-300 hover:text-red-600 disabled:opacity-60"
+                >
+                  {approvalSaving ? <Spinner size="sm" /> : <X className="h-3.5 w-3.5" />}
+                  Unpublish
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -750,6 +883,121 @@ function OpeningDetail({
         </div>
       )}
     </div>
+
+      {/* ── Opening sheet (Stage 2) — public listing on jobs.nearwork.co ─────── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+        <div className="mb-4 flex items-start gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: 'var(--green-soft)', color: 'var(--green)' }}
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-700 text-[var(--black)]">Opening sheet</h3>
+            <p className="mt-0.5 text-xs text-[var(--light)]">
+              The public, candidate-facing listing shown on jobs.nearwork.co. Fill it in, then publish.
+            </p>
+          </div>
+          {opening.published && (
+            <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-[10px] font-700 text-green-700">
+              <Globe className="h-3 w-3" />Live
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Public summary <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={sheet.publicSummary}
+              onChange={(e) => setSheet((s) => ({ ...s, publicSummary: e.target.value }))}
+              rows={4}
+              placeholder="What the role is, who it's for, and why it's exciting — written for candidates."
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Skills <span className="text-red-500">*</span> <span className="normal-case font-400">(comma-separated)</span>
+            </label>
+            <input
+              value={sheet.skills}
+              onChange={(e) => setSheet((s) => ({ ...s, skills: e.target.value }))}
+              placeholder="React, TypeScript, Node.js, GraphQL"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Industry</label>
+            <input
+              value={sheet.industry}
+              onChange={(e) => setSheet((s) => ({ ...s, industry: e.target.value }))}
+              placeholder="SaaS / Fintech"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Seniority</label>
+            <input
+              value={sheet.seniority}
+              onChange={(e) => setSheet((s) => ({ ...s, seniority: e.target.value }))}
+              placeholder="Mid / Senior / Lead"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Work mode</label>
+            <select
+              value={sheet.workMode}
+              onChange={(e) => setSheet((s) => ({ ...s, workMode: e.target.value as WorkMode }))}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)]"
+            >
+              {(Object.keys(WORK_MODE_LABELS) as WorkMode[]).map((m) => (
+                <option key={m} value={m}>{WORK_MODE_LABELS[m]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">City</label>
+            <input
+              value={sheet.city}
+              onChange={(e) => setSheet((s) => ({ ...s, city: e.target.value }))}
+              placeholder="Bogotá"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Benefits</label>
+            <textarea
+              value={sheet.benefits}
+              onChange={(e) => setSheet((s) => ({ ...s, benefits: e.target.value }))}
+              rows={2}
+              placeholder="Health insurance, remote stipend, learning budget…"
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            onClick={saveSheet}
+            disabled={sheetSaving}
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
+            style={{ background: 'var(--green)' }}
+          >
+            {sheetSaving ? <Spinner size="sm" /> : <FileText className="h-3.5 w-3.5" />}
+            Save sheet
+          </button>
+          {!sheetReady && (
+            <span className="text-[10px] text-[var(--light)]">
+              Public summary + at least one skill are required to publish.
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

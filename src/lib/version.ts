@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.6.1';
+export const APP_VERSION = '0.7.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,36 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.7.0',
+    date: '2026-05-31',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Openings now publish to jobs.nearwork.co — every opening gets an “Opening sheet” you fill in (public summary, skills, industry, seniority, work mode, city, benefits), then hit Publish to make it live for candidates (Opening → Jobs bridge)',
+          'New opening sheet editor on every opening detail page, with a clear “Live” badge once it’s published',
+          'Publish to Jobs button (replaces the old Publish step) is gated until the sheet has a public summary and at least one skill, so we never push an empty listing',
+          'When published, the opening shows a “View on Jobs” link straight to the public apply page, plus a one-click Unpublish to pull it back down',
+          'Every new opening now gets a shared NW-code at creation — the same ID flows across Admin, the pipeline, the kickoff brief, and Jobs',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'Openings created in Admin never appeared on jobs.nearwork.co — Admin only flipped an internal approval flag and never wrote the public listing fields Jobs reads. Publishing now writes published:true plus the full candidate-facing projection',
+          'Pausing, filling, or cancelling an opening now automatically removes it from jobs.nearwork.co',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Opening gains code, publicSummary, skills, industry, seniority, workMode, city, benefits, plus the Jobs-schema mirrors (published, publishedAt, currency, wfh, exp, sb-exp)',
+          'New WorkMode type + WORK_MODE_LABELS; saveOpening generates the NW code first and stores it on both the opening and its pipeline',
+        ],
+      },
+    ],
+  },
   {
     version: '0.6.1',
     date: '2026-05-31',

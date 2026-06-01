@@ -214,6 +214,8 @@ export interface Opening {
   approvalStatus?: OpeningApprovalStatus;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   targetDate?: string;
+  // Shared opening ID across Admin / Jobs / Talent (mirrors the pipeline NW code)
+  code?: string;
   // Team fields
   sourcer?: string;
   recruiter?: string;
@@ -224,7 +226,34 @@ export interface Opening {
   applicationCount?: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+
+  // ─── Opening sheet (Stage 2) — candidate-facing content that projects to
+  // jobs.nearwork.co. Filled after the kickoff (Stage 1) is verified. ─────────
+  publicSummary?: string;          // candidate-facing role description
+  skills?: string[];               // key skills (chips on the job card)
+  industry?: string;               // e.g. SaaS, Fintech
+  seniority?: string;              // e.g. Junior / Mid / Senior
+  workMode?: WorkMode;             // remote / hybrid / onsite
+  city?: string;                   // candidate-facing location
+  benefits?: string;               // free-text benefits / perks
+
+  // ─── Jobs projection (written on publish so jobs.nearwork.co can read it) ───
+  published?: boolean;             // jobs.nearwork.co filters on published == true
+  publishedAt?: Timestamp;
+  // Jobs-schema mirror fields (denormalized from the above on publish):
+  currency?: string;               // mirrors salaryCurrency
+  wfh?: string;                    // "Remote" | "Hybrid" | "On-site" (from workMode)
+  exp?: string;                    // mirrors seniority
+  'sb-exp'?: string;               // mirrors seniority (Jobs reads either)
 }
+
+export type WorkMode = 'remote' | 'hybrid' | 'onsite';
+
+export const WORK_MODE_LABELS: Record<WorkMode, string> = {
+  remote: 'Remote',
+  hybrid: 'Hybrid',
+  onsite: 'On-site',
+};
 
 export interface QuestionSettings {
   useAssessment: boolean;

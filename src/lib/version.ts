@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.7.2';
+export const APP_VERSION = '0.7.3';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.7.3',
+    date: '2026-05-31',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Partners on app.nearwork.co could not send or see pipeline chat messages ("Missing or insufficient permissions") — chat access is now granted by company/organisation membership instead of an exact role match, so any invited partner on the right company can read and reply',
+          'Pipeline chat messages now carry the organisation they belong to, keeping each company’s thread private to that company',
+        ],
+      },
+    ],
+  },
   {
     version: '0.7.2',
     date: '2026-05-31',

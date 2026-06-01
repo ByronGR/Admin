@@ -403,6 +403,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     try {
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
+        orgId: pipeline.orgId || '',
         kind: 'msg',
         authorId: me.id,
         authorName: me.name,
@@ -440,6 +441,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     try {
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
+        orgId: pipeline.orgId || '',
         kind: 'interview',
         authorId: me.id,
         authorName: me.name,

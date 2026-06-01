@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  auth,
   db,
   collection,
   query,
@@ -363,19 +364,39 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     }
   }
 
+  // ── Identity ──────────────────────────────────────────────────────────────
+  // Prefer the loaded staff profile, but fall back to the authenticated Firebase
+  // user so a logged-in person can always post — even if their `users` doc
+  // hasn't resolved yet (e.g. hardcoded super admins with no profile doc).
+  function getIdentity(): { id: string; name: string } | null {
+    if (profile?.id) {
+      return { id: profile.id, name: profile.name ?? profile.email ?? 'You' };
+    }
+    const u = auth.currentUser;
+    if (u?.uid) {
+      return { id: u.uid, name: u.displayName || u.email || 'You' };
+    }
+    return null;
+  }
+
   // ── Send message ──────────────────────────────────────────────────────────
 
   async function send() {
     const body = draft.trim();
-    if (!body || sending || !profile) return;
+    if (!body || sending) return;
+    const me = getIdentity();
+    if (!me) {
+      showToast('Still signing you in — try again in a moment', 'error');
+      return;
+    }
     setSending(true);
     try {
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
         kind: 'msg',
-        authorId: profile.id,
-        authorName: profile.name ?? profile.email,
-        authorInitials: getInitialsStr(profile.name ?? profile.email ?? 'U'),
+        authorId: me.id,
+        authorName: me.name,
+        authorInitials: getInitialsStr(me.name),
         authorOrg: 'nearwork',
         body,
         internal: internalMode,
@@ -385,8 +406,10 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
       });
       setDraft('');
       setSlashKind(null);
-    } catch {
-      showToast('Failed to send message', 'error');
+    } catch (err) {
+      console.error('Pipeline chat: send failed', err);
+      const detail = err instanceof Error ? err.message : 'Failed to send message';
+      showToast(`Couldn't send: ${detail}`, 'error');
     } finally {
       setSending(false);
     }
@@ -395,7 +418,12 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
   // ── Schedule interview ────────────────────────────────────────────────────
 
   async function scheduleInterview() {
-    if (!intCandidateId || !intWhen.trim() || !profile) return;
+    if (!intCandidateId || !intWhen.trim()) return;
+    const me = getIdentity();
+    if (!me) {
+      showToast('Still signing you in — try again in a moment', 'error');
+      return;
+    }
     const cand = candidates.find((c) => c.candidateId === intCandidateId);
     if (!cand) return;
     setIntSubmitting(true);
@@ -403,21 +431,23 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
         kind: 'interview',
-        authorId: profile.id,
-        authorName: profile.name ?? profile.email,
-        authorInitials: getInitialsStr(profile.name ?? profile.email ?? 'U'),
+        authorId: me.id,
+        authorName: me.name,
+        authorInitials: getInitialsStr(me.name),
         authorOrg: 'nearwork',
         candidateId: cand.candidateId,
         candidateName: cand.name,
         when: intWhen.trim(),
-        withWho: [profile.name ?? profile.email],
+        withWho: [me.name],
         createdAt: serverTimestamp(),
       });
       setInterviewModal(false);
       setIntCandidateId('');
       setIntWhen('');
-    } catch {
-      showToast('Failed to schedule interview', 'error');
+    } catch (err) {
+      console.error('Pipeline chat: schedule interview failed', err);
+      const detail = err instanceof Error ? err.message : 'Failed to schedule interview';
+      showToast(`Couldn't schedule: ${detail}`, 'error');
     } finally {
       setIntSubmitting(false);
     }
@@ -426,23 +456,26 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
   // ── Reactions ─────────────────────────────────────────────────────────────
 
   async function toggleReaction(messageId: string, emoji: string) {
-    if (!profile) return;
+    const me = getIdentity();
+    if (!me) return;
     const msg = messages.find((m) => m.id === messageId);
     if (!msg || msg.kind !== 'msg') return;
     const reactions = [...(msg.reactions ?? [])];
     const idx = reactions.findIndex((r) => r.emoji === emoji);
     if (idx === -1) {
-      reactions.push({ emoji, userIds: [profile.id] });
+      reactions.push({ emoji, userIds: [me.id] });
     } else {
       const r = reactions[idx];
-      const has = r.userIds.includes(profile.id);
-      const userIds = has ? r.userIds.filter((u) => u !== profile.id) : [...r.userIds, profile.id];
+      const has = r.userIds.includes(me.id);
+      const userIds = has ? r.userIds.filter((u) => u !== me.id) : [...r.userIds, me.id];
       if (userIds.length === 0) reactions.splice(idx, 1);
       else reactions[idx] = { ...r, userIds };
     }
     try {
       await updateDoc(doc(db, 'pipeline_messages', messageId), { reactions });
-    } catch {}
+    } catch (err) {
+      console.error('Pipeline chat: reaction failed', err);
+    }
     setReactPickerFor(null);
   }
 

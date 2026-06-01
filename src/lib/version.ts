@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.6.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,25 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.6.1',
+    date: '2026-05-31',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Pipeline chat: sending a message could silently do nothing if your staff profile hadn’t finished loading — the composer now falls back to your signed-in account so messages always go through',
+          'Pipeline chat now shows the real reason when a message can’t be sent (instead of a generic failure), making permission issues easy to spot',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'pipeline-chat send/schedule/react paths use a getIdentity() fallback to auth.currentUser when the users-doc profile is null (e.g. hardcoded super admins) and surface caught Firestore errors',
+        ],
+      },
+    ],
+  },
   {
     version: '0.6.0',
     date: '2026-05-30',

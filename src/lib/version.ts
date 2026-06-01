@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.7.1';
+export const APP_VERSION = '0.7.2';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.7.2',
+    date: '2026-05-31',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Pipeline chat messages were not appearing after sending — the message thread now loads reliably without depending on a Firestore index, and sorts correctly by time',
+          'Chat read errors are now logged to the console instead of being silently hidden, so any future issue is easy to diagnose',
+        ],
+      },
+    ],
+  },
   {
     version: '0.7.1',
     date: '2026-05-31',

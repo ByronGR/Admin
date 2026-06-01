@@ -14,7 +14,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   limit,
   addDoc,
   updateDoc,
@@ -248,21 +247,32 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
   // ── Real-time messages ────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!pipeline.code) {
+      setMessages([]);
+      setMsgsLoading(false);
+      return;
+    }
+    // NOTE: query by pipelineCode equality only (no orderBy) so this never needs
+    // a composite Firestore index — indexes are managed by hand for this project
+    // and a missing pipelineCode+createdAt index would silently break the thread.
+    // We sort client-side below.
     const q = query(
       collection(db, 'pipeline_messages'),
       where('pipelineCode', '==', pipeline.code),
-      orderBy('createdAt', 'asc'),
       limit(200)
     );
     const unsub = onSnapshot(
       q,
       (snap) => {
-        setMessages(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage))
-        );
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage));
+        rows.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+        setMessages(rows);
         setMsgsLoading(false);
       },
-      () => setMsgsLoading(false)
+      (err) => {
+        console.error('[pipeline-chat] failed to read pipeline_messages', err);
+        setMsgsLoading(false);
+      }
     );
     return unsub;
   }, [pipeline.code]);

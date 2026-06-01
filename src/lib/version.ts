@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.7.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.7.1',
+    date: '2026-05-31',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Pipeline chat is now a single shared thread with the client portal (app.nearwork.co) — messages you send here appear for the partner, and theirs appear here, with the same redesigned chat (avatars, Nearwork/Partner badges, reactions, @-mentions, /candidate cards)',
+          'Partners on the App now see the same polished pipeline chat design that Admin has',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Interview cards posted to chat now carry an explicit internal:false flag so they surface in the partner’s (client-side) message query',
+          'Internal notes (internal:true) stay Nearwork-only: the App only ever queries non-internal messages, so Firestore rules can deny client reads on internal notes without them leaving the server',
+        ],
+      },
+    ],
+  },
   {
     version: '0.7.0',
     date: '2026-05-31',

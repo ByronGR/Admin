@@ -439,6 +439,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
         candidateName: cand.name,
         when: intWhen.trim(),
         withWho: [me.name],
+        internal: false,
         createdAt: serverTimestamp(),
       });
       setInterviewModal(false);

@@ -268,6 +268,23 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
         rows.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
         setMessages(rows);
         setMsgsLoading(false);
+
+        // Self-heal: older messages predate the orgId stamp. Client portal reads
+        // are gated on sameOrg(resource.data), and Firestore denies a client's
+        // ENTIRE list query if any returned doc lacks a matching orgId — which
+        // silently hid the whole thread on app.nearwork.co. Nearwork staff have
+        // write access, so backfill orgId here whenever a teammate opens the
+        // thread. Guarded so it only writes the missing ones (no update loop).
+        if (pipeline.orgId) {
+          snap.docs.forEach((d) => {
+            const data = d.data() as { orgId?: string };
+            if (!data.orgId) {
+              updateDoc(doc(db, 'pipeline_messages', d.id), { orgId: pipeline.orgId }).catch(
+                (e) => console.error('[pipeline-chat] orgId backfill failed', e)
+              );
+            }
+          });
+        }
       },
       (err) => {
         console.error('[pipeline-chat] failed to read pipeline_messages', err);

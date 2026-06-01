@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.7.3';
+export const APP_VERSION = '0.7.4';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.7.4',
+    date: '2026-06-01',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Pipeline chat messages sent from Admin now reliably appear on app.nearwork.co, and partner messages now stay visible in their own chat history — older messages are automatically tagged with their organisation when a Nearwork teammate opens the thread, so the partner view no longer goes blank',
+        ],
+      },
+    ],
+  },
   {
     version: '0.7.3',
     date: '2026-05-31',

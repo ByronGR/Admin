@@ -17,6 +17,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
+import { StaffPicker } from '@/components/ui/staff-picker';
 import { fmtDate, sortByTimestamp, generateCode } from '@/lib/utils';
 import type { Opening, Organization, WorkMode } from '@/lib/types';
 import { WORK_MODE_LABELS } from '@/lib/types';
@@ -325,11 +326,10 @@ export default function OpeningsPage() {
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
-            <input
+            <StaffPicker
               value={form.recruiter}
-              onChange={(e) => setForm((f) => ({ ...f, recruiter: e.target.value }))}
-              placeholder="Recruiter name"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              onChange={(name) => setForm((f) => ({ ...f, recruiter: name }))}
+              placeholder="Search team for recruiter"
             />
           </div>
           <div>
@@ -345,11 +345,10 @@ export default function OpeningsPage() {
             <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
               Account Manager <span className="normal-case font-400">(optional)</span>
             </label>
-            <input
+            <StaffPicker
               value={form.accountManager}
-              onChange={(e) => setForm((f) => ({ ...f, accountManager: e.target.value }))}
-              placeholder="Account manager name"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              onChange={(name) => setForm((f) => ({ ...f, accountManager: name }))}
+              placeholder="Search team for account manager"
             />
           </div>
           <div>
@@ -830,9 +829,7 @@ function OpeningDetail({
             { key: 'title', label: 'Title' },
             { key: 'location', label: 'Location' },
             { key: 'sourcer', label: 'Sourcer' },
-            { key: 'recruiter', label: 'Recruiter' },
             { key: 'hiringManager', label: 'Hiring Manager' },
-            { key: 'accountManager', label: 'Account Manager (optional)' },
             { key: 'salaryMin', label: 'Salary min', type: 'number' },
             { key: 'salaryMax', label: 'Salary max', type: 'number' },
           ].map(({ key, label, type }) => (
@@ -846,6 +843,24 @@ function OpeningDetail({
               />
             </div>
           ))}
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
+            <StaffPicker
+              compact
+              value={editForm.recruiter}
+              onChange={(name) => setEditForm((f) => ({ ...f, recruiter: name }))}
+              placeholder="Search team for recruiter"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Account Manager (optional)</label>
+            <StaffPicker
+              compact
+              value={editForm.accountManager}
+              onChange={(name) => setEditForm((f) => ({ ...f, accountManager: name }))}
+              placeholder="Search team for account manager"
+            />
+          </div>
           <div>
             <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Status</label>
             <select

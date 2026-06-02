@@ -37,6 +37,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
+import { StaffPicker } from '@/components/ui/staff-picker';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason } from '@/lib/types';
@@ -1141,20 +1142,22 @@ function PipelineWorkspace({
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                 Recruiter
               </label>
-              <input
+              <StaffPicker
+                compact
                 value={editRecruiter}
-                onChange={(e) => setEditRecruiter(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+                onChange={setEditRecruiter}
+                placeholder="Search team for recruiter"
               />
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                Hiring manager
+                Account manager
               </label>
-              <input
+              <StaffPicker
+                compact
                 value={editManager}
-                onChange={(e) => setEditManager(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
+                onChange={setEditManager}
+                placeholder="Search team for account manager"
               />
             </div>
             <div>

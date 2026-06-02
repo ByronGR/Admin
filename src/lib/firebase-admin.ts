@@ -1,5 +1,6 @@
 import { getApps, initializeApp, applicationDefault, cert, type App, type Credential } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 import { ExternalAccountClient } from 'google-auth-library';
 import { getVercelOidcToken } from '@vercel/functions/oidc';
 
@@ -93,4 +94,8 @@ function adminApp(): App {
 
 export function adminAuth() {
   return getAuth(adminApp());
+}
+
+export function adminDb() {
+  return getFirestore(adminApp());
 }

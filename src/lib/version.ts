@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.7.4';
+export const APP_VERSION = '0.8.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,20 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.8.0',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Creating a new opening now takes you straight into its kick-off brief, so you can capture everything from the kick-off call before sourcing begins',
+          'Clients can now review, approve, or request changes to the kick-off brief from app.nearwork.co — once they approve, the brief is locked as the agreed source of truth for the search',
+          'Kick-off briefs now sync end-to-end: drafts you save in Admin, submissions for client review, client approvals and change requests all flow through a single secure, audited channel (internal-only notes are never shown to the client)',
+        ],
+      },
+    ],
+  },
   {
     version: '0.7.4',
     date: '2026-06-01',

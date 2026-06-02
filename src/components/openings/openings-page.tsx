@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   db,
   collection,
@@ -27,6 +28,7 @@ import { Search, Plus, X, Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCir
 export default function OpeningsPage() {
   const { showToast } = useToast();
   const { profile } = useAuth();
+  const router = useRouter();
 
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
@@ -123,7 +125,7 @@ export default function OpeningsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      showToast(`Opening created · Pipeline ${pipelineCode} auto-generated`, 'success');
+      showToast(`Opening created · Pipeline ${pipelineCode} — opening kick-off brief`, 'success');
       setNewModal(false);
       setForm({
         title: '', orgId: '', orgName: '', department: '', location: '',
@@ -132,9 +134,10 @@ export default function OpeningsPage() {
         sourcer: '', recruiter: '', hiringManager: '', accountManager: '',
         priority: 'medium',
       });
-      // Reload
-      const snap = await getDocs(collection(db, 'openings'));
-      setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
+      // Go straight to the kick-off brief for the new opening so the recruiter can
+      // capture the kick-off call before sourcing. The brief is keyed by pipelineCode.
+      router.push(`/kickoff?code=${encodeURIComponent(pipelineCode)}`);
+      return;
     } catch {
       showToast('Failed to create opening', 'error');
     } finally {

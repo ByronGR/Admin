@@ -378,7 +378,20 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-700 text-[var(--black)]">{candidate.name}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-700 text-[var(--black)]">{candidate.name}</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(candidate.code ?? candidate.id);
+                    showToast(`Candidate ID ${candidate.code ?? candidate.id} copied`, 'success');
+                  }}
+                  title="Copy candidate ID"
+                  className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 font-mono text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+                >
+                  {candidate.code ?? candidate.id}
+                </button>
+              </div>
               <p className="text-xs text-[var(--mid)]">
                 {candidate.currentRole ?? '—'}
                 {candidate.currentCompany ? ` at ${candidate.currentCompany}` : ''}

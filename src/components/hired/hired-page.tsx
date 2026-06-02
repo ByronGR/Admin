@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   db,
   collection,
   getDocs,
-  addDoc,
+  doc,
+  getDoc,
+  setDoc,
   serverTimestamp,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
@@ -13,11 +15,11 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, fmtCurrency, sortByTimestamp } from '@/lib/utils';
-import type { Placement, EngagementType } from '@/lib/types';
+import { fmtDate, fmtCurrency, sortByTimestamp, initials } from '@/lib/utils';
+import type { Placement, EngagementType, Candidate } from '@/lib/types';
 import { ENGAGEMENT_LABELS } from '@/lib/types';
 import {
-  Search, Plus, Trophy, Shield, DollarSign, ChevronRight,
+  Search, Plus, Trophy, Shield, DollarSign, ChevronRight, X,
 } from 'lucide-react';
 
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
@@ -51,20 +53,54 @@ export default function HiredPage() {
 
   const [newModal, setNewModal] = useState(false);
   const [form, setForm] = useState({
-    candidateName: '', candidateEmail: '', orgName: '', openingTitle: '',
+    candidateId: '', candidateName: '', candidateEmail: '', orgName: '', openingTitle: '',
     pipelineCode: '', startDate: '', salaryAmount: '', salaryCurrency: 'USD',
     guaranteeDays: '90', referralSource: '', referralFee: '',
     engagementType: 'direct' as EngagementType,
   });
   const [saving, setSaving] = useState(false);
 
+  // Candidate directory for the placement picker — a placement is keyed by the
+  // selected candidate's ID so /hired/<id> and /candidates/<id> are one person.
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candQuery, setCandQuery] = useState('');
+  const [candOpen, setCandOpen] = useState(false);
+  const candBoxRef = useRef<HTMLDivElement>(null);
+
+  // Close the candidate dropdown on outside click.
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (candBoxRef.current && !candBoxRef.current.contains(e.target as Node)) {
+        setCandOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const candMatches = useMemo(() => {
+    const q = candQuery.trim().toLowerCase();
+    const placedIds = new Set(placements.map((p) => p.candidateId).filter(Boolean));
+    return candidates
+      .filter((c) => !placedIds.has(c.id))
+      .filter((c) =>
+        !q ||
+        [c.name, c.email, c.code, c.id].filter(Boolean).join(' ').toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+  }, [candidates, candQuery, placements]);
+
   useEffect(() => { load(); }, []);
 
   async function load() {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, 'placements'));
-      setPlacements(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
+      const [placeSnap, candSnap] = await Promise.all([
+        getDocs(collection(db, 'placements')),
+        getDocs(collection(db, 'candidates')),
+      ]);
+      setPlacements(sortByTimestamp(placeSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
+      setCandidates(candSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)));
     } catch {
       showToast('Failed to load placements', 'error');
     } finally {
@@ -103,8 +139,12 @@ export default function HiredPage() {
   });
 
   async function savePlacement() {
-    if (!form.candidateName || !form.orgName || !form.startDate) {
-      showToast('Candidate, org, and start date are required', 'error');
+    if (!form.candidateId || !form.candidateName) {
+      showToast('Pick a candidate from the directory first', 'error');
+      return;
+    }
+    if (!form.orgName || !form.startDate) {
+      showToast('Org and start date are required', 'error');
       return;
     }
     setSaving(true);
@@ -112,7 +152,18 @@ export default function HiredPage() {
       const guaranteeEndDate = form.startDate && form.guaranteeDays
         ? new Date(new Date(form.startDate).getTime() + Number(form.guaranteeDays) * 86400000).toISOString().slice(0, 10)
         : undefined;
-      await addDoc(collection(db, 'placements'), {
+      // Key the placement by the candidate's ID so /hired/<id> and
+      // /candidates/<id> reference the same person. Block double-placements.
+      const ref = doc(db, 'placements', form.candidateId);
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        showToast('This candidate already has a placement record', 'error');
+        setSaving(false);
+        return;
+      }
+      await setDoc(ref, {
+        code: form.candidateId,
+        candidateId: form.candidateId,
         candidateName: form.candidateName,
         candidateEmail: form.candidateEmail,
         orgName: form.orgName,
@@ -131,8 +182,9 @@ export default function HiredPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      showToast('Placement recorded', 'success');
+      showToast(`Placement recorded · ID ${form.candidateId}`, 'success');
       setNewModal(false);
+      setForm((f) => ({ ...f, candidateId: '', candidateName: '', candidateEmail: '' }));
       load();
     } catch {
       showToast('Failed to save placement', 'error');
@@ -325,10 +377,78 @@ export default function HiredPage() {
 
       {/* New placement modal */}
       <Modal open={newModal} onClose={() => setNewModal(false)} title="New placement" size="lg">
+        {/* Candidate picker — a placement is keyed by the candidate's ID, so the
+            candidate must be selected from the directory (not free-typed). */}
+        <div className="mb-4" ref={candBoxRef}>
+          <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Candidate *</label>
+          {form.candidateId ? (
+            <div className="flex items-center justify-between rounded-lg border border-[var(--green)] bg-[var(--bg)] px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--green)] text-[10px] font-700 text-white">
+                  {initials(form.candidateName)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-600 text-[var(--black)]">{form.candidateName}</p>
+                  <p className="truncate text-[10px] text-[var(--light)]">
+                    {form.candidateEmail || '—'} · ID {form.candidateId}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, candidateId: '', candidateName: '', candidateEmail: '' }))}
+                className="ml-2 shrink-0 rounded-md p-1 text-[var(--light)] hover:bg-white hover:text-[var(--black)]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
+              <input
+                value={candQuery}
+                onChange={(e) => { setCandQuery(e.target.value); setCandOpen(true); }}
+                onFocus={() => setCandOpen(true)}
+                placeholder="Search candidate by name, email, or ID..."
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] py-2.5 pl-8 pr-3 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+              {candOpen && (
+                <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-[var(--border)] bg-white shadow-lg">
+                  {candMatches.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-[var(--light)]">
+                      {candidates.length === 0 ? 'No candidates yet.' : 'No matching candidate.'}
+                    </div>
+                  ) : (
+                    candMatches.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setForm((f) => ({ ...f, candidateId: c.id, candidateName: c.name, candidateEmail: c.email ?? '' }));
+                          setCandQuery('');
+                          setCandOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--bg)]"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-[10px] font-700 text-[var(--mid)]">
+                          {initials(c.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-600 text-[var(--black)]">{c.name}</p>
+                          <p className="truncate text-[10px] text-[var(--light)]">
+                            {c.email || '—'} · ID {c.code ?? c.id}
+                          </p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {[
-            { key: 'candidateName', label: 'Candidate name *', placeholder: 'Jane Smith' },
-            { key: 'candidateEmail', label: 'Candidate email', placeholder: 'jane@example.com', type: 'email' },
             { key: 'orgName', label: 'Organization *', placeholder: 'Acme Inc.' },
             { key: 'openingTitle', label: 'Role title', placeholder: 'CSM' },
             { key: 'pipelineCode', label: 'Pipeline code', placeholder: 'PL-1234' },

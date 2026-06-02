@@ -275,6 +275,10 @@ export type CandidateStatus =
 
 export interface Candidate {
   id: string;
+  // Short, human-readable ID (e.g. "K7M2PX"). For candidates created in Admin
+  // this equals the Firestore document ID, so /candidates/<code> resolves
+  // directly and a hired placement can share the same ID.
+  code?: string;
   name: string;
   firstName?: string;
   lastName?: string;
@@ -486,6 +490,9 @@ export interface CandidateAssessment {
 
 export interface Placement {
   id: string;
+  // Mirrors the candidate's short code/ID. The placement document is keyed by
+  // this same value, so /hired/<code> and /candidates/<code> are one person.
+  code?: string;
   candidateId: string;
   candidateName?: string;
   candidateEmail?: string;

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.10.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.10.0',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidates now get a short, readable ID (like K7M2PX) shown on their profile and list — click it to copy. The same ID becomes the candidate\'s page address, so /candidates/<id> is easy to share.',
+          'Recording a placement now links it to the candidate: pick the person from a searchable directory instead of re-typing their name, so /hired/<id> and /candidates/<id> are the same person and a candidate can\'t be double-placed.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.9.0',
     date: '2026-06-02',

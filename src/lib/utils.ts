@@ -76,6 +76,24 @@ export function generateCode(prefix = 'PL'): string {
   return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
+// Crockford-style alphabet: no I, L, O, U or 0/1 so codes are unambiguous when
+// read aloud, typed, or pasted into a URL.
+const CANDIDATE_ID_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+
+/**
+ * Generate a short, human-readable candidate ID like "K7M2PX". This becomes the
+ * candidate's Firestore document ID, so /candidates/<id> and the matching
+ * /hired/<id> placement share one ID for the same person. Callers should check
+ * for collisions before writing (the keyspace is ~30^6 so collisions are rare).
+ */
+export function generateCandidateId(len = 6): string {
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    out += CANDIDATE_ID_ALPHABET[Math.floor(Math.random() * CANDIDATE_ID_ALPHABET.length)];
+  }
+  return out;
+}
+
 /** Capitalize first letter */
 export function capitalize(s: string): string {
   if (!s) return '';

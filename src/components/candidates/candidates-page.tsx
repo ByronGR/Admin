@@ -7,14 +7,16 @@ import {
   collection,
   getDocs,
   serverTimestamp,
-  addDoc,
+  doc,
+  getDoc,
+  setDoc,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Search, Plus, Download } from 'lucide-react';
 
@@ -115,7 +117,18 @@ export default function CandidatesPage() {
     }
     setSaving(true);
     try {
-      await addDoc(collection(db, 'candidates'), {
+      // Give every new candidate a short, human-readable ID and use it as the
+      // Firestore document ID, so /candidates/<code> resolves directly and a
+      // future hired placement can reuse the same ID. Retry a few times in the
+      // (very unlikely) event of a collision.
+      let code = generateCandidateId();
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const existing = await getDoc(doc(db, 'candidates', code));
+        if (!existing.exists()) break;
+        code = generateCandidateId();
+      }
+      await setDoc(doc(db, 'candidates', code), {
+        code,
         name: form.name,
         email: form.email,
         phone: form.phone,
@@ -129,7 +142,7 @@ export default function CandidatesPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      showToast('Candidate added', 'success');
+      showToast(`Candidate added · ID ${code}`, 'success');
       setNewModal(false);
       setForm({ name: '', email: '', phone: '', location: '', currentRole: '', currentCompany: '', linkedIn: '', skills: '' });
       load();
@@ -310,7 +323,10 @@ export default function CandidatesPage() {
                           {initials(c.name)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-600 text-[var(--black)]">{c.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-xs font-600 text-[var(--black)]">{c.name}</p>
+                            <span className="shrink-0 rounded font-mono text-[9px] font-600 text-[var(--light)]">{c.code ?? c.id}</span>
+                          </div>
                           <p className="truncate text-[10px] text-[var(--light)]">{c.email}</p>
                         </div>
                       </div>

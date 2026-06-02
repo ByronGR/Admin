@@ -201,6 +201,14 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
 
   const candidates = pipeline.candidates ?? [];
 
+  // The pipeline's owning org may be stored under orgId OR organizationId
+  // depending on how the pipeline was created. Resolve both so chat messages
+  // are always stamped with a real org — an empty orgId silently poisons the
+  // client's list query (Firestore denies the WHOLE query if any returned
+  // message fails sameOrg), which hides the entire thread on app.nearwork.co.
+  const resolvedOrgId =
+    pipeline.orgId || (pipeline as { organizationId?: string }).organizationId || '';
+
   // ── Load staff for @mention autocomplete ──────────────────────────────────
 
   useEffect(() => {
@@ -275,11 +283,11 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
         // silently hid the whole thread on app.nearwork.co. Nearwork staff have
         // write access, so backfill orgId here whenever a teammate opens the
         // thread. Guarded so it only writes the missing ones (no update loop).
-        if (pipeline.orgId) {
+        if (resolvedOrgId) {
           snap.docs.forEach((d) => {
             const data = d.data() as { orgId?: string };
-            if (!data.orgId) {
-              updateDoc(doc(db, 'pipeline_messages', d.id), { orgId: pipeline.orgId }).catch(
+            if (data.orgId !== resolvedOrgId) {
+              updateDoc(doc(db, 'pipeline_messages', d.id), { orgId: resolvedOrgId }).catch(
                 (e) => console.error('[pipeline-chat] orgId backfill failed', e)
               );
             }
@@ -420,7 +428,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     try {
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
-        orgId: pipeline.orgId || '',
+        orgId: resolvedOrgId,
         kind: 'msg',
         authorId: me.id,
         authorName: me.name,
@@ -458,7 +466,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     try {
       await addDoc(collection(db, 'pipeline_messages'), {
         pipelineCode: pipeline.code,
-        orgId: pipeline.orgId || '',
+        orgId: resolvedOrgId,
         kind: 'interview',
         authorId: me.id,
         authorName: me.name,

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.8.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.8.1',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Pipeline chat messages now sync reliably both ways between Admin and the client portal — a message stamped without an organization no longer hides the entire conversation on app.nearwork.co',
+        ],
+      },
+    ],
+  },
   {
     version: '0.8.0',
     date: '2026-06-02',

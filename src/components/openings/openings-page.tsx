@@ -7,6 +7,7 @@ import {
   collection,
   getDocs,
   doc,
+  getDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -436,6 +437,21 @@ function ApprovalBadge({ status }: { status?: string }) {
   return null;
 }
 
+// Kick-off brief status pill (mirrors the statuses used on the /kickoff page).
+function BriefStatusBadge({ status, loading }: { status: string | null; loading?: boolean }) {
+  if (loading) return <span className="text-[10px] text-[var(--light)]">checking…</span>;
+  const map: Record<string, { cls: string; label: string }> = {
+    draft: { cls: 'bg-[var(--bg)] text-[var(--light)] border border-[var(--border)]', label: '● Draft' },
+    submitted: { cls: 'bg-blue-50 text-blue-600 border border-blue-200', label: '⏳ Sent to client' },
+    changes_requested: { cls: 'bg-amber-50 text-amber-800 border border-amber-200', label: '⚠️ Changes requested' },
+    approved: { cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200', label: '✅ Client approved' },
+  };
+  const s = status == null
+    ? { cls: 'bg-[var(--bg)] text-[var(--light)] border border-dashed border-[var(--border2)]', label: 'Not started' }
+    : (map[status] ?? map.draft);
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-700 ${s.cls}`}>{s.label}</span>;
+}
+
 function OpeningDetail({
   opening,
   orgs,
@@ -450,10 +466,30 @@ function OpeningDetail({
   onRefresh: () => Promise<void>;
 }) {
   const { showToast } = useToast();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [approvalSaving, setApprovalSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // ── Stage 1 · Kick-off Brief status (the doc sent to the client to approve) ──
+  // The brief lives at kickoffBriefs/{code}; we read its status so the opening
+  // surfaces where the kick-off stands without opening the full brief page.
+  const briefCode = opening.code ?? opening.id;
+  const [briefStatus, setBriefStatus] = useState<string | null>(null);
+  const [briefLoading, setBriefLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    setBriefLoading(true);
+    getDoc(doc(db, 'kickoffBriefs', briefCode))
+      .then((snap) => {
+        if (!alive) return;
+        setBriefStatus(snap.exists() ? ((snap.data().status as string) ?? 'draft') : null);
+      })
+      .catch(() => { if (alive) setBriefStatus(null); })
+      .finally(() => { if (alive) setBriefLoading(false); });
+    return () => { alive = false; };
+  }, [briefCode]);
   const [editForm, setEditForm] = useState({
     title: opening.title,
     description: opening.description ?? '',
@@ -647,6 +683,47 @@ function OpeningDetail({
 
   return (
     <div className="space-y-4">
+      {/* ── Stage 1 · Kick-off Brief ──────────────────────────────────────────
+          The intake document captured on the kick-off call and sent to the
+          client for their approval before sourcing begins. */}
+      <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3 min-w-0">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: 'var(--green-soft)', color: 'var(--green)' }}
+            >
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[10px] font-700 text-[var(--mid)]">STAGE 1</span>
+                <h3 className="text-sm font-700 text-[var(--black)]">Kick-off Brief</h3>
+                <BriefStatusBadge status={briefStatus} loading={briefLoading} />
+              </div>
+              <p className="mt-1 max-w-xl text-xs text-[var(--light)]">
+                The intake captured on the kick-off call. This is the document sent to the client
+                for their approval before sourcing begins.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => router.push(`/kickoff?code=${encodeURIComponent(briefCode)}`)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
+            style={{ background: 'var(--green)' }}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            {briefStatus == null ? 'Start kick-off brief' : 'Open kick-off brief'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Stage 2 · Opening & Publishing ─────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-1 pt-1">
+        <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[10px] font-700 text-[var(--mid)]">STAGE 2</span>
+        <span className="text-xs font-600 text-[var(--mid)]">Opening &amp; Publishing</span>
+      </div>
+
       {/* Approval flow bar */}
       <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">

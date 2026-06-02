@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.10.0';
+export const APP_VERSION = '0.11.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.11.0',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Opening detail now leads with Stage 1 — the Kick-off Brief — showing whether it\'s a draft, sent to the client, has changes requested, or is approved, with a one-click button to open the full brief. The existing opening and publishing flow is now clearly labelled Stage 2.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.10.0',
     date: '2026-06-02',

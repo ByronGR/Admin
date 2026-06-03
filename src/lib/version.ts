@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.11.1';
+export const APP_VERSION = '0.12.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,20 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.12.0',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Each opening now has a unique URL (/openings/NW-XXXXXX) and its Firestore doc ID equals the pipeline code — the same ID is shared across Admin, Jobs, and Talent.',
+          'Opening list shows the NW-XXXXXX code in a dedicated column; clicking a row navigates to the opening\'s own page.',
+          'New Opening button now shows a minimal form (title + org + recruiter + priority) and goes straight to the kick-off brief after creation.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.11.1',
     date: '2026-06-02',

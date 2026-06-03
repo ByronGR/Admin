@@ -1040,6 +1040,7 @@ function PipelineWorkspace({
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
 }) {
   const { showToast } = useToast();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'kanban' | 'chat'>('kanban');
   const [showEdit, setShowEdit] = useState(false);
 
@@ -1125,6 +1126,13 @@ function PipelineWorkspace({
             >
               <Edit3 className="h-3.5 w-3.5" />
               Edit pipeline
+            </button>
+            <button
+              onClick={() => router.push(`/openings/${pipeline.code}`)}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              View opening
             </button>
             <button
               onClick={() => window.open(`/kickoff?code=${pipeline.code}`, '_blank')}

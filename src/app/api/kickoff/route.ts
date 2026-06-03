@@ -160,6 +160,7 @@ async function clientBelongsToOrg(uid: string, email: string, orgId: string): Pr
 export async function POST(req: Request) {
   const origin = req.headers.get('origin');
 
+  try {
   // ── Auth ──
   const authHeader = req.headers.get('authorization') ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -306,4 +307,10 @@ export async function POST(req: Request) {
   }
 
   return json({ ok: false, error: `Unknown action: ${action}` }, 400, origin);
+
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Internal server error';
+    console.error('[kickoff API]', e);
+    return json({ ok: false, error: msg }, 500, origin);
+  }
 }

@@ -240,8 +240,14 @@ export function OpeningDetail({
   async function handleDelete() {
     setDeleting(true);
     try {
+      const code = opening.code ?? opening.id;
       await deleteDoc(doc(db, 'openings', opening.id));
-      showToast('Opening deleted', 'success');
+      // Delete linked pipeline and kickoff brief (ignore errors if they don't exist)
+      await Promise.allSettled([
+        deleteDoc(doc(db, 'pipelines', code)),
+        deleteDoc(doc(db, 'kickoffBriefs', code)),
+      ]);
+      showToast('Opening, pipeline, and kick-off brief deleted', 'success');
       onClose();
     } catch {
       showToast('Failed to delete opening', 'error');
@@ -311,6 +317,19 @@ export function OpeningDetail({
             {briefStatus == null ? 'Start kick-off brief' : 'Open kick-off brief'}
           </button>
         </div>
+      </div>
+
+      {/* Linked pipeline */}
+      <div
+        className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-white px-5 py-3 cursor-pointer hover:border-[var(--green)]"
+        onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[10px] font-700 text-[var(--mid)]">PIPELINE</span>
+          <span className="text-xs font-600 text-[var(--black)] font-mono">{briefCode}</span>
+          <span className="text-xs text-[var(--light)]">· {opening.title}</span>
+        </div>
+        <ChevronRight className="h-3.5 w-3.5 text-[var(--light)]" />
       </div>
 
       {/* Stage 2 · Opening & Publishing */}

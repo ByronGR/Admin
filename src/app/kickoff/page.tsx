@@ -219,7 +219,12 @@ function KickoffInner() {
         ...extraData,
       }),
     });
-    const data = await res.json();
+    let data: { ok: boolean; error?: string };
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server error (${res.status}). Check Vercel logs.`);
+    }
     if (!data.ok) throw new Error(data.error ?? 'API error');
     return data;
   }

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.12.0';
+export const APP_VERSION = '0.12.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.12.1',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Kick-off brief submit now shows a clear error message instead of a cryptic "Unexpected end of JSON" dialog (API route wrapped in top-level error handler).',
+          'Deleting an opening now also deletes the linked pipeline and kick-off brief.',
+        ],
+      },
+      {
+        title: 'Added',
+        items: [
+          'Opening detail shows a clickable pipeline row that navigates to the pipeline workspace.',
+          'Pipeline workspace has a "View opening" button that navigates to the opening detail.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.12.0',
     date: '2026-06-02',

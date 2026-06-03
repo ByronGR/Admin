@@ -121,13 +121,22 @@ export function adminDb(): ReturnType<typeof getFirestore> {
       },
     });
     if (authClient) {
-      // google-gax (used internally by @google-cloud/firestore for gRPC) calls
-      // auth.getUniverseDomain() to validate the universe. ExternalAccountClient
-      // doesn't implement this method — only GoogleAuth does. Shim it in so the
-      // validation passes (we're always targeting the standard googleapis.com universe).
+      // google-gax (used internally by @google-cloud/firestore for gRPC) expects a
+      // GoogleAuth instance and calls several methods that ExternalAccountClient doesn't
+      // implement. Shim each missing method so validation passes.
       const patchedClient = authClient as unknown as Record<string, unknown>;
+      // getUniverseDomain — google-gax/grpc.js:312 validates we're on googleapis.com
       if (typeof patchedClient.getUniverseDomain !== 'function') {
         patchedClient.getUniverseDomain = () => Promise.resolve('googleapis.com');
+      }
+      // getClient — google-gax/grpc.js calls this to retrieve the underlying auth client;
+      // GoogleAuth wraps the real client and returns it here. We ARE the client, so return self.
+      if (typeof patchedClient.getClient !== 'function') {
+        patchedClient.getClient = () => Promise.resolve(authClient);
+      }
+      // getProjectId — may be called to resolve the project; return the configured project.
+      if (typeof patchedClient.getProjectId !== 'function') {
+        patchedClient.getProjectId = () => Promise.resolve(process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-require-imports

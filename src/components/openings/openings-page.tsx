@@ -6,51 +6,35 @@ import {
   db,
   collection,
   getDocs,
-  doc,
-  setDoc,
-  serverTimestamp,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { StaffPicker } from '@/components/ui/staff-picker';
-import { sortByTimestamp, generateCode } from '@/lib/utils';
-import type { Opening, Organization } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth';
+import { sortByTimestamp } from '@/lib/utils';
+import type { Opening } from '@/lib/types';
 import { ApprovalBadge } from './opening-detail';
 import { Search, Plus, ChevronRight } from 'lucide-react';
 
 export default function OpeningsPage() {
   const { showToast } = useToast();
-  const { profile } = useAuth();
   const router = useRouter();
 
   const [openings, setOpenings] = useState<Opening[]>([]);
-  const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  const [newModal, setNewModal] = useState(false);
-  const [form, setForm] = useState({
-    title: '', orgId: '', recruiter: '', priority: 'medium',
-  });
-  const [saving, setSaving] = useState(false);
-
   useEffect(() => {
-    Promise.all([
-      getDocs(collection(db, 'openings')),
-      getDocs(collection(db, 'organizations')),
-    ]).then(([openSnap, orgSnap]) => {
-      setOpenings(sortByTimestamp(openSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
-      setOrgs(orgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization)));
-      setLoading(false);
-    }).catch(() => {
-      showToast('Failed to load openings', 'error');
-      setLoading(false);
-    });
+    getDocs(collection(db, 'openings'))
+      .then((snap) => {
+        setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
+        setLoading(false);
+      })
+      .catch(() => {
+        showToast('Failed to load openings', 'error');
+        setLoading(false);
+      });
   }, []);
 
   const filtered = openings.filter((o) => {
@@ -59,63 +43,6 @@ export default function OpeningsPage() {
     const matchStatus = !statusFilter || o.status === statusFilter;
     return matchSearch && matchStatus;
   });
-
-  async function saveOpening() {
-    if (!form.title || !form.orgId) {
-      showToast('Title and organization are required', 'error');
-      return;
-    }
-    setSaving(true);
-    const org = orgs.find((o) => o.id === form.orgId);
-    try {
-      // The opening's Firestore doc ID = the pipeline code (NW-XXXXXX).
-      // This single ID is shared across Admin, Jobs, and Talent.
-      const code = generateCode('NW');
-
-      await setDoc(doc(db, 'openings', code), {
-        title: form.title,
-        code,
-        orgId: form.orgId,
-        orgName: org?.name ?? '',
-        recruiter: form.recruiter,
-        priority: form.priority,
-        status: 'draft',
-        approvalStatus: 'draft',
-        published: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      await setDoc(doc(db, 'pipelines', code), {
-        code,
-        title: form.title,
-        openingId: code,
-        orgId: form.orgId,
-        orgName: org?.name ?? '',
-        recruiter: form.recruiter,
-        status: 'active',
-        candidates: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      setNewModal(false);
-      setForm({ title: '', orgId: '', recruiter: '', priority: 'medium' });
-      // Go straight to the kick-off brief so the recruiter captures the role details.
-      router.push(`/kickoff?code=${encodeURIComponent(code)}`);
-    } catch {
-      showToast('Failed to create opening', 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const priorityColors: Record<string, string> = {
-    urgent: 'text-red-600',
-    high: 'text-amber-600',
-    medium: 'text-blue-600',
-    low: 'text-gray-500',
-  };
 
   return (
     <MainLayout>
@@ -129,7 +56,7 @@ export default function OpeningsPage() {
             </p>
           </div>
           <button
-            onClick={() => setNewModal(true)}
+            onClick={() => router.push('/openings/new')}
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
             style={{ background: 'var(--green)' }}
           >
@@ -210,72 +137,6 @@ export default function OpeningsPage() {
         )}
       </div>
 
-      {/* New opening modal — title + org only; detail captured in kickoff brief */}
-      <Modal open={newModal} onClose={() => setNewModal(false)} title="New opening">
-        <p className="mb-4 text-xs text-[var(--light)]">
-          After creating the opening you'll be taken straight to the kick-off brief to capture the role details.
-        </p>
-        <div className="grid gap-4">
-          <div>
-            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Job title *</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Customer Success Manager"
-              autoFocus
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Organization *</label>
-            <select
-              value={form.orgId}
-              onChange={(e) => setForm((f) => ({ ...f, orgId: e.target.value }))}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)]"
-            >
-              <option value="">Select organization...</option>
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
-            <StaffPicker
-              value={form.recruiter}
-              onChange={(name) => setForm((f) => ({ ...f, recruiter: name }))}
-              placeholder="Search team for recruiter"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Priority</label>
-            <select
-              value={form.priority}
-              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)]"
-            >
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={() => setNewModal(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">
-            Cancel
-          </button>
-          <button
-            onClick={saveOpening}
-            disabled={saving}
-            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
-            style={{ background: 'var(--green)' }}
-          >
-            {saving && <Spinner size="sm" />}
-            Create → Go to kick-off brief
-          </button>
-        </div>
-      </Modal>
     </MainLayout>
   );
 }

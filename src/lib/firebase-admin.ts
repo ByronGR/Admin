@@ -96,6 +96,41 @@ export function adminAuth() {
   return getAuth(adminApp());
 }
 
-export function adminDb() {
-  return getFirestore(adminApp());
+let cachedFirestore: ReturnType<typeof getFirestore> | null = null;
+
+export function adminDb(): ReturnType<typeof getFirestore> {
+  if (cachedFirestore) return cachedFirestore;
+
+  const audience = process.env.GCP_WIF_AUDIENCE;
+  if (audience) {
+    // firebase-admin v12's getFirestore() rejects any credential that is not
+    // ServiceAccountCredential or ApplicationDefaultCredential (see firestore-internal.js).
+    // Bypass that check by constructing @google-cloud/firestore directly with the
+    // ExternalAccountClient — exactly what firebase-admin does internally, minus the gate.
+    const saEmail = process.env.FIREBASE_SA_EMAIL || DEFAULT_SA_EMAIL;
+    const authClient = ExternalAccountClient.fromJSON({
+      type: 'external_account',
+      audience,
+      subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
+      token_url: 'https://sts.googleapis.com/v1/token',
+      service_account_impersonation_url:
+        `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${saEmail}:generateAccessToken`,
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      subject_token_supplier: {
+        getSubjectToken: async () => getVercelOidcToken(),
+      },
+    });
+    if (authClient) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const GCFirestore = require('@google-cloud/firestore').Firestore;
+      cachedFirestore = new GCFirestore({
+        projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
+        auth: authClient,
+      }) as ReturnType<typeof getFirestore>;
+      return cachedFirestore;
+    }
+  }
+
+  cachedFirestore = getFirestore(adminApp());
+  return cachedFirestore;
 }

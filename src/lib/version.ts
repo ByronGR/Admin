@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.12.1';
+export const APP_VERSION = '0.12.2';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.12.2',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          '"New Opening" button now navigates to a full page (/openings/new) instead of opening a popup modal — same fields, better form.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'Kick-off brief submit error: "Failed to initialize Google Cloud Firestore client with the available credentials" — fixed by bypassing firebase-admin\'s credential type check and constructing Firestore directly with the Vercel OIDC → GCP WIF credential.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.12.1',
     date: '2026-06-02',

@@ -121,29 +121,28 @@ export function adminDb(): ReturnType<typeof getFirestore> {
       },
     });
     if (authClient) {
-      // google-gax (used internally by @google-cloud/firestore for gRPC) expects a
-      // GoogleAuth instance and calls several methods that ExternalAccountClient doesn't
-      // implement. Shim each missing method so validation passes.
-      const patchedClient = authClient as unknown as Record<string, unknown>;
-      // getUniverseDomain — google-gax/grpc.js:312 validates we're on googleapis.com
-      if (typeof patchedClient.getUniverseDomain !== 'function') {
-        patchedClient.getUniverseDomain = () => Promise.resolve('googleapis.com');
-      }
-      // getClient — google-gax/grpc.js calls this to retrieve the underlying auth client;
-      // GoogleAuth wraps the real client and returns it here. We ARE the client, so return self.
-      if (typeof patchedClient.getClient !== 'function') {
-        patchedClient.getClient = () => Promise.resolve(authClient);
-      }
-      // getProjectId — may be called to resolve the project; return the configured project.
-      if (typeof patchedClient.getProjectId !== 'function') {
-        patchedClient.getProjectId = () => Promise.resolve(process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID);
-      }
-
+      // google-gax (the gRPC layer inside @google-cloud/firestore) requires a full
+      // GoogleAuth instance — not a raw ExternalAccountClient. GoogleAuth properly
+      // implements getClient(), getProjectId(), getUniverseDomain(), and all other
+      // methods gRPC reaches for. We create a GoogleAuth and pre-populate its
+      // cachedCredential with our ExternalAccountClient so it never triggers ADC
+      // detection; it just returns the WIF client directly on the first call.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { GoogleAuth } = require('google-auth-library');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const GCFirestore = require('@google-cloud/firestore').Firestore;
+
+      const googleAuth = new GoogleAuth({
+        projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
+      });
+      // cachedCredential is a public property on GoogleAuth. Setting it prevents the
+      // library from running application-default-credential detection and makes
+      // getClient() return our ExternalAccountClient immediately.
+      googleAuth.cachedCredential = authClient;
+
       cachedFirestore = new GCFirestore({
         projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
-        auth: authClient,
+        auth: googleAuth,
       }) as ReturnType<typeof getFirestore>;
       return cachedFirestore;
     }

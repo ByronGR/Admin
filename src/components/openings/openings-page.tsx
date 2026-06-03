@@ -6,12 +6,15 @@ import {
   db,
   collection,
   getDocs,
+  doc,
+  setDoc,
+  serverTimestamp,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
-import { sortByTimestamp } from '@/lib/utils';
+import { sortByTimestamp, generateCode } from '@/lib/utils';
 import type { Opening } from '@/lib/types';
 import { ApprovalBadge } from './opening-detail';
 import { Search, Plus, ChevronRight } from 'lucide-react';
@@ -22,6 +25,7 @@ export default function OpeningsPage() {
 
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -36,6 +40,35 @@ export default function OpeningsPage() {
         setLoading(false);
       });
   }, []);
+
+  // One-click creation: generate a code, write the opening + pipeline, then go
+  // straight to the kick-off brief where all the details are captured.
+  async function handleNewOpening() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const code = generateCode('NW');
+      await setDoc(doc(db, 'openings', code), {
+        code,
+        status: 'draft',
+        approvalStatus: 'draft',
+        published: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, 'pipelines', code), {
+        code,
+        status: 'active',
+        candidates: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      router.push(`/kickoff?code=${encodeURIComponent(code)}`);
+    } catch {
+      showToast('Failed to create opening', 'error');
+      setCreating(false);
+    }
+  }
 
   const filtered = openings.filter((o) => {
     const q = search.toLowerCase();
@@ -56,12 +89,13 @@ export default function OpeningsPage() {
             </p>
           </div>
           <button
-            onClick={() => router.push('/openings/new')}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
+            onClick={handleNewOpening}
+            disabled={creating}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-60"
             style={{ background: 'var(--green)' }}
           >
-            <Plus className="h-3.5 w-3.5" />
-            New opening
+            {creating ? <Spinner size="sm" /> : <Plus className="h-3.5 w-3.5" />}
+            {creating ? 'Creating…' : 'New opening'}
           </button>
         </div>
 
@@ -117,7 +151,7 @@ export default function OpeningsPage() {
                   onClick={() => router.push(`/openings/${o.code ?? o.id}`)}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-600 text-[var(--black)]">{o.title}</p>
+                    <p className="truncate text-xs font-600 text-[var(--black)]">{o.title || '—'}</p>
                     <p className="text-[10px] text-[var(--light)]">
                       {o.department ?? '—'} · {o.location ?? 'Remote'}
                     </p>

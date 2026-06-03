@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, Suspense, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import {
+  useEffect, useState, useRef, useCallback, Suspense,
+  type ReactNode, type Dispatch, type SetStateAction,
+} from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   auth, db, onAuthStateChanged, isNearworkEmail,
-  doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot,
+  doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, onSnapshot,
   serverTimestamp,
 } from '@/lib/firebase';
 import type { User } from '@/lib/firebase';
+import type { Organization } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,11 +41,25 @@ interface InterviewStage {
   duration: string;
 }
 
-// ─── Save indicator ────────────────────────────────────────────────────────────
-
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-// ─── Kickoff page (inner — needs useSearchParams) ─────────────────────────────
+// ─── Section definitions ──────────────────────────────────────────────────────
+
+const SECTIONS = [
+  { id: 's1',    num: 1,  icon: '🎯', label: 'Role Overview' },
+  { id: 's2',    num: 2,  icon: '💰', label: 'Compensation' },
+  { id: 's3',    num: 3,  icon: '📋', label: 'Role Description' },
+  { id: 's4',    num: 4,  icon: '🎓', label: 'Requirements' },
+  { id: 's5',    num: 5,  icon: '🤝', label: 'Team & Culture' },
+  { id: 's6',    num: 6,  icon: '💬', label: 'Interview Process' },
+  { id: 's7',    num: 7,  icon: '🛠️', label: 'Tools & Tech' },
+  { id: 's8',    num: 8,  icon: '🏢', label: 'NW Assignment' },
+  { id: 's9',    num: 9,  icon: '📄', label: 'Administrative' },
+  { id: 's10',   num: 10, icon: '📝', label: 'Additional Notes' },
+  { id: 'audit', num: 0,  icon: '📋', label: 'Audit Trail' },
+] as const;
+
+// ─── Kickoff inner component ──────────────────────────────────────────────────
 
 function KickoffInner() {
   const params = useSearchParams();
@@ -59,13 +77,18 @@ function KickoffInner() {
   const [changesBannerNote, setChangesBannerNote] = useState('');
   const [approvedMeta, setApprovedMeta] = useState('');
 
-  // ── Confirm modal state ──
+  // Opening metadata (editable inline on this page)
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [editingMeta, setEditingMeta] = useState(false);
+
+  // Confirm modal
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<'submit' | 'reopen' | null>(null);
   const [confirmInput, setConfirmInput] = useState('');
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // ── Dynamic lists ──
+  // Dynamic lists
   const [keyResponsibilities, setKeyResponsibilities] = useState<string[]>(['']);
   const [mustHaveSkills, setMustHaveSkills] = useState<string[]>(['']);
   const [niceToHaveSkills, setNiceToHaveSkills] = useState<string[]>(['']);
@@ -75,7 +98,9 @@ function KickoffInner() {
   const [sourcingChannels, setSourcingChannels] = useState<string[]>(['']);
   const [interviewStages, setInterviewStages] = useState<InterviewStage[]>([]);
 
-  // ── Simple form fields (using refs for performance) ──
+  // Anchored Rail: active section tracker
+  const [activeSection, setActiveSection] = useState('s1');
+
   const formRef = useRef<HTMLFormElement>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -88,6 +113,14 @@ function KickoffInner() {
     });
   }, []);
 
+  // ── Load orgs ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    getDocs(collection(db, 'organizations'))
+      .then((snap) => setOrgs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization))))
+      .catch(() => {/* non-critical */});
+  }, [user]);
+
   // ── Load pipeline + brief ─────────────────────────────────────────────────
   useEffect(() => {
     if (!user || !pipelineCode) return;
@@ -96,7 +129,7 @@ function KickoffInner() {
 
     async function load() {
       try {
-        // Try pipelines collection first
+        // Try pipelines collection first, then openings
         const pSnap = await getDoc(doc(db, 'pipelines', pipelineCode));
         let opening: Record<string, unknown> | null = null;
         if (pSnap.exists()) {
@@ -104,21 +137,32 @@ function KickoffInner() {
         } else {
           const oQuery = query(collection(db, 'openings'), where('code', '==', pipelineCode));
           const oDocs = await getDocs(oQuery);
-          if (oDocs.empty) {
-            setErrorMsg(`No pipeline or opening found with code "${pipelineCode}"`);
-            setLoadState('error');
-            return;
+          if (!oDocs.empty) {
+            opening = { id: oDocs.docs[0].id, ...oDocs.docs[0].data() };
           }
-          opening = { id: oDocs.docs[0].id, ...oDocs.docs[0].data() };
         }
+
+        // Also load the opening doc directly for metadata (title, orgId, etc.)
+        const openingSnap = await getDoc(doc(db, 'openings', pipelineCode));
+        if (openingSnap.exists()) {
+          opening = { ...(opening ?? {}), ...openingSnap.data(), id: pipelineCode };
+        }
+
+        if (!opening) {
+          setErrorMsg(`No opening found with code "${pipelineCode}"`);
+          setLoadState('error');
+          return;
+        }
+
         setOpeningData(opening);
+        setSelectedOrgId(String(opening.orgId ?? ''));
 
         // Subscribe to brief
         unsubBrief = onSnapshot(doc(db, 'kickoffBriefs', pipelineCode), (snap) => {
           if (snap.exists()) {
             const brief = { id: snap.id, ...snap.data() } as BriefData;
             setBriefData(brief);
-            applyBriefToForm(brief);
+            applyBriefToForm(brief, opening!);
             const s = (brief.status ?? 'draft') as BriefStatus;
             setStatus(s);
             setAuditHistory(brief.history ?? []);
@@ -131,6 +175,9 @@ function KickoffInner() {
             if (s === 'approved') {
               setApprovedMeta(`Nearwork: ${brief.nearworkApprovedBy ?? '—'} · Client: ${brief.clientApprovedBy ?? '—'}`);
             }
+          } else {
+            // New brief — pre-fill S1 job title from the opening's title
+            applyBriefToForm({} as BriefData, opening!);
           }
         });
 
@@ -145,34 +192,57 @@ function KickoffInner() {
     return () => { unsubBrief?.(); };
   }, [user, pipelineCode]);
 
-  // ── Apply brief data to form ──────────────────────────────────────────────
-  function applyBriefToForm(brief: BriefData) {
-    // Simple fields
+  // ── IntersectionObserver — Anchored Rail active section ───────────────────
+  useEffect(() => {
+    if (loadState !== 'ready') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Use the topmost visible section as the active one
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length > 0) setActiveSection(visible[0].target.id);
+      },
+      { threshold: 0.15 },
+    );
+    SECTIONS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [loadState]);
+
+  // ── Apply brief + opening data to form ────────────────────────────────────
+  function applyBriefToForm(brief: BriefData, opening: Record<string, unknown>) {
     const simpleFields = [
-      'jobTitle','department','locationPolicy','employmentType','numberOfPositions',
-      'targetStartDate','urgency','colombiaViable','locationNotes',
-      'salaryMin','salaryMax','currency','payFrequency','signOnBonus','variablePay',
-      'equity','benefitsPackage','additionalPerks','roleSummary','dayToDay',
-      'success30','success60','success90','yearsOfExperience','educationLevel',
-      'fieldOfStudy','englishLevel','otherLanguages','backgroundCheck','industryExperience',
-      'teamSize','reportsToTitle','reportsToName','directReports','workingStyle',
-      'worksCloselyWith','workingHours','timezoneRequirements','remotePolicyDetails',
-      'teamCultureNotes','totalInterviewStages','interviewLanguage','timeToOffer',
-      'assessmentRequired','assessmentDetails','rejectionCriteria','internalSystems',
-      'trainingProvided','trainingDetails','assignedRecruiter','accountManager',
-      'sourcingStartDate','candidateDeadline','targetCandidateVolume','reportingCadence',
-      'reportingFormat','searchStrategyNotes','internalNotes','contractType',
-      'probationPeriod','noticePeriod','workAuthRequired','nonCompeteNda',
-      'equipmentProvidedBy','additionalNotes','otherDiscussed',
+      'jobTitle', 'department', 'locationPolicy', 'employmentType', 'numberOfPositions',
+      'targetStartDate', 'urgency', 'colombiaViable', 'locationNotes',
+      'salaryMin', 'salaryMax', 'currency', 'payFrequency', 'signOnBonus', 'variablePay',
+      'equity', 'benefitsPackage', 'additionalPerks', 'roleSummary', 'dayToDay',
+      'success30', 'success60', 'success90', 'yearsOfExperience', 'educationLevel',
+      'fieldOfStudy', 'englishLevel', 'otherLanguages', 'backgroundCheck', 'industryExperience',
+      'teamSize', 'reportsToTitle', 'reportsToName', 'directReports', 'workingStyle',
+      'worksCloselyWith', 'workingHours', 'timezoneRequirements', 'remotePolicyDetails',
+      'teamCultureNotes', 'totalInterviewStages', 'interviewLanguage', 'timeToOffer',
+      'assessmentRequired', 'assessmentDetails', 'rejectionCriteria', 'internalSystems',
+      'trainingProvided', 'trainingDetails', 'assignedRecruiter', 'accountManager',
+      'sourcingStartDate', 'candidateDeadline', 'targetCandidateVolume', 'reportingCadence',
+      'reportingFormat', 'searchStrategyNotes', 'internalNotes', 'contractType',
+      'probationPeriod', 'noticePeriod', 'workAuthRequired', 'nonCompeteNda',
+      'equipmentProvidedBy', 'additionalNotes', 'otherDiscussed',
     ];
     if (formRef.current) {
       simpleFields.forEach((k) => {
         const el = formRef.current?.elements.namedItem(k) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
-        if (el && brief[k] != null) el.value = String(brief[k]);
+        // Prefer brief data; fall back to opening data for jobTitle
+        const val = brief[k] ?? (k === 'jobTitle' ? opening.title : undefined);
+        if (el && val != null) el.value = String(val);
       });
+      // Pre-fill recruiter from opening if brief has none
+      const recEl = formRef.current.elements.namedItem('assignedRecruiter') as HTMLInputElement | null;
+      if (recEl && !recEl.value && opening.recruiter) recEl.value = String(opening.recruiter);
     }
 
-    // Dynamic lists
     if (Array.isArray(brief.keyResponsibilities)) setKeyResponsibilities(brief.keyResponsibilities as string[]);
     if (Array.isArray(brief.mustHaveSkills)) setMustHaveSkills(brief.mustHaveSkills as string[]);
     if (Array.isArray(brief.niceToHaveSkills)) setNiceToHaveSkills(brief.niceToHaveSkills as string[]);
@@ -192,7 +262,6 @@ function KickoffInner() {
       const s = String(v).trim();
       if (s) data[k] = s;
     });
-    // Dynamic lists
     data.keyResponsibilities = keyResponsibilities.filter(Boolean);
     data.mustHaveSkills = mustHaveSkills.filter(Boolean);
     data.niceToHaveSkills = niceToHaveSkills.filter(Boolean);
@@ -204,9 +273,30 @@ function KickoffInner() {
     return data;
   }
 
+  // ── Sync metadata back to the opening doc ────────────────────────────────
+  async function syncOpeningMeta() {
+    if (!pipelineCode) return;
+    try {
+      const formData = collectFormData();
+      const jobTitle = String(formData.jobTitle ?? '').trim();
+      const org = orgs.find((o) => o.id === selectedOrgId);
+      const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      if (jobTitle) updates.title = jobTitle;
+      if (selectedOrgId) { updates.orgId = selectedOrgId; updates.orgName = org?.name ?? ''; }
+      // Also sync to pipeline doc
+      await Promise.all([
+        updateDoc(doc(db, 'openings', pipelineCode), updates),
+        updateDoc(doc(db, 'pipelines', pipelineCode), updates),
+      ]);
+    } catch {
+      // Non-critical — opening meta sync can fail silently
+    }
+  }
+
   // ── API call ──────────────────────────────────────────────────────────────
   async function callAPI(action: string, extraData: Record<string, unknown> = {}) {
     if (!user) throw new Error('Not authenticated');
+    const org = orgs.find((o) => o.id === selectedOrgId);
     const token = await user.getIdToken();
     const res = await fetch('/api/kickoff', {
       method: 'POST',
@@ -214,7 +304,8 @@ function KickoffInner() {
       body: JSON.stringify({
         action,
         code: pipelineCode,
-        orgId: (openingData?.orgId as string) ?? (openingData?.org as string) ?? '',
+        orgId: (selectedOrgId || (openingData?.orgId as string)) ?? '',
+        orgName: org?.name ?? (openingData?.orgName as string) ?? '',
         ...collectFormData(),
         ...extraData,
       }),
@@ -234,7 +325,7 @@ function KickoffInner() {
     if (isReadOnly) return;
     try {
       setSaveState('saving');
-      await callAPI('save');
+      await Promise.all([callAPI('save'), syncOpeningMeta()]);
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 3000);
     } catch (e) {
@@ -242,7 +333,7 @@ function KickoffInner() {
       console.error('Auto-save failed:', e);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReadOnly, user, pipelineCode, openingData, keyResponsibilities, mustHaveSkills, niceToHaveSkills, requiredCertifications, requiredTools, techStack, sourcingChannels, interviewStages]);
+  }, [isReadOnly, user, pipelineCode, openingData, selectedOrgId, orgs, keyResponsibilities, mustHaveSkills, niceToHaveSkills, requiredCertifications, requiredTools, techStack, sourcingChannels, interviewStages]);
 
   function scheduleAutoSave() {
     if (isReadOnly) return;
@@ -263,6 +354,7 @@ function KickoffInner() {
     setConfirmLoading(true);
     try {
       await callAPI(pendingAction);
+      if (pendingAction !== 'reopen') await syncOpeningMeta();
       setConfirmOpen(false);
       setPendingAction(null);
     } catch (e) {
@@ -273,31 +365,31 @@ function KickoffInner() {
   }
 
   // ── Copy client link ──────────────────────────────────────────────────────
-  const [copyLabel, setCopyLabel] = useState('📋 Copy client link');
+  const [copyLabel, setCopyLabel] = useState('Copy client link');
   function copyClientLink() {
     navigator.clipboard.writeText(`https://app.nearwork.co/pipeline/${pipelineCode}/kickoff`).then(() => {
-      setCopyLabel('✅ Copied!');
-      setTimeout(() => setCopyLabel('📋 Copy client link'), 2000);
+      setCopyLabel('Copied!');
+      setTimeout(() => setCopyLabel('Copy client link'), 2000);
     });
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────
-  const openingTitle = String((openingData?.openingTitle ?? openingData?.title ?? pipelineCode) || pipelineCode);
-  const openingMeta = [openingData?.orgName, pipelineCode, openingData?.recruiter].filter(Boolean).join(' · ');
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const openingTitle = String((openingData?.title ?? openingData?.openingTitle ?? '').toString().trim() || '');
+  const openingOrg = String((openingData?.orgName ?? '').toString().trim() || '');
+  const displayTitle = openingTitle || 'Untitled opening';
 
   const statusBadge = {
-    draft: { cls: 'bg-[#F5F4F0] text-[#9E9E9E] border border-[#E5E4E0]', label: '● Draft' },
-    submitted: { cls: 'bg-blue-50 text-blue-600 border border-blue-200', label: '⏳ Pending Review' },
-    changes_requested: { cls: 'bg-amber-50 text-amber-800 border border-amber-200', label: '⚠️ Changes Requested' },
-    approved: { cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200', label: '✅ Approved' },
+    draft:             { cls: 'bg-[#F5F4F0] text-[#777] border border-[#E5E4E0]', label: 'Draft' },
+    submitted:         { cls: 'bg-blue-50 text-blue-600 border border-blue-200',   label: 'Pending review' },
+    changes_requested: { cls: 'bg-amber-50 text-amber-800 border border-amber-200', label: 'Changes requested' },
+    approved:          { cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200', label: 'Approved' },
   }[status];
 
-  const saveIndicatorCls = saveState === 'saving' ? 'text-amber-400' : saveState === 'saved' ? 'text-teal-300' : 'text-white/30';
-
+  const saveIndicatorCls = saveState === 'saving' ? 'text-amber-400' : saveState === 'saved' ? 'text-teal-400' : 'text-white/25';
   const confirmExpected = pendingAction === 'submit' ? 'SUBMIT' : 'REOPEN';
   const confirmReady = confirmInput.trim().toUpperCase() === confirmExpected;
 
-  // ── States ────────────────────────────────────────────────────────────────
+  // ── Loading / error states ────────────────────────────────────────────────
   if (loadState === 'loading') {
     return (
       <div className="min-h-screen bg-[#F5F4F0] flex flex-col items-center justify-center gap-3">
@@ -308,7 +400,7 @@ function KickoffInner() {
   }
   if (loadState === 'auth-error') {
     return (
-      <div className="min-h-screen bg-[#F5F4F0] flex flex-col items-center justify-center gap-3 text-center">
+      <div className="min-h-screen bg-[#F5F4F0] flex flex-col items-center justify-center gap-3 text-center px-4">
         <div className="text-5xl">🔒</div>
         <p className="text-base font-bold">Access restricted</p>
         <p className="text-[#9E9E9E] text-sm">Only Nearwork staff can access this page.</p>
@@ -318,7 +410,7 @@ function KickoffInner() {
   }
   if (loadState === 'error') {
     return (
-      <div className="min-h-screen bg-[#F5F4F0] flex flex-col items-center justify-center gap-3 text-center">
+      <div className="min-h-screen bg-[#F5F4F0] flex flex-col items-center justify-center gap-3 text-center px-4">
         <div className="text-4xl">⚠️</div>
         <p className="text-base font-bold">Error</p>
         <p className="text-[#9E9E9E] text-sm">{errorMsg}</p>
@@ -329,59 +421,168 @@ function KickoffInner() {
   // ── Full page ─────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Nav */}
-      <nav className="h-14 bg-[#111111] flex items-center px-5 gap-4 sticky top-0 z-50">
-        <a href="/dashboard" className="text-lg font-black text-white tracking-tight">Near<span className="text-[#16A085]">work</span></a>
+      {/* ── Top nav ─────────────────────────────────────────────────────── */}
+      <nav className="h-13 bg-[#111] flex items-center px-5 gap-3 sticky top-0 z-50 border-b border-white/8">
+        <a href="/dashboard" className="text-[15px] font-black text-white tracking-tight">Near<span className="text-[#16A085]">work</span></a>
         <div className="w-px h-4 bg-white/15" />
-        <button onClick={() => history.back()} className="text-white/60 text-xs hover:text-white flex items-center gap-1">← Back</button>
+        <button onClick={() => history.back()} className="text-white/55 text-xs hover:text-white/90 flex items-center gap-1 transition-colors">
+          ← Back
+        </button>
         <div className="w-px h-4 bg-white/15" />
-        <span className="text-white/85 text-sm font-semibold">Kick-off Brief</span>
+        <span className="text-white/80 text-xs font-semibold">Kick-off Brief</span>
+        <span className="ml-0.5 text-[10px] text-white/35 font-mono">{pipelineCode}</span>
         <div className="flex-1" />
-        <span className={`text-xs transition-colors ${saveIndicatorCls}`} title={saveState}>●</span>
-        <span className="text-white/50 text-xs">{user?.email}</span>
+        {/* Save indicator */}
+        <span className={`text-[10px] transition-colors flex items-center gap-1.5 ${saveIndicatorCls}`}>
+          {saveState === 'saving' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
+          {saveState === 'saved' && <span className="w-2 h-2 rounded-full bg-teal-400" />}
+          {saveState === 'error' && <span className="w-2 h-2 rounded-full bg-red-400" />}
+          {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Save failed' : ''}
+        </span>
+        <span className="text-white/40 text-[11px] ml-1">{user?.email}</span>
       </nav>
 
-      {/* Status bar */}
-      <div className="bg-white border-b border-[#E5E4E0] px-5 py-3 flex items-center gap-3 flex-wrap">
-        <div>
-          <div className="font-bold text-[15px]">{openingTitle}</div>
-          <div className="text-xs text-[#9E9E9E]">{openingMeta}</div>
+      {/* ── Sub-header: opening identity + action bar ───────────────────── */}
+      <div className="bg-white border-b border-[#E5E4E0] px-5 py-3 flex items-center gap-3 flex-wrap sticky top-13 z-40">
+        {/* Identity */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="min-w-0">
+            {/* Editable opening metadata */}
+            {editingMeta ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  autoFocus
+                  defaultValue={openingTitle}
+                  onBlur={(e) => {
+                    const newTitle = e.target.value.trim();
+                    if (newTitle && newTitle !== openingTitle) {
+                      setOpeningData((d) => d ? { ...d, title: newTitle } : d);
+                      updateDoc(doc(db, 'openings', pipelineCode), { title: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
+                      updateDoc(doc(db, 'pipelines', pipelineCode), { title: newTitle, openingTitle: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
+                      // Also update the jobTitle input in the form
+                      const el = formRef.current?.elements.namedItem('jobTitle') as HTMLInputElement | null;
+                      if (el) el.value = newTitle;
+                    }
+                    setEditingMeta(false);
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditingMeta(false); }}
+                  className="text-sm font-bold text-[#111] border-b-2 border-[#16A085] bg-transparent outline-none w-64 pb-0.5"
+                  placeholder="e.g. Senior Software Engineer"
+                />
+                <select
+                  value={selectedOrgId}
+                  onChange={(e) => {
+                    const newOrgId = e.target.value;
+                    setSelectedOrgId(newOrgId);
+                    const org = orgs.find((o) => o.id === newOrgId);
+                    setOpeningData((d) => d ? { ...d, orgId: newOrgId, orgName: org?.name ?? '' } : d);
+                    updateDoc(doc(db, 'openings', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    updateDoc(doc(db, 'pipelines', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                  }}
+                  className="text-xs border border-[#E5E4E0] rounded-md px-2 py-1 bg-white outline-none focus:border-[#16A085]"
+                >
+                  <option value="">No organization</option>
+                  {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                <button onClick={() => setEditingMeta(false)} className="text-[11px] text-[#9E9E9E] hover:text-[#16A085]">Done</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setEditingMeta(true)}
+                className="group text-left"
+                title="Click to edit opening name and organization"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm text-[#111] group-hover:text-[#16A085] transition-colors">{displayTitle}</span>
+                  <span className="text-[10px] text-[#C5C4C0] group-hover:text-[#16A085] transition-colors">✏</span>
+                </div>
+                <div className="text-[11px] text-[#9E9E9E] mt-0.5">
+                  {openingOrg || <span className="text-amber-600">⚠ No organization set</span>}
+                  {openingOrg ? ` · ${pipelineCode}` : ` · ${pipelineCode}`}
+                </div>
+              </button>
+            )}
+          </div>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusBadge.cls}`}>
+            {statusBadge.label}
+          </span>
         </div>
-        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${statusBadge.cls}`}>{statusBadge.label}</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={copyClientLink} className="px-3 py-1.5 bg-white border border-[#E5E4E0] text-xs font-semibold rounded-lg hover:border-[#16A085] hover:text-[#16A085] transition-colors">{copyLabel}</button>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
+          <button
+            onClick={copyClientLink}
+            className="px-3 py-1.5 bg-white border border-[#E5E4E0] text-[11px] font-semibold rounded-lg hover:border-[#16A085] hover:text-[#16A085] transition-colors"
+          >
+            {copyLabel}
+          </button>
           {(status === 'submitted' || status === 'approved') && (
-            <button onClick={() => openConfirm('reopen')} className="px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors">↩ Reopen for editing</button>
+            <button onClick={() => openConfirm('reopen')} className="px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold rounded-lg hover:bg-amber-100 transition-colors">
+              ↩ Reopen
+            </button>
           )}
           {!isReadOnly && (
-            <button onClick={saveDraft} className="px-3 py-1.5 bg-white border border-[#E5E4E0] text-xs font-semibold rounded-lg hover:border-[#16A085] hover:text-[#16A085] transition-colors">Save draft</button>
+            <button onClick={saveDraft} className="px-3 py-1.5 bg-white border border-[#E5E4E0] text-[11px] font-semibold rounded-lg hover:border-[#16A085] hover:text-[#16A085] transition-colors">
+              Save draft
+            </button>
           )}
           {status !== 'approved' && status !== 'submitted' && (
-            <button onClick={() => openConfirm('submit')} className="px-3 py-1.5 bg-[#16A085] text-white text-xs font-semibold rounded-lg hover:bg-[#12866E] transition-colors">Submit for client review →</button>
+            <button onClick={() => openConfirm('submit')} className="px-3 py-1.5 bg-[#16A085] text-white text-[11px] font-semibold rounded-lg hover:bg-[#12866E] transition-colors">
+              Submit for client review →
+            </button>
           )}
         </div>
       </div>
 
-      <div className="flex min-h-[calc(100vh-113px)]">
-        {/* Sidebar */}
-        <aside className="w-[220px] flex-shrink-0 bg-white border-r border-[#E5E4E0] sticky top-[113px] h-[calc(100vh-113px)] overflow-y-auto py-4 hidden md:block">
-          <nav className="flex flex-col">
-            {[
-              ['#s1','1','Role Overview'],['#s2','2','Compensation'],['#s3','3','Role Description'],
-              ['#s4','4','Requirements'],['#s5','5','Team & Culture'],['#s6','6','Interview Process'],
-              ['#s7','7','Tools & Tech'],['#s8','8','NW Assignment'],['#s9','9','Administrative'],
-              ['#s10','10','Additional Notes'],['#audit','📋','Audit Trail'],
-            ].map(([href, num, label]) => (
-              <a key={href} href={href} className="flex items-center gap-2 px-4 py-2 text-xs text-[#555555] hover:bg-[#F0FAF7] hover:text-[#16A085] border-l-2 border-transparent hover:border-[#16A085] transition-all">
-                <span className="text-[10px] text-[#9E9E9E] w-4">{num}</span>{label}
-              </a>
-            ))}
+      {/* ── Body: Rail + Content ─────────────────────────────────────────── */}
+      <div className="flex min-h-[calc(100vh-105px)] bg-[#F5F4F0]">
+
+        {/* ── Anchored Rail ─────────────────────────────────────────────── */}
+        <aside className="hidden md:flex flex-col w-[200px] flex-shrink-0 sticky top-[105px] h-[calc(100vh-105px)] bg-white border-r border-[#E5E4E0] overflow-y-auto">
+          {/* Progress bar */}
+          <div className="px-4 pt-4 pb-3 border-b border-[#F0EFEB]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#9E9E9E]">Progress</span>
+              <span className="text-[11px] font-semibold text-[#16A085]">{SECTIONS.filter((s) => s.num > 0).length - 1}/10</span>
+            </div>
+            <div className="h-1 bg-[#F0EFEB] rounded-full overflow-hidden">
+              <div className="h-full bg-[#16A085] rounded-full transition-all" style={{ width: '10%' }} />
+            </div>
+          </div>
+
+          {/* Section list */}
+          <nav className="flex flex-col py-2 flex-1">
+            {SECTIONS.map(({ id, num, icon, label }) => {
+              const isActive = activeSection === id;
+              return (
+                <a
+                  key={id}
+                  href={`#${id}`}
+                  className={`flex items-center gap-2.5 px-3 py-2 mx-2 rounded-lg text-[12px] font-medium transition-all ${
+                    isActive
+                      ? 'bg-[#EEF9F6] text-[#16A085] font-semibold'
+                      : 'text-[#666] hover:bg-[#F8F7F3] hover:text-[#111]'
+                  }`}
+                >
+                  {num > 0 ? (
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-all ${
+                      isActive ? 'bg-[#16A085] text-white' : 'bg-[#F0EFEB] text-[#999]'
+                    }`}>
+                      {num}
+                    </span>
+                  ) : (
+                    <span className="w-5 h-5 flex items-center justify-center text-sm flex-shrink-0">{icon}</span>
+                  )}
+                  <span className="truncate leading-snug">{label}</span>
+                </a>
+              );
+            })}
           </nav>
         </aside>
 
-        {/* Main */}
-        <main className="flex-1 p-6 max-w-[860px]">
+        {/* ── Main content ───────────────────────────────────────────────── */}
+        <main className="flex-1 px-6 py-6 max-w-[860px]">
+
           {/* Banners */}
           {status === 'changes_requested' && changesBannerNote && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex gap-3">
@@ -405,7 +606,7 @@ function KickoffInner() {
           <form ref={formRef} onInput={scheduleAutoSave} className="space-y-5">
 
             {/* S1 Role Overview */}
-            <Section id="s1" icon="🎯" title="Role Overview" desc="Core information about the position and engagement">
+            <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Job Title" required><input name="jobTitle" disabled={isReadOnly} className={inp} placeholder="e.g. Senior Software Engineer" /></Field>
                 <Field label="Department / Team" optional><input name="department" disabled={isReadOnly} className={inp} placeholder="e.g. Engineering, Sales" /></Field>
@@ -424,7 +625,7 @@ function KickoffInner() {
             </Section>
 
             {/* S2 Compensation */}
-            <Section id="s2" icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes">
+            <Section id="s2" num={2} icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes">
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Salary Min"><input type="number" name="salaryMin" disabled={isReadOnly} className={inp} placeholder="e.g. 3000" /></Field>
                 <Field label="Salary Max"><input type="number" name="salaryMax" disabled={isReadOnly} className={inp} placeholder="e.g. 5000" /></Field>
@@ -445,7 +646,7 @@ function KickoffInner() {
             </Section>
 
             {/* S3 Role Description */}
-            <Section id="s3" icon="📋" title="Role Description" desc="What this person will actually do and what success looks like">
+            <Section id="s3" num={3} icon="📋" title="Role Description" desc="What this person will actually do and what success looks like">
               <Field label="Role Summary / Elevator Pitch" required><textarea name="roleSummary" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="2–4 sentences describing the role, its purpose, and why it matters…" /></Field>
               <div className="mt-4">
                 <Field label="Key Responsibilities">
@@ -456,7 +657,7 @@ function KickoffInner() {
                 <Field label="Day-to-day Activities" optional><textarea name="dayToDay" disabled={isReadOnly} className={ta} placeholder="What will a typical week look like?" /></Field>
               </div>
               <div className="mt-4 border border-[#E5E4E0] rounded-xl overflow-hidden">
-                <div className="bg-[#FAFAF9] px-4 py-2.5 text-[11px] font-bold text-[#555555] border-b border-[#E5E4E0] uppercase tracking-wide">Success Milestones</div>
+                <div className="bg-[#FAFAF9] px-4 py-2.5 text-[11px] font-bold text-[#555] border-b border-[#E5E4E0] uppercase tracking-wide">Success Milestones</div>
                 <div className="p-4 grid grid-cols-3 gap-4">
                   <Field label="✅ 30 Days"><textarea name="success30" disabled={isReadOnly} className={ta} style={{minHeight:90}} placeholder="What should they accomplish in 30 days?" /></Field>
                   <Field label="🚀 60 Days"><textarea name="success60" disabled={isReadOnly} className={ta} style={{minHeight:90}} placeholder="By 60 days, what does good look like?" /></Field>
@@ -466,7 +667,7 @@ function KickoffInner() {
             </Section>
 
             {/* S4 Requirements */}
-            <Section id="s4" icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications">
+            <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Must-Have Skills / Experience">
                   <DynamicList items={mustHaveSkills} setItems={setMustHaveSkills} disabled={isReadOnly} placeholder="e.g. 5+ years Python, REST API design…" onAdd={scheduleAutoSave} />
@@ -502,7 +703,7 @@ function KickoffInner() {
             </Section>
 
             {/* S5 Team & Culture */}
-            <Section id="s5" icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment">
+            <Section id="s5" num={5} icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment">
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Team Size"><input type="number" name="teamSize" disabled={isReadOnly} className={inp} placeholder="e.g. 8" /></Field>
                 <Field label="Reports To (Title)"><input name="reportsToTitle" disabled={isReadOnly} className={inp} placeholder="e.g. VP of Engineering" /></Field>
@@ -526,7 +727,7 @@ function KickoffInner() {
             </Section>
 
             {/* S6 Interview Process */}
-            <Section id="s6" icon="💬" title="Interview Process" desc="Stage-by-stage breakdown, timeline, and decision criteria">
+            <Section id="s6" num={6} icon="💬" title="Interview Process" desc="Stage-by-stage breakdown, timeline, and decision criteria">
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Total Interview Stages"><input type="number" name="totalInterviewStages" disabled={isReadOnly} className={inp} placeholder="e.g. 3" /></Field>
                 <Field label="Interview Language">
@@ -535,14 +736,14 @@ function KickoffInner() {
                 <Field label="Time from 1st Interview to Offer"><input name="timeToOffer" disabled={isReadOnly} className={inp} placeholder="e.g. 2–3 weeks" /></Field>
               </div>
               <div className="mb-4">
-                <label className="block text-[11px] font-semibold text-[#555555] mb-2">Interview Stages (define each stage)</label>
+                <label className="block text-[11px] font-semibold text-[#555] mb-2">Interview Stages</label>
                 <div className="space-y-2">
                   {interviewStages.map((stage, i) => (
                     <div key={i} className="bg-[#F5F4F0] border border-[#E5E4E0] rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-[11px] font-bold text-[#555555]">Stage {i + 1}</span>
+                        <span className="text-[11px] font-bold text-[#555]">Stage {i + 1}</span>
                         {!isReadOnly && (
-                          <button type="button" onClick={() => { setInterviewStages(s => s.filter((_, j) => j !== i)); scheduleAutoSave(); }} className="text-xs px-2 py-1 bg-white border border-[#E5E4E0] rounded-lg text-[#555555] hover:text-red-500 hover:border-red-300">Remove</button>
+                          <button type="button" onClick={() => { setInterviewStages(s => s.filter((_, j) => j !== i)); scheduleAutoSave(); }} className="text-xs px-2 py-1 bg-white border border-[#E5E4E0] rounded-lg text-[#555] hover:text-red-500 hover:border-red-300">Remove</button>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -563,13 +764,13 @@ function KickoffInner() {
                 <Field label="Assessment / Technical Test Required">
                   <Select name="assessmentRequired" disabled={isReadOnly} options={['Yes','No','To be decided']} />
                 </Field>
-                <Field label="Assessment Details" optional><textarea name="assessmentDetails" disabled={isReadOnly} className={ta} style={{minHeight:72}} placeholder="Type of test, duration, tool used (e.g. HackerRank, take-home project)…" /></Field>
+                <Field label="Assessment Details" optional><textarea name="assessmentDetails" disabled={isReadOnly} className={ta} style={{minHeight:72}} placeholder="Type of test, duration, tool used…" /></Field>
               </div>
               <Field label="Rejection / Disqualifying Criteria"><textarea name="rejectionCriteria" disabled={isReadOnly} className={ta} placeholder="What are the automatic disqualifiers?" /></Field>
             </Section>
 
             {/* S7 Tools & Tech */}
-            <Section id="s7" icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems">
+            <Section id="s7" num={7} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Required Tools / Software">
                   <DynamicList items={requiredTools} setItems={setRequiredTools} disabled={isReadOnly} placeholder="e.g. Jira, Slack, Figma…" onAdd={scheduleAutoSave} />
@@ -588,7 +789,7 @@ function KickoffInner() {
             </Section>
 
             {/* S8 Nearwork Assignment */}
-            <Section id="s8" icon="🏢" title="Nearwork Team Assignment" desc="Who's on the search, timelines, and strategy — internal use">
+            <Section id="s8" num={8} icon="🏢" title="Nearwork Team Assignment" desc="Who's on the search, timelines, and strategy — internal use">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Assigned Recruiter"><input name="assignedRecruiter" disabled={isReadOnly} className={inp} placeholder="Full name" /></Field>
                 <Field label="Account Manager"><input name="accountManager" disabled={isReadOnly} className={inp} placeholder="Full name" /></Field>
@@ -620,7 +821,7 @@ function KickoffInner() {
             </Section>
 
             {/* S9 Administrative */}
-            <Section id="s9" icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations">
+            <Section id="s9" num={9} icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations">
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Contract Type">
                   <Select name="contractType" disabled={isReadOnly} options={['Employment (Payroll)','B2B Contractor','Freelance','Internship','Part-time Employment']} />
@@ -642,17 +843,17 @@ function KickoffInner() {
             </Section>
 
             {/* S10 Additional Notes */}
-            <Section id="s10" icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above">
+            <Section id="s10" num={10} icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above">
               <div className="mb-4">
                 <Field label="Additional Notes / Special Instructions"><textarea name="additionalNotes" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="Client preferences, special considerations, context for this search…" /></Field>
               </div>
-              <Field label="Other Items Discussed (not covered above)"><textarea name="otherDiscussed" disabled={isReadOnly} className={ta} style={{minHeight:80}} placeholder="Anything else from the kick-off call that should be documented…" /></Field>
+              <Field label="Other Items Discussed"><textarea name="otherDiscussed" disabled={isReadOnly} className={ta} style={{minHeight:80}} placeholder="Anything else from the kick-off call that should be documented…" /></Field>
             </Section>
 
-          </form>{/* end form */}
+          </form>
 
           {/* Audit Trail */}
-          <div id="audit" className="bg-white border border-[#E5E4E0] rounded-xl mt-5 overflow-hidden">
+          <div id="audit" className="bg-white border border-[#E5E4E0] rounded-xl mt-5 overflow-hidden scroll-mt-28">
             <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
               <span className="text-lg">📋</span>
               <div>
@@ -676,7 +877,7 @@ function KickoffInner() {
                         </div>
                         <div className="text-[11px] text-[#9E9E9E] mt-0.5">{h.by} · {h.byRole === 'nearwork' ? 'Nearwork' : 'Client'} · {formatDate(h.timestamp)}</div>
                         {h.note && h.action !== 'saved' && h.action !== 'submitted' && (
-                          <div className="text-xs text-[#555555] mt-1.5 bg-[#F5F4F0] rounded-lg px-2.5 py-2 border-l-2 border-[#D0CFC9]">{h.note}</div>
+                          <div className="text-xs text-[#555] mt-1.5 bg-[#F5F4F0] rounded-lg px-2.5 py-2 border-l-2 border-[#D0CFC9]">{h.note}</div>
                         )}
                       </div>
                     </div>
@@ -688,18 +889,18 @@ function KickoffInner() {
         </main>
       </div>
 
-      {/* Confirm Modal */}
+      {/* ── Confirm Modal ────────────────────────────────────────────────── */}
       {confirmOpen && (
         <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-[999] backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-7 max-w-[440px] w-[90%] shadow-2xl">
             <div className="text-4xl mb-3">{pendingAction === 'submit' ? '📤' : '↩️'}</div>
             <div className="text-lg font-bold mb-2">{pendingAction === 'submit' ? 'Submit for Client Review?' : 'Reopen for Editing?'}</div>
-            <div className="text-sm text-[#555555] mb-4 leading-relaxed">
+            <div className="text-sm text-[#555] mb-4 leading-relaxed">
               {pendingAction === 'submit'
                 ? 'By submitting, Nearwork confirms this brief is accurate and ready for client review. The client will see a "Pending Review" link in their portal.'
                 : 'This will move the brief back to Draft status. If it was already approved, both parties will need to approve it again.'}
             </div>
-            <div className="text-[11px] font-bold text-[#555555] uppercase tracking-wider mb-1.5">Type {confirmExpected} to confirm</div>
+            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-1.5">Type {confirmExpected} to confirm</div>
             <input
               autoFocus
               className="w-full px-3.5 py-2.5 border-2 border-[#E5E4E0] rounded-xl text-sm font-bold tracking-widest text-center focus:border-[#16A085] outline-none transition-colors"
@@ -723,20 +924,21 @@ function KickoffInner() {
 
 // ─── Shared style constants ────────────────────────────────────────────────────
 
-const inp = 'w-full px-3 py-2 border border-[#E5E4E0] rounded-lg text-xs text-[#111111] bg-white focus:border-[#16A085] focus:outline-none transition-colors disabled:bg-[#FAFAF9] disabled:text-[#9E9E9E] disabled:cursor-not-allowed';
+const inp = 'w-full px-3 py-2 border border-[#E5E4E0] rounded-lg text-xs text-[#111] bg-white focus:border-[#16A085] focus:outline-none transition-colors disabled:bg-[#FAFAF9] disabled:text-[#9E9E9E] disabled:cursor-not-allowed';
 const ta = `${inp} resize-y min-h-[80px] leading-relaxed`;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ id, icon, title, desc, children }: { id: string; icon: string; title: string; desc: string; children: ReactNode }) {
+function Section({ id, num, icon, title, desc, children }: { id: string; num: number; icon: string; title: string; desc: string; children: ReactNode }) {
   return (
     <div id={id} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
-      <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
-        <span className="text-lg">{icon}</span>
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
+        <div className="w-7 h-7 rounded-full bg-[#111] flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">{num}</div>
         <div>
           <div className="text-sm font-bold">{title}</div>
           <div className="text-xs text-[#9E9E9E] mt-0.5">{desc}</div>
         </div>
+        <span className="ml-auto text-base">{icon}</span>
       </div>
       <div className="p-5">{children}</div>
     </div>
@@ -746,7 +948,7 @@ function Section({ id, icon, title, desc, children }: { id: string; icon: string
 function Field({ label, required, optional, children }: { label: string; required?: boolean; optional?: boolean; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-semibold text-[#555555] tracking-[0.02em]">
+      <label className="text-[11px] font-semibold text-[#555] tracking-[0.02em]">
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
         {optional && <span className="text-[#9E9E9E] font-normal ml-1">(optional)</span>}
@@ -795,8 +997,6 @@ function DynamicList({ items, setItems, disabled, placeholder, onAdd }: {
   );
 }
 
-// ─── Date formatter ────────────────────────────────────────────────────────────
-
 function formatDate(ts: string | { toDate?: () => Date } | undefined): string {
   if (!ts) return '—';
   try {
@@ -808,7 +1008,7 @@ function formatDate(ts: string | { toDate?: () => Date } | undefined): string {
   }
 }
 
-// ─── Page export (Suspense boundary for useSearchParams) ──────────────────────
+// ─── Page export ──────────────────────────────────────────────────────────────
 
 export default function KickoffPage() {
   return (

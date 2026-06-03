@@ -121,6 +121,15 @@ export function adminDb(): ReturnType<typeof getFirestore> {
       },
     });
     if (authClient) {
+      // google-gax (used internally by @google-cloud/firestore for gRPC) calls
+      // auth.getUniverseDomain() to validate the universe. ExternalAccountClient
+      // doesn't implement this method — only GoogleAuth does. Shim it in so the
+      // validation passes (we're always targeting the standard googleapis.com universe).
+      const patchedClient = authClient as unknown as Record<string, unknown>;
+      if (typeof patchedClient.getUniverseDomain !== 'function') {
+        patchedClient.getUniverseDomain = () => Promise.resolve('googleapis.com');
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const GCFirestore = require('@google-cloud/firestore').Firestore;
       cachedFirestore = new GCFirestore({

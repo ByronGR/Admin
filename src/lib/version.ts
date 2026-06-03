@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.12.2';
+export const APP_VERSION = '0.12.3';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.12.3',
+    date: '2026-06-02',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Kick-off page redesigned with an Anchored Rail — a fixed left sidebar shows all 10 sections as numbered circles; the active section is highlighted as you scroll.',
+          '"New Opening" now creates a blank draft instantly (no intermediate form) and jumps straight to the kick-off brief.',
+          'Opening title and organization can be set inline on the kick-off page header — click the pencil icon to edit. Every save writes the title and org back to the opening and pipeline docs.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'Kick-off brief submit error: "this.auth.getUniverseDomain is not a function" — patched ExternalAccountClient to implement getUniverseDomain() so google-gax universe validation passes.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.12.2',
     date: '2026-06-02',

@@ -4,6 +4,15 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { ExternalAccountClient } from 'google-auth-library';
 import { getVercelOidcToken } from '@vercel/functions/oidc';
 
+// Load @google-cloud/firestore at module level so the Firestore constructor
+// and the FieldValue sentinels always come from the same module instance.
+// Callers that need FieldValue (e.g. /api/kickoff) should import GCFieldValue
+// from here instead of from 'firebase-admin/firestore', to avoid the bundler
+// creating two separate class registries that make instanceof checks fail.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const _gc = require('@google-cloud/firestore') as typeof import('@google-cloud/firestore');
+export const GCFieldValue = _gc.FieldValue;
+
 // Server-only Firebase Admin SDK. Credentials are resolved at runtime, in order:
 //   1. FIREBASE_SERVICE_ACCOUNT — a service-account JSON string (only works if the
 //      GCP org policy that disables key creation is lifted; not the default path).
@@ -121,15 +130,15 @@ export function adminDb(): ReturnType<typeof getFirestore> {
       },
     });
     if (authClient) {
-      // Use Firestore's REST transport instead of gRPC. This bypasses google-gax
-      // entirely — the REST client just calls auth.getRequestHeaders() on each
-      // request, which ExternalAccountClient already implements correctly.
-      // No GoogleAuth wrapper, no getClient/getUniverseDomain/getProjectId shimming needed.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const GCFirestore = require('@google-cloud/firestore').Firestore;
-      cachedFirestore = new GCFirestore({
+      // Use Firestore's REST transport (preferRest) to bypass gRPC/google-gax entirely —
+      // the REST client just calls auth.getRequestHeaders() per request, which
+      // ExternalAccountClient implements correctly.
+      // Use _gc.Firestore (the module-level require) so the Firestore class and
+      // the GCFieldValue sentinels exported above share the same module instance,
+      // keeping instanceof checks consistent in the serializer.
+      cachedFirestore = new _gc.Firestore({
         projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
-        auth: authClient,
+        auth: authClient as unknown as import('@google-cloud/firestore').Settings['auth'],
         preferRest: true,
       }) as ReturnType<typeof getFirestore>;
       return cachedFirestore;

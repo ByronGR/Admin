@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
 
 // ─── POST /api/kickoff ────────────────────────────────────────────────────────
 // Server-side state machine for the kick-off brief shared between admin.nearwork.co

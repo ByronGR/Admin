@@ -161,7 +161,18 @@ export default function OpeningsPage() {
                   <div className="text-xs text-[var(--mid)]">{o.recruiter ?? '—'}</div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge label={o.status} variant="status" />
-                    <ApprovalBadge status={o.approvalStatus} />
+                    {o.briefStatus === 'submitted' && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-700 text-blue-700">⏳ Brief pending</span>
+                    )}
+                    {o.briefStatus === 'changes_requested' && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-700 text-amber-700">⚠ Changes requested</span>
+                    )}
+                    {o.briefStatus === 'approved' && o.approvalStatus !== 'published' && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-700 text-emerald-700">✓ Brief approved</span>
+                    )}
+                    {o.published && (
+                      <span className="flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-700 text-green-700">🌐 Live</span>
+                    )}
                   </div>
                   <ChevronRight className="h-3.5 w-3.5 text-[var(--light)]" />
                 </div>

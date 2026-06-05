@@ -240,6 +240,7 @@ export interface Opening {
   // ─── Jobs projection (written on publish so jobs.nearwork.co can read it) ───
   published?: boolean;             // jobs.nearwork.co filters on published == true
   publishedAt?: Timestamp;
+  briefStatus?: string;            // synced from kickoffBriefs by /api/kickoff on every status change
   // Jobs-schema mirror fields (denormalized from the above on publish):
   currency?: string;               // mirrors salaryCurrency
   wfh?: string;                    // "Remote" | "Hybrid" | "On-site" (from workMode)

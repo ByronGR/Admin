@@ -251,6 +251,12 @@ export async function POST(req: Request) {
       history.push({ action: 'submitted', by: actorName, byRole: 'nearwork', timestamp: now });
       update.history = history;
       await ref.set(update, { merge: true });
+      // Sync briefStatus to opening + pipeline so the list / app can show it without extra reads
+      const briefSync = { briefStatus: 'submitted', updatedAt: FieldValue.serverTimestamp() };
+      await Promise.allSettled([
+        db.collection('openings').doc(code).set(briefSync, { merge: true }),
+        db.collection('pipelines').doc(code).set(briefSync, { merge: true }),
+      ]);
       return json({ ok: true }, 200, origin);
     }
 
@@ -258,6 +264,11 @@ export async function POST(req: Request) {
     if (!snap.exists) return json({ ok: false, error: 'Brief not found' }, 404, origin);
     history.push({ action: 'reopened', by: actorName, byRole: 'nearwork', timestamp: now });
     await ref.set({ status: 'draft', updatedAt: FieldValue.serverTimestamp(), history }, { merge: true });
+    const reopenSync = { briefStatus: 'draft', updatedAt: FieldValue.serverTimestamp() };
+    await Promise.allSettled([
+      db.collection('openings').doc(code).set(reopenSync, { merge: true }),
+      db.collection('pipelines').doc(code).set(reopenSync, { merge: true }),
+    ]);
     return json({ ok: true }, 200, origin);
   }
 
@@ -290,6 +301,11 @@ export async function POST(req: Request) {
         updatedAt: FieldValue.serverTimestamp(),
         history,
       }, { merge: true });
+      const approveSync = { briefStatus: 'approved', updatedAt: FieldValue.serverTimestamp() };
+      await Promise.allSettled([
+        db.collection('openings').doc(code).set(approveSync, { merge: true }),
+        db.collection('pipelines').doc(code).set(approveSync, { merge: true }),
+      ]);
       return json({ ok: true }, 200, origin);
     }
 
@@ -302,6 +318,11 @@ export async function POST(req: Request) {
       updatedAt: FieldValue.serverTimestamp(),
       history,
     }, { merge: true });
+    const changesSync = { briefStatus: 'changes_requested', updatedAt: FieldValue.serverTimestamp() };
+    await Promise.allSettled([
+      db.collection('openings').doc(code).set(changesSync, { merge: true }),
+      db.collection('pipelines').doc(code).set(changesSync, { merge: true }),
+    ]);
     return json({ ok: true }, 200, origin);
   }
 

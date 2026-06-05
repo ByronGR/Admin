@@ -223,6 +223,25 @@ export default function PipelinePage() {
     if (focus) setActivePipelineCode(focus);
   }, []);
 
+  // Keep the URL in sync with the active pipeline so users can copy/share it.
+  function openPipeline(code: string) {
+    setActivePipelineCode(code);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('focus', code);
+      history.pushState(null, '', url.toString());
+    }
+  }
+
+  function closePipeline() {
+    setActivePipelineCode(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('focus');
+      history.pushState(null, '', url.toString());
+    }
+  }
+
   // Filter pipelines
   const filtered = pipelines.filter((p) => {
     const matchSearch =
@@ -500,7 +519,7 @@ export default function PipelinePage() {
           </div>
           {activePipeline && (
             <button
-              onClick={() => setActivePipelineCode(null)}
+              onClick={() => closePipeline()}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
             >
               <X className="h-3.5 w-3.5" />
@@ -577,7 +596,7 @@ export default function PipelinePage() {
                 scoreMap={scoreMap}
                 expanded={expandedRows.has(p.code)}
                 onToggle={() => toggleRow(p.code)}
-                onOpen={() => setActivePipelineCode(p.code)}
+                onOpen={() => openPipeline(p.code)}
                 onUpdateStatus={updatePipelineStatus}
                 onDelete={deletePipeline}
                 onDragEnd={(e) => handleDragEnd(e, p.code)}

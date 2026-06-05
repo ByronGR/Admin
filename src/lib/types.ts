@@ -302,6 +302,7 @@ export interface Candidate {
   linkedIn?: string;
   portfolio?: string;
   resumeUrl?: string;
+  cvUrl?: string;       // alias written by jobs.nearwork.co — same as resumeUrl
   photoUrl?: string;
   status?: CandidateStatus;
   source?: string;

@@ -436,9 +436,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
           {/* Actions: CV + WhatsApp */}
           <div className="mt-4 flex flex-wrap gap-2">
-            {candidate.resumeUrl ? (
+            {(candidate.resumeUrl || candidate.cvUrl) ? (
               <a
-                href={candidate.resumeUrl}
+                href={candidate.resumeUrl || candidate.cvUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"

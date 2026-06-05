@@ -556,8 +556,22 @@ export function OpeningDetail({
         )}
       </div>
 
+      {/* ── "Next step" callout when brief is approved but sheet not yet filled ── */}
+      {briefStatus === 'approved' && !sheetReady && !opening.published && (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <span className="text-xl flex-shrink-0">🎉</span>
+          <div>
+            <p className="text-sm font-700 text-emerald-800">Brief approved — next: fill the Opening Sheet</p>
+            <p className="mt-0.5 text-xs text-emerald-700">
+              The client approved the kick-off brief. Fill the public summary, skills, and details below,
+              then click <strong>Publish to Jobs</strong> to make this role live on jobs.nearwork.co.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Opening sheet (for jobs.nearwork.co) ───────────────────────── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+      <div className={`rounded-2xl border p-6 bg-white ${briefStatus === 'approved' && !sheetReady && !opening.published ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-[var(--border)]'}`}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <div

@@ -244,6 +244,7 @@ export async function POST(req: Request) {
         status: 'submitted',
         submittedAt: FieldValue.serverTimestamp(),
         nearworkApprovedBy: actorName,
+        nearworkUid: uid,
         updatedAt: FieldValue.serverTimestamp(),
       };
       if (body.orgId != null) update.orgId = String(body.orgId);
@@ -257,6 +258,34 @@ export async function POST(req: Request) {
         db.collection('openings').doc(code).set(briefSync, { merge: true }),
         db.collection('pipelines').doc(code).set(briefSync, { merge: true }),
       ]);
+      // Write client notifications — notify all active org members that the brief needs review
+      try {
+        const orgId = body.orgId ? String(body.orgId) : '';
+        const jobTitle = String(body.jobTitle ?? existing?.jobTitle ?? code);
+        if (orgId) {
+          const membersSnap = await db.collection('orgMembers').where('orgId', '==', orgId).get();
+          const clientUids = membersSnap.docs
+            .map((d) => d.data() as Record<string, unknown>)
+            .filter((m) => String(m.status ?? 'active').toLowerCase() === 'active')
+            .map((m) => String(m.uid ?? ''))
+            .filter(Boolean);
+          await Promise.allSettled(
+            clientUids.map((recipientUid) =>
+              db.collection('notifications').add({
+                recipientUid,
+                title: 'Kick-off brief ready for review',
+                message: `The kick-off brief for "${jobTitle}" is ready for your review and approval.`,
+                read: false,
+                pipelineCode: code,
+                type: 'brief_submitted',
+                createdAt: FieldValue.serverTimestamp(),
+              })
+            )
+          );
+        }
+      } catch {
+        // Non-critical — notifications can fail silently
+      }
       return json({ ok: true }, 200, origin);
     }
 
@@ -292,6 +321,27 @@ export async function POST(req: Request) {
     const history: HistoryEntry[] = Array.isArray(existing.history) ? [...(existing.history as HistoryEntry[])] : [];
     const now = new Date().toISOString();
 
+    // Helper: write an admin notification to whoever submitted the brief
+    async function notifyNearworkStaff(title: string, bodyText: string) {
+      try {
+        const nearworkUid = String(existing.nearworkUid ?? '');
+        if (!nearworkUid) return;
+        await db.collection('notifications').add({
+          userId: nearworkUid,
+          type: 'status_change',
+          title,
+          body: bodyText,
+          link: `/openings/${code}`,
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch {
+        // Non-critical
+      }
+    }
+
+    const jobTitle = String(existing.jobTitle ?? code);
+
     if (action === 'approve') {
       history.push({ action: 'approved', by: actorName, byRole: 'client', timestamp: now });
       await ref.set({
@@ -306,6 +356,10 @@ export async function POST(req: Request) {
         db.collection('openings').doc(code).set(approveSync, { merge: true }),
         db.collection('pipelines').doc(code).set(approveSync, { merge: true }),
       ]);
+      await notifyNearworkStaff(
+        `Brief approved — ${jobTitle}`,
+        `${actorName} approved the kick-off brief. You can now fill the Opening Sheet and publish the role.`
+      );
       return json({ ok: true }, 200, origin);
     }
 
@@ -323,6 +377,10 @@ export async function POST(req: Request) {
       db.collection('openings').doc(code).set(changesSync, { merge: true }),
       db.collection('pipelines').doc(code).set(changesSync, { merge: true }),
     ]);
+    await notifyNearworkStaff(
+      `Changes requested — ${jobTitle}`,
+      `${actorName} requested changes on the kick-off brief: "${note}"`
+    );
     return json({ ok: true }, 200, origin);
   }
 

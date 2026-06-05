@@ -594,11 +594,21 @@ function KickoffInner() {
             </div>
           )}
           {status === 'approved' && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex gap-3 items-center">
-              <span className="text-xl">✅</span>
-              <div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex gap-3">
+              <span className="text-xl flex-shrink-0">✅</span>
+              <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-emerald-800">Both parties have approved this brief</div>
                 <div className="text-xs text-emerald-700 mt-0.5">{approvedMeta}</div>
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-emerald-800 font-semibold">Next step:</span>
+                  <span className="text-xs text-emerald-700">Fill the Opening Sheet and publish the role to jobs.nearwork.co</span>
+                  <a
+                    href={`/openings/${pipelineCode}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 text-white text-[11px] font-semibold rounded-lg hover:bg-emerald-800 transition-colors"
+                  >
+                    Go to Opening Sheet →
+                  </a>
+                </div>
               </div>
             </div>
           )}

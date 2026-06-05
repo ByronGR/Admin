@@ -129,6 +129,14 @@ function json(data: unknown, status: number, origin: string | null) {
   return NextResponse.json(data, { status, headers: corsHeaders(origin) });
 }
 
+// Map a brief's locationPolicy string to { wfh, workMode } for the opening doc.
+function mapLocationPolicy(lp: string): { wfh: string; workMode: string } {
+  const l = (lp ?? '').toLowerCase();
+  if (l.includes('hybrid')) return { wfh: 'Hybrid', workMode: 'hybrid' };
+  if (l.includes('on-site') || l.includes('onsite') || l.includes('office') || l.includes('in-office')) return { wfh: 'On-site', workMode: 'onsite' };
+  return { wfh: 'Remote', workMode: 'remote' };
+}
+
 // Collect every org a client belongs to, then check membership of `orgId`.
 async function clientBelongsToOrg(uid: string, email: string, orgId: string): Promise<boolean> {
   if (!orgId) return false;
@@ -351,14 +359,59 @@ export async function POST(req: Request) {
         updatedAt: FieldValue.serverTimestamp(),
         history,
       }, { merge: true });
-      const approveSync = { briefStatus: 'approved', updatedAt: FieldValue.serverTimestamp() };
+
+      // ── Auto-publish: map brief fields → opening doc and go live immediately ──
+      const locMode = mapLocationPolicy(String(existing.locationPolicy ?? ''));
+      const mustHaveSkills  = Array.isArray(existing.mustHaveSkills)  ? (existing.mustHaveSkills  as string[]) : [];
+      const niceToHaveSkills = Array.isArray(existing.niceToHaveSkills) ? (existing.niceToHaveSkills as string[]) : [];
+      const keyResponsibilities = Array.isArray(existing.keyResponsibilities) ? (existing.keyResponsibilities as string[]) : [];
+      const techStack = Array.isArray(existing.techStack) ? (existing.techStack as string[]) : [];
+      // Merge mustHaveSkills + techStack for skills chips, deduped, max 10
+      const allSkills = [...new Set([...mustHaveSkills, ...techStack])].slice(0, 10);
+      const salaryMin = Number(existing.salaryMin ?? 0) || null;
+      const salaryMax = Number(existing.salaryMax ?? 0) || null;
+      const currency  = String(existing.currency ?? existing.salaryCurrency ?? 'USD');
+      const seniority = String(existing.yearsOfExperience ?? '');
+      const autoPublishPayload: Record<string, unknown> = {
+        briefStatus:      'approved',
+        status:           'open',
+        published:        true,
+        publishedAt:      FieldValue.serverTimestamp(),
+        approvalStatus:   'published',
+        code,
+        // Content fields (displayed on jobs.nearwork.co job cards and detail page)
+        publicSummary:           String(existing.roleSummary ?? ''),
+        content_about:           String(existing.roleSummary ?? ''),
+        content_responsibilities: keyResponsibilities,
+        content_qualifications:  mustHaveSkills,
+        content_benefits:        [],    // admin fills this in the Opening Sheet after approval
+        niceToHave:              niceToHaveSkills,
+        skills:                  allSkills,
+        // Salary
+        ...(salaryMin ? { salaryMin } : {}),
+        ...(salaryMax ? { salaryMax } : {}),
+        currency,
+        salaryCurrency:  currency,
+        // Work meta
+        wfh:             locMode.wfh,
+        workMode:        locMode.workMode,
+        exp:             seniority,
+        'sb-exp':        seniority,
+        seniority,
+        industry:  String(existing.industryExperience ?? ''),
+        contract:  String(existing.contractType       ?? ''),
+        tz:        String(existing.timezoneRequirements ?? ''),
+        timezone:  String(existing.timezoneRequirements ?? ''),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
       await Promise.allSettled([
-        db.collection('openings').doc(code).set(approveSync, { merge: true }),
-        db.collection('pipelines').doc(code).set(approveSync, { merge: true }),
+        db.collection('openings').doc(code).set(autoPublishPayload, { merge: true }),
+        db.collection('pipelines').doc(code).set({ briefStatus: 'approved', updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
       ]);
       await notifyNearworkStaff(
         `Brief approved — ${jobTitle}`,
-        `${actorName} approved the kick-off brief. You can now fill the Opening Sheet and publish the role.`
+        `${actorName} approved the kick-off brief. The role is now live on jobs.nearwork.co — you can edit or pause it from the Opening Sheet.`
       );
       return json({ ok: true }, 200, origin);
     }

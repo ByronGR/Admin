@@ -228,14 +228,25 @@ export interface Opening {
   updatedAt?: Timestamp;
 
   // ─── Opening sheet (Stage 2) — candidate-facing content that projects to
-  // jobs.nearwork.co. Filled after the kickoff (Stage 1) is verified. ─────────
-  publicSummary?: string;          // candidate-facing role description
+  // jobs.nearwork.co. Auto-populated from the kickoff brief on client approval;
+  // admin can edit/enrich afterwards. ─────────────────────────────────────────
+  publicSummary?: string;          // candidate-facing role description (legacy/short form)
   skills?: string[];               // key skills (chips on the job card)
   industry?: string;               // e.g. SaaS, Fintech
   seniority?: string;              // e.g. Junior / Mid / Senior
   workMode?: WorkMode;             // remote / hybrid / onsite
   city?: string;                   // candidate-facing location
-  benefits?: string;               // free-text benefits / perks
+  benefits?: string;               // free-text benefits / perks (legacy)
+
+  // ─── Structured content sections (populated from brief, shown on detail page) ──
+  content_about?: string;           // "Role overview" — long-form about the role/company
+  content_responsibilities?: string[]; // "What you'll own" — one item per bullet
+  content_qualifications?: string[];   // "What we're looking for" — must-have requirements
+  content_benefits?: string[];         // "What you get" — benefits list
+  niceToHave?: string[];               // Nice-to-have skills (optional)
+  contract?: string;                   // Contract type (full-time / contract / part-time)
+  timezone?: string;                   // Timezone requirement
+  tz?: string;                         // Timezone alias (legacy — Jobs site reads either)
 
   // ─── Jobs projection (written on publish so jobs.nearwork.co can read it) ───
   published?: boolean;             // jobs.nearwork.co filters on published == true

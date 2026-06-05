@@ -98,9 +98,15 @@ function KickoffInner() {
   const [assignedRecruiter, setAssignedRecruiter] = useState('');
   const [assignedRecruiterEmail, setAssignedRecruiterEmail] = useState('');
 
+  // Account Manager (controlled — also stores email)
+  const [accountManager, setAccountManager] = useState('');
+  const [accountManagerEmail, setAccountManagerEmail] = useState('');
+
   // Airtable roles
   const [airtableRoles, setAirtableRoles] = useState<AirtableRole[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState('');
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [rolesError, setRolesError] = useState('');
 
   // Nearwork staff (for recruiter picker)
   const staff = useStaff();
@@ -128,10 +134,21 @@ function KickoffInner() {
 
   // ── Load Airtable roles ───────────────────────────────────────────────────
   useEffect(() => {
+    setRolesLoading(true);
+    setRolesError('');
     fetch('/api/airtable-roles')
       .then((r) => r.json())
-      .then((d) => { if (d.ok && Array.isArray(d.roles)) setAirtableRoles(d.roles); })
-      .catch(() => {/* non-critical — form works without it */});
+      .then((d) => {
+        if (d.ok && Array.isArray(d.roles) && d.roles.length > 0) {
+          setAirtableRoles(d.roles);
+        } else if (d.ok && Array.isArray(d.roles) && d.roles.length === 0) {
+          setRolesError('No roles found — check that AIRTABLE_BASE and AIRTABLE_KEY are set in Vercel, and that your table is named "Roles", "Job Roles", or "Positions".');
+        } else {
+          setRolesError(d.error || 'Airtable not configured (AIRTABLE_BASE / AIRTABLE_KEY missing in Vercel).');
+        }
+      })
+      .catch(() => setRolesError('Could not reach /api/airtable-roles — check Vercel logs.'))
+      .finally(() => setRolesLoading(false));
   }, []);
 
   // ── Load orgs ──────────────────────────────────────────────────────────────
@@ -244,7 +261,7 @@ function KickoffInner() {
       'teamSize', 'reportsToTitle', 'reportsToName', 'directReports', 'workingStyle',
       'worksCloselyWith', 'workingHours', 'timezoneRequirements', 'remotePolicyDetails',
       'teamCultureNotes', 'internalSystems', 'trainingProvided', 'trainingDetails',
-      'accountManager', 'sourcingStartDate', 'candidateDeadline', 'targetCandidateVolume',
+      'sourcingStartDate', 'candidateDeadline', 'targetCandidateVolume',
       'reportingCadence', 'reportingFormat', 'searchStrategyNotes', 'internalNotes',
       'contractType', 'probationPeriod', 'noticePeriod', 'workAuthRequired', 'nonCompeteNda',
       'equipmentProvidedBy', 'additionalNotes', 'otherDiscussed',
@@ -269,6 +286,8 @@ function KickoffInner() {
     if (brief.assignedRecruiter) setAssignedRecruiter(String(brief.assignedRecruiter));
     else if (opening.recruiter) setAssignedRecruiter(String(opening.recruiter));
     if (brief.assignedRecruiterEmail) setAssignedRecruiterEmail(String(brief.assignedRecruiterEmail));
+    if (brief.accountManager) setAccountManager(String(brief.accountManager));
+    if (brief.accountManagerEmail) setAccountManagerEmail(String(brief.accountManagerEmail));
     if (brief.airtableRoleId) setSelectedRoleId(String(brief.airtableRoleId));
   }
 
@@ -291,6 +310,8 @@ function KickoffInner() {
     // Controlled fields not in the DOM form
     if (assignedRecruiter) data.assignedRecruiter = assignedRecruiter;
     if (assignedRecruiterEmail) data.assignedRecruiterEmail = assignedRecruiterEmail;
+    if (accountManager) data.accountManager = accountManager;
+    if (accountManagerEmail) data.accountManagerEmail = accountManagerEmail;
     if (selectedRoleId) data.airtableRoleId = selectedRoleId;
     return data;
   }
@@ -357,7 +378,7 @@ function KickoffInner() {
   }, [isReadOnly, user, pipelineCode, openingData, selectedOrgId, orgs,
       keyResponsibilities, mustHaveSkills, niceToHaveSkills, requiredCertifications,
       requiredTools, techStack, sourcingChannels, assignedRecruiter,
-      assignedRecruiterEmail, selectedRoleId]);
+      assignedRecruiterEmail, accountManager, accountManagerEmail, selectedRoleId]);
 
   function scheduleAutoSave() {
     if (isReadOnly) return;
@@ -365,6 +386,16 @@ function KickoffInner() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(saveDraft, 2500);
   }
+
+  // Cancels any pending auto-save — passed to DynamicList so clicking
+  // "+ Add item" can't race with an in-flight save timer.
+  const cancelAutoSave = useCallback(() => {
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+      setSaveState('idle');
+    }
+  }, []);
 
   // ── Submit validation ─────────────────────────────────────────────────────
   function validateBeforeSubmit(): string | null {
@@ -700,10 +731,16 @@ function KickoffInner() {
                 )}
               </div>
 
-              {/* Airtable role selector — only shown when roles are loaded */}
-              {airtableRoles.length > 0 && (
-                <div className="mb-4 bg-[#F5F4F0] border border-[#E5E4E0] rounded-lg px-4 py-3">
-                  <div className="text-[10px] font-bold text-[#555] uppercase tracking-wider mb-2">📋 Nearwork Role Catalog</div>
+              {/* Airtable role catalog — always shown (loading / error / ready) */}
+              <div className="mb-4 bg-[#F5F4F0] border border-[#E5E4E0] rounded-lg px-4 py-3">
+                <div className="text-[10px] font-bold text-[#555] uppercase tracking-wider mb-2">📋 Nearwork Role Catalog</div>
+                {rolesLoading ? (
+                  <div className="text-[12px] text-[#9E9E9E] animate-pulse">Loading roles from Airtable…</div>
+                ) : rolesError ? (
+                  <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    ⚠ {rolesError}
+                  </div>
+                ) : (
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
                       disabled={isReadOnly}
@@ -722,19 +759,19 @@ function KickoffInner() {
                       }}
                       className={`${inp} flex-1 min-w-[200px] cursor-pointer`}
                     >
-                      <option value="">Select role from catalog…</option>
+                      <option value="">— Select from catalog to auto-fill title —</option>
                       {airtableRoles.map((r) => (
                         <option key={r.id} value={r.id}>{r.name}</option>
                       ))}
                     </select>
                     {selectedRole && (
-                      <span className="text-[11px] text-[#9E9E9E]">
-                        Sets the job title and pre-fills suggested rates in Section 2
+                      <span className="text-[11px] text-[#16A085] font-medium">
+                        ✓ Rates pre-filled in Section 2
                       </span>
                     )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Job Title" required><input name="jobTitle" disabled={isReadOnly} className={inp} placeholder="e.g. Senior Software Engineer" /></Field>
@@ -794,7 +831,7 @@ function KickoffInner() {
               <Field label="Role Summary / Elevator Pitch" required><textarea name="roleSummary" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="2–4 sentences describing the role, its purpose, and why it matters…" /></Field>
               <div className="mt-4">
                 <Field label="Key Responsibilities">
-                  <DynamicList items={keyResponsibilities} setItems={setKeyResponsibilities} disabled={isReadOnly} placeholder="e.g. Lead backend architecture decisions…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={keyResponsibilities} setItems={setKeyResponsibilities} disabled={isReadOnly} placeholder="e.g. Lead backend architecture decisions…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
               </div>
               <div className="mt-4">
@@ -814,10 +851,10 @@ function KickoffInner() {
             <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Must-Have Skills / Experience">
-                  <DynamicList items={mustHaveSkills} setItems={setMustHaveSkills} disabled={isReadOnly} placeholder="e.g. 5+ years Python, REST API design…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={mustHaveSkills} setItems={setMustHaveSkills} disabled={isReadOnly} placeholder="e.g. 5+ years Python, REST API design…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
                 <Field label="Nice-to-Have Skills">
-                  <DynamicList items={niceToHaveSkills} setItems={setNiceToHaveSkills} disabled={isReadOnly} placeholder="e.g. Experience with Kubernetes…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={niceToHaveSkills} setItems={setNiceToHaveSkills} disabled={isReadOnly} placeholder="e.g. Experience with Kubernetes…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
               </div>
               <div className="grid grid-cols-3 gap-4 mb-4">
@@ -840,7 +877,7 @@ function KickoffInner() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Required Certifications" optional>
-                  <DynamicList items={requiredCertifications} setItems={setRequiredCertifications} disabled={isReadOnly} placeholder="e.g. AWS Solutions Architect…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={requiredCertifications} setItems={setRequiredCertifications} disabled={isReadOnly} placeholder="e.g. AWS Solutions Architect…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
                 <Field label="Industry Experience" optional><textarea name="industryExperience" disabled={isReadOnly} className={ta} style={{minHeight:72}} placeholder="Any specific industry experience required? e.g. fintech, healthcare…" /></Field>
               </div>
@@ -874,10 +911,10 @@ function KickoffInner() {
             <Section id="s7" num={6} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Required Tools / Software">
-                  <DynamicList items={requiredTools} setItems={setRequiredTools} disabled={isReadOnly} placeholder="e.g. Jira, Slack, Figma…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={requiredTools} setItems={setRequiredTools} disabled={isReadOnly} placeholder="e.g. Jira, Slack, Figma…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
                 <Field label="Tech Stack">
-                  <DynamicList items={techStack} setItems={setTechStack} disabled={isReadOnly} placeholder="e.g. React, Node.js, PostgreSQL…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={techStack} setItems={setTechStack} disabled={isReadOnly} placeholder="e.g. React, Node.js, PostgreSQL…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
               </div>
               <div className="grid grid-cols-3 gap-4">
@@ -908,7 +945,19 @@ function KickoffInner() {
                   />
                 </Field>
 
-                <Field label="Account Manager"><input name="accountManager" disabled={isReadOnly} className={inp} placeholder="Full name" /></Field>
+                <Field label="Account Manager">
+                  <RecruiterPicker
+                    staff={staff}
+                    value={accountManager}
+                    valueEmail={accountManagerEmail}
+                    disabled={isReadOnly}
+                    onChange={(name, email) => {
+                      setAccountManager(name);
+                      setAccountManagerEmail(email);
+                      scheduleAutoSave();
+                    }}
+                  />
+                </Field>
               </div>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Sourcing Start Date"><input type="date" name="sourcingStartDate" disabled={isReadOnly} className={inp} /></Field>
@@ -923,7 +972,7 @@ function KickoffInner() {
               </div>
               <div className="mb-4">
                 <Field label="Sourcing Channels">
-                  <DynamicList items={sourcingChannels} setItems={setSourcingChannels} disabled={isReadOnly} placeholder="e.g. LinkedIn, referrals, job boards…" onAdd={scheduleAutoSave} />
+                  <DynamicList items={sourcingChannels} setItems={setSourcingChannels} disabled={isReadOnly} placeholder="e.g. LinkedIn, referrals, job boards…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
                 </Field>
               </div>
               <div className="mb-4">
@@ -1085,12 +1134,13 @@ function Select({ name, options, disabled }: { name: string; options: string[]; 
 
 // ─── DynamicList — fixed: no auto-save on add-item, auto-focus new inputs ─────
 
-function DynamicList({ items, setItems, disabled, placeholder, onAdd }: {
+function DynamicList({ items, setItems, disabled, placeholder, onAdd, cancelSave }: {
   items: string[];
   setItems: Dispatch<SetStateAction<string[]>>;
   disabled?: boolean;
   placeholder?: string;
   onAdd?: () => void;
+  cancelSave?: () => void;
 }) {
   const prevLenRef = useRef(items.length);
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -1128,11 +1178,12 @@ function DynamicList({ items, setItems, disabled, placeholder, onAdd }: {
         </div>
       ))}
       {!disabled && (
-        // IMPORTANT: do NOT call onAdd() here — adding an empty item would trigger
-        // auto-save which removes the empty field before the user can type in it.
+        // IMPORTANT: do NOT call onAdd() here.
+        // Also cancel any pending auto-save so it can't race and filter the
+        // empty field out of state before the user has a chance to type.
         <button
           type="button"
-          onClick={() => setItems(s => [...s, ''])}
+          onClick={() => { cancelSave?.(); setItems(s => [...s, '']); }}
           className="mt-1 py-1.5 px-3 border-2 border-dashed border-[#D0CFC9] rounded-lg text-[11px] font-semibold text-[#9E9E9E] hover:border-[#16A085] hover:text-[#16A085] hover:bg-[#F0FAF7] transition-all"
         >
           + Add item

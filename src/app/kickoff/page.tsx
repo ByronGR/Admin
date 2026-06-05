@@ -664,6 +664,42 @@ function KickoffInner() {
             {/* ── S1 Role Overview ──────────────────────────────────────── */}
             <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement">
 
+              {/* Organization — required, always visible */}
+              <div className={`mb-5 p-4 rounded-xl border-2 ${selectedOrgId ? 'border-[#E5E4E0] bg-white' : 'border-amber-300 bg-amber-50'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#555]">🏢 Organization</span>
+                  <span className="text-[10px] font-semibold text-red-500 uppercase tracking-wider">Required</span>
+                  {!selectedOrgId && <span className="text-[11px] text-amber-700 font-medium ml-auto">⚠ Must be set before submitting</span>}
+                </div>
+                <select
+                  disabled={isReadOnly}
+                  value={selectedOrgId}
+                  onChange={(e) => {
+                    const newOrgId = e.target.value;
+                    setSelectedOrgId(newOrgId);
+                    const org = orgs.find((o) => o.id === newOrgId);
+                    setOpeningData((d) => d ? { ...d, orgId: newOrgId, orgName: org?.name ?? '' } : d);
+                    updateDoc(doc(db, 'openings', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    updateDoc(doc(db, 'pipelines', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    if (submitError) setSubmitError('');
+                  }}
+                  className={`w-full text-sm border rounded-lg px-3 py-2 outline-none transition-colors ${
+                    selectedOrgId
+                      ? 'border-[#E5E4E0] bg-white focus:border-[#16A085]'
+                      : 'border-amber-300 bg-amber-50 focus:border-amber-500 text-amber-900 font-medium'
+                  } ${isReadOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <option value="">— Select the client organization —</option>
+                  {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                {selectedOrgId && (
+                  <div className="text-[11px] text-[#9E9E9E] mt-1.5">
+                    Linked to <span className="font-semibold text-[#16A085]">{orgs.find(o => o.id === selectedOrgId)?.name}</span>
+                    {' · '}also editable via the pencil icon in the header
+                  </div>
+                )}
+              </div>
+
               {/* Airtable role selector — only shown when roles are loaded */}
               {airtableRoles.length > 0 && (
                 <div className="mb-4 bg-[#F5F4F0] border border-[#E5E4E0] rounded-lg px-4 py-3">

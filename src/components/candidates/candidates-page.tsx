@@ -10,6 +10,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -18,7 +19,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { initials, sortByTimestamp, generateCandidateId } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
-import { Search, Plus, Download } from 'lucide-react';
+import { Search, Plus, Download, Trash2 } from 'lucide-react';
 
 // ─── Smart match config ───────────────────────────────────────────────────────
 
@@ -49,6 +50,30 @@ export default function CandidatesPage() {
     currentRole: '', currentCompany: '', linkedIn: '', skills: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'candidates', deleteTarget.id));
+      setCandidates((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      showToast(`Deleted ${deleteTarget.name || deleteTarget.id}`, 'success');
+      setDeleteTarget(null);
+    } catch {
+      showToast('Failed to delete candidate', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // A candidate is "empty" if they have no meaningful profile data
+  function isEmpty(c: Candidate) {
+    return !c.name && !c.email && !c.currentRole && !(c.skills?.length);
+  }
 
   // Smart match
   const [matchRole, setMatchRole] = useState('');
@@ -312,22 +337,25 @@ export default function CandidatesPage() {
                   display.map((c) => (
                     <div
                       key={c.id}
-                      className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer"
+                      className={`grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer ${isEmpty(c) ? 'opacity-60' : ''}`}
                       onClick={() => router.push(`/candidates/${c.id}`)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
-                          style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+                          style={{ background: isEmpty(c) ? 'var(--border)' : 'linear-gradient(135deg, var(--green), var(--gd))' }}
                         >
                           {initials(c.name)}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <p className="truncate text-xs font-600 text-[var(--black)]">{c.name}</p>
+                            <p className="truncate text-xs font-600 text-[var(--black)]">{c.name || <span className="italic text-[var(--light)]">No name</span>}</p>
                             <span className="shrink-0 rounded font-mono text-[9px] font-600 text-[var(--light)]">{c.code ?? c.id}</span>
+                            {isEmpty(c) && (
+                              <span className="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-700 text-red-500">Empty</span>
+                            )}
                           </div>
-                          <p className="truncate text-[10px] text-[var(--light)]">{c.email}</p>
+                          <p className="truncate text-[10px] text-[var(--light)]">{c.email || '—'}</p>
                         </div>
                       </div>
                       <div className="min-w-0">
@@ -353,7 +381,7 @@ export default function CandidatesPage() {
                           <span className="text-xs text-[var(--light)]">—</span>
                         )}
                       </div>
-                      <div className="flex justify-end">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -363,6 +391,16 @@ export default function CandidatesPage() {
                         >
                           View
                         </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(c);
+                          }}
+                          className="rounded-lg border border-[var(--border)] p-1 text-[var(--light)] hover:border-red-300 hover:bg-red-50 hover:text-red-500"
+                          title="Delete candidate"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -370,6 +408,35 @@ export default function CandidatesPage() {
               </div>
             )}
       </div>
+
+      {/* Delete confirmation modal */}
+      <Modal open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} title="Delete candidate">
+        <p className="text-sm text-[var(--mid)] leading-relaxed mb-5">
+          Are you sure you want to permanently delete{' '}
+          <strong className="text-[var(--black)]">{deleteTarget?.name || deleteTarget?.id}</strong>?
+          {deleteTarget && isEmpty(deleteTarget) && (
+            <span className="ml-1 text-red-500">This candidate has no profile data.</span>
+          )}{' '}
+          This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setDeleteTarget(null)}
+            disabled={deleting}
+            className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirmDelete}
+            disabled={deleting}
+            className="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2 text-xs font-600 text-white hover:bg-red-600 disabled:opacity-60"
+          >
+            {deleting && <Spinner size="sm" />}
+            {deleting ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </Modal>
 
       {/* New candidate modal */}
       <Modal open={newModal} onClose={() => setNewModal(false)} title="Add candidate" size="lg">

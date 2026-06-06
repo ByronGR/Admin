@@ -120,7 +120,7 @@ export default function CandidatesPage() {
         let score = 0;
         if (c.currentRole?.toLowerCase().includes(role.toLowerCase())) score += 40;
         if (expNum >= 0 && (c.experience ?? 0) >= expNum) score += 30;
-        if (salary && (c.expectedSalary ?? 0) <= Number(salary)) score += 30;
+        if (salary && Number(c.expectedSalary ?? 0) <= Number(salary)) score += 30;
         return { ...c, _score: score };
       })
       .filter((c) => c._score > 0)

@@ -88,7 +88,10 @@ type Body = Record<string, unknown>;
 
 // Build the persisted subset of a save/submit body, coercing types and dropping
 // anything not on the allow-list.
-function sanitizeBriefFields(body: Body): Record<string, unknown> {
+// forSubmit=false → keep empty strings in arrays so in-progress DynamicList items
+//   survive the auto-save → onSnapshot roundtrip without being wiped.
+// forSubmit=true  → filter empty strings so the submitted brief is clean.
+function sanitizeBriefFields(body: Body, forSubmit = false): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of STRING_FIELDS) {
     if (body[k] != null) out[k] = String(body[k]);
@@ -101,7 +104,8 @@ function sanitizeBriefFields(body: Body): Record<string, unknown> {
   }
   for (const k of STRING_ARRAY_FIELDS) {
     if (Array.isArray(body[k])) {
-      out[k] = (body[k] as unknown[]).map((v) => String(v).trim()).filter(Boolean);
+      const items = (body[k] as unknown[]).map((v) => String(v).trim());
+      out[k] = forSubmit ? items.filter(Boolean) : items;
     }
   }
   if (Array.isArray(body.interviewStages)) {
@@ -247,7 +251,7 @@ export async function POST(req: Request) {
 
     if (action === 'submit') {
       const update: Record<string, unknown> = {
-        ...sanitizeBriefFields(body),
+        ...sanitizeBriefFields(body, true),
         openingCode: code,
         status: 'submitted',
         submittedAt: FieldValue.serverTimestamp(),

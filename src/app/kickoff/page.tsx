@@ -4,10 +4,10 @@ import {
   useEffect, useState, useRef, useCallback, useMemo, Suspense,
   type ReactNode, type Dispatch, type SetStateAction,
 } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   auth, db, onAuthStateChanged, isNearworkEmail,
-  doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, onSnapshot,
+  doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot,
   serverTimestamp,
 } from '@/lib/firebase';
 import type { User } from '@/lib/firebase';
@@ -58,12 +58,13 @@ const SECTIONS = [
 function KickoffInner() {
   const params = useSearchParams();
   const pipelineCode = params?.get('code') ?? '';
+  const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'auth-error' | 'error' | 'ready'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
   const [openingData, setOpeningData] = useState<Record<string, unknown> | null>(null);
-  const [briefData, setBriefData] = useState<BriefData | null>(null);
+  const [_briefData, setBriefData] = useState<BriefData | null>(null);
   const [status, setStatus] = useState<BriefStatus>('draft');
   const [auditHistory, setAuditHistory] = useState<AuditEntry[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -116,11 +117,22 @@ function KickoffInner() {
 
   const formRef = useRef<HTMLFormElement>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jobTitleInputRef = useRef<HTMLInputElement>(null);
 
   // Computed selected role (for suggested rates in S2)
   const selectedRole = useMemo(
     () => airtableRoles.find((r) => r.id === selectedRoleId) ?? null,
     [airtableRoles, selectedRoleId],
+  );
+
+  // Timeline entries for Item 9 — who submitted, when partner reviewed, decision
+  const timelineSubmitted = useMemo(
+    () => auditHistory.find((h) => h.action === 'submitted') ?? null,
+    [auditHistory],
+  );
+  const timelineDecision = useMemo(
+    () => [...auditHistory].reverse().find((h) => h.action === 'approved' || h.action === 'changes_requested') ?? null,
+    [auditHistory],
   );
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -133,9 +145,9 @@ function KickoffInner() {
   }, []);
 
   // ── Load Airtable roles ───────────────────────────────────────────────────
+  // rolesLoading / rolesError are already initialised to true / '' in useState —
+  // no need to reset them synchronously at the top of the effect.
   useEffect(() => {
-    setRolesLoading(true);
-    setRolesError('');
     fetch('/api/airtable-roles')
       .then((r) => r.json())
       .then((d) => {
@@ -200,6 +212,7 @@ function KickoffInner() {
           if (snap.exists()) {
             const brief = { id: snap.id, ...snap.data() } as BriefData;
             setBriefData(brief);
+            // eslint-disable-next-line react-hooks/immutability
             applyBriefToForm(brief, opening!);
             const s = (brief.status ?? 'draft') as BriefStatus;
             setStatus(s);
@@ -215,6 +228,7 @@ function KickoffInner() {
             }
           } else {
             // New brief — pre-fill S1 job title from the opening's title
+             
             applyBriefToForm({} as BriefData, opening!);
           }
         });
@@ -300,19 +314,30 @@ function KickoffInner() {
       const s = String(v).trim();
       if (s) data[k] = s;
     });
-    data.keyResponsibilities = keyResponsibilities.filter(Boolean);
-    data.mustHaveSkills = mustHaveSkills.filter(Boolean);
-    data.niceToHaveSkills = niceToHaveSkills.filter(Boolean);
-    data.requiredCertifications = requiredCertifications.filter(Boolean);
-    data.requiredTools = requiredTools.filter(Boolean);
-    data.techStack = techStack.filter(Boolean);
-    data.sourcingChannels = sourcingChannels.filter(Boolean);
+    // Send empty strings as-is so Firestore drafts preserve in-progress empty items.
+    // The server strips empties only on 'submit' (see sanitizeBriefFields in api/kickoff/route.ts).
+    data.keyResponsibilities = keyResponsibilities;
+    data.mustHaveSkills = mustHaveSkills;
+    data.niceToHaveSkills = niceToHaveSkills;
+    data.requiredCertifications = requiredCertifications;
+    data.requiredTools = requiredTools;
+    data.techStack = techStack;
+    data.sourcingChannels = sourcingChannels;
     // Controlled fields not in the DOM form
     if (assignedRecruiter) data.assignedRecruiter = assignedRecruiter;
     if (assignedRecruiterEmail) data.assignedRecruiterEmail = assignedRecruiterEmail;
     if (accountManager) data.accountManager = accountManager;
     if (accountManagerEmail) data.accountManagerEmail = accountManagerEmail;
-    if (selectedRoleId) data.airtableRoleId = selectedRoleId;
+    if (selectedRoleId) {
+      data.airtableRoleId = selectedRoleId;
+      // When a catalog role is selected, the jobTitle input is disabled so FormData
+      // skips it — pull the title from the roles list (or the DOM node as fallback).
+      if (!data.jobTitle) {
+        const role = airtableRoles.find((r) => r.id === selectedRoleId);
+        if (role?.name) data.jobTitle = role.name;
+        else if (jobTitleInputRef.current?.value) data.jobTitle = jobTitleInputRef.current.value;
+      }
+    }
     return data;
   }
 
@@ -424,12 +449,18 @@ function KickoffInner() {
 
   async function executeAction() {
     if (!pendingAction) return;
+    const action = pendingAction;
     setConfirmLoading(true);
     try {
-      await callAPI(pendingAction);
-      if (pendingAction !== 'reopen') await syncOpeningMeta();
+      await callAPI(action);
+      if (action !== 'reopen') await syncOpeningMeta();
       setConfirmOpen(false);
       setPendingAction(null);
+      // After submitting, go straight to the Opening Sheet so the team can
+      // fill it out while the client reviews the brief.
+      if (action === 'submit' && pipelineCode) {
+        router.push(`/openings/${pipelineCode}`);
+      }
     } catch (e) {
       alert('Error: ' + (e instanceof Error ? e.message : 'Unknown error'));
     } finally {
@@ -660,6 +691,36 @@ function KickoffInner() {
         {/* ── Main content ───────────────────────────────────────────────── */}
         <main className="flex-1 px-6 py-6 max-w-[860px]">
 
+          {/* ── Submission timeline (Item 9) ───────────────────────────────── */}
+          {(timelineSubmitted || auditHistory.length > 0) && (
+            <div className="bg-white border border-[#E5E4E0] rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap text-[11px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E9E9E] flex-shrink-0">Timeline</span>
+              {timelineSubmitted ? (
+                <span className="flex items-center gap-1.5 text-[#555]">
+                  <span className="text-base">📤</span>
+                  Submitted by <strong className="text-[#111] font-semibold">{timelineSubmitted.by}</strong>
+                  <span className="text-[#9E9E9E]">· {formatDate(timelineSubmitted.timestamp)}</span>
+                </span>
+              ) : (
+                <span className="text-[#9E9E9E] italic">Not yet submitted</span>
+              )}
+              {timelineSubmitted && !timelineDecision && (
+                <span className="flex items-center gap-1.5 text-amber-700">
+                  <span className="text-base">⏳</span>
+                  Awaiting client review
+                </span>
+              )}
+              {timelineDecision && (
+                <span className="flex items-center gap-1.5 text-[#555]">
+                  <span className="text-base">{timelineDecision.action === 'approved' ? '✅' : '⚠️'}</span>
+                  {timelineDecision.action === 'approved' ? 'Approved' : 'Changes requested'} by{' '}
+                  <strong className="text-[#111] font-semibold">{timelineDecision.by}</strong>
+                  <span className="text-[#9E9E9E]">· {formatDate(timelineDecision.timestamp)}</span>
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Banners */}
           {status === 'changes_requested' && changesBannerNote && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex gap-3">
@@ -731,50 +792,53 @@ function KickoffInner() {
                 )}
               </div>
 
-              {/* Airtable role catalog — always shown (loading / error / ready) */}
-              <div className="mb-4 bg-[#F5F4F0] border border-[#E5E4E0] rounded-lg px-4 py-3">
-                <div className="text-[10px] font-bold text-[#555] uppercase tracking-wider mb-2">📋 Nearwork Role Catalog</div>
-                {rolesLoading ? (
-                  <div className="text-[12px] text-[#9E9E9E] animate-pulse">Loading roles from Airtable…</div>
-                ) : rolesError ? (
-                  <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                    ⚠ {rolesError}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <select
-                      disabled={isReadOnly}
-                      value={selectedRoleId}
-                      onChange={(e) => {
-                        const role = airtableRoles.find((r) => r.id === e.target.value);
-                        setSelectedRoleId(e.target.value);
-                        if (role) {
-                          const el = formRef.current?.elements.namedItem('jobTitle') as HTMLInputElement | null;
-                          if (el) {
-                            el.value = role.name;
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                          }
-                        }
-                        scheduleAutoSave();
-                      }}
-                      className={`${inp} flex-1 min-w-[200px] cursor-pointer`}
-                    >
-                      <option value="">— Select from catalog to auto-fill title —</option>
-                      {airtableRoles.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                    {selectedRole && (
-                      <span className="text-[11px] text-[#16A085] font-medium">
-                        ✓ Rates pre-filled in Section 2
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
               <div className="grid grid-cols-2 gap-4 mb-4">
-                <Field label="Job Title" required><input name="jobTitle" disabled={isReadOnly} className={inp} placeholder="e.g. Senior Software Engineer" /></Field>
+                {/* Job Title — unified Airtable dropdown + custom text input (Item 5) */}
+                <Field label="Job Title" required>
+                  {rolesLoading ? (
+                    <input ref={jobTitleInputRef} name="jobTitle" disabled={isReadOnly} className={inp} placeholder="Loading roles from Airtable…" />
+                  ) : rolesError ? (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">⚠ {rolesError}</div>
+                      <input ref={jobTitleInputRef} name="jobTitle" disabled={isReadOnly} className={inp} placeholder="e.g. Senior Software Engineer" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <select
+                        disabled={isReadOnly}
+                        value={selectedRoleId || '_custom'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '_custom') {
+                            setSelectedRoleId('');
+                            if (jobTitleInputRef.current) jobTitleInputRef.current.value = '';
+                          } else {
+                            const role = airtableRoles.find((r) => r.id === val);
+                            setSelectedRoleId(val);
+                            if (role && jobTitleInputRef.current) jobTitleInputRef.current.value = role.name;
+                          }
+                          scheduleAutoSave();
+                        }}
+                        className={`${inp} cursor-pointer`}
+                      >
+                        <option value="_custom">✏ Enter custom title…</option>
+                        {airtableRoles.map((r) => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        ref={jobTitleInputRef}
+                        name="jobTitle"
+                        disabled={isReadOnly || !!selectedRoleId}
+                        className={`${inp} ${selectedRoleId ? 'bg-[#F0FAF7] text-[#16A085] font-semibold border-[rgba(22,160,133,.35)]' : ''}`}
+                        placeholder={selectedRoleId ? '' : 'e.g. Senior Software Engineer'}
+                      />
+                      {selectedRoleId && (
+                        <span className="text-[11px] text-[#16A085] font-medium">✓ Rates pre-filled in Section 2</span>
+                      )}
+                    </div>
+                  )}
+                </Field>
                 <Field label="Department / Team" optional><input name="department" disabled={isReadOnly} className={inp} placeholder="e.g. Engineering, Sales" /></Field>
               </div>
               <div className="grid grid-cols-3 gap-4 mb-4">

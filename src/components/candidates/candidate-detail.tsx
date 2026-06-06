@@ -18,6 +18,7 @@ import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
   Candidate,
+  WorkHistoryEntry,
   Timestamp,
   Pipeline,
   PipelineCandidate,
@@ -689,18 +690,66 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
         </div>
 
+        {/* Work history (Jobs applicants) */}
+        {Array.isArray(candidate.workHistory) && candidate.workHistory.some(w => w.company || w.title) && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Work history</h3>
+            <div className="space-y-3">
+              {candidate.workHistory.filter(w => w.company || w.title).map((w, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg)] text-[10px] font-800 text-[var(--mid)]">
+                    {i + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-600 text-[var(--black)]">{w.title || '—'}</p>
+                    <p className="text-[11px] text-[var(--mid)]">{w.company || '—'}</p>
+                    {(w.from || w.to) && (
+                      <p className="mt-0.5 text-[10px] text-[var(--light)]">
+                        {w.from || '?'} → {w.to === 'present' ? 'Present' : w.to || '?'}
+                      </p>
+                    )}
+                    {w.contact && (
+                      <p className="mt-0.5 text-[10px] text-[var(--light)]">Contact: {w.contact}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Gathered info / details */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Details</h3>
           <div className="grid gap-3 sm:grid-cols-2 text-xs">
-            {candidate.createdAt && (
+            {(candidate.city || candidate.location) && (
               <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Joined Nearwork
-                </p>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">City / Location</p>
+                <p className="mt-0.5 text-[var(--black)]">{candidate.city || candidate.location}</p>
+              </div>
+            )}
+            {candidate.english && (
+              <div>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">English level</p>
+                <p className="mt-0.5 text-[var(--black)]">{candidate.english}</p>
+              </div>
+            )}
+            {(candidate.expectedSalaryAmount != null || candidate.expectedSalary != null) && (
+              <div>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Expected salary</p>
                 <p className="mt-0.5 text-[var(--black)]">
-                  {fmtDate(candidate.createdAt as Timestamp | string | undefined)}
+                  {candidate.expectedSalaryAmount
+                    ? `${candidate.expectedSalaryCurrency || 'USD'} ${Number(candidate.expectedSalaryAmount).toLocaleString()}/mo`
+                    : typeof candidate.expectedSalary === 'number'
+                      ? `$${candidate.expectedSalary.toLocaleString()}/mo`
+                      : String(candidate.expectedSalary)}
                 </p>
+              </div>
+            )}
+            {candidate.phone && (
+              <div>
+                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Phone</p>
+                <p className="mt-0.5 text-[var(--black)]">{candidate.phone}</p>
               </div>
             )}
             {typeof candidate.experience === 'number' && (
@@ -711,15 +760,13 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <p className="mt-0.5 text-[var(--black)]">{candidate.experience} years</p>
               </div>
             )}
-            {candidate.expectedSalary != null && (
+            {candidate.createdAt && (
               <div>
                 <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Expected salary
+                  Joined Nearwork
                 </p>
                 <p className="mt-0.5 text-[var(--black)]">
-                  {typeof candidate.expectedSalary === 'number'
-                    ? `$${candidate.expectedSalary.toLocaleString()}/mo`
-                    : String(candidate.expectedSalary)}
+                  {fmtDate(candidate.createdAt as Timestamp | string | undefined)}
                 </p>
               </div>
             )}

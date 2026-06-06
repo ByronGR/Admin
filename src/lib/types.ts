@@ -285,6 +285,14 @@ export type CandidateStatus =
   | 'rejected'
   | 'withdrawn';
 
+export interface WorkHistoryEntry {
+  company?: string;
+  title?: string;
+  from?: string;
+  to?: string;
+  contact?: string;
+}
+
 export interface Candidate {
   id: string;
   // Short, human-readable ID (e.g. "K7M2PX"). For candidates created in Admin
@@ -302,16 +310,19 @@ export interface Candidate {
   linkedIn?: string;
   portfolio?: string;
   resumeUrl?: string;
-  cvUrl?: string;       // alias written by jobs.nearwork.co — same as resumeUrl
+  cvUrl?: string;             // alias written by jobs.nearwork.co — same as resumeUrl
   photoUrl?: string;
   status?: CandidateStatus;
   source?: string;
   tags?: string[];
   skills?: string[];
-  experience?: number;
+  experience?: number;        // years of experience (Admin-created candidates)
+  workHistory?: WorkHistoryEntry[]; // jobs.nearwork.co full work history array
+  english?: string;           // English level written by jobs.nearwork.co
   currentRole?: string;
   currentCompany?: string;
-  expectedSalary?: number;
+  expectedSalary?: number | string; // number (Admin) or formatted string (Jobs)
+  expectedSalaryAmount?: number;
   expectedSalaryCurrency?: string;
   notes?: string;
   rating?: number;

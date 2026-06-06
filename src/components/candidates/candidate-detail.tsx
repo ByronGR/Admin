@@ -703,7 +703,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </p>
               </div>
             )}
-            {candidate.experience != null && (
+            {typeof candidate.experience === 'number' && (
               <div>
                 <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                   Experience
@@ -717,7 +717,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                   Expected salary
                 </p>
                 <p className="mt-0.5 text-[var(--black)]">
-                  ${candidate.expectedSalary.toLocaleString()}/mo
+                  {typeof candidate.expectedSalary === 'number'
+                    ? `$${candidate.expectedSalary.toLocaleString()}/mo`
+                    : String(candidate.expectedSalary)}
                 </p>
               </div>
             )}

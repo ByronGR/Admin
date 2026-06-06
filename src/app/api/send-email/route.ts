@@ -13,6 +13,29 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// Allow any *.nearwork.co origin (talent, jobs, etc.) to call this endpoint.
+
+const ALLOWED_ORIGINS = [
+  'https://talent.nearwork.co',
+  'https://jobs.nearwork.co',
+  'https://www.nearwork.co',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get('origin');
+  return new Response(null, { status: 204, headers: corsHeaders(origin) });
+}
+
 // ─── Template builder ────────────────────────────────────────────────────────
 
 function buildJobAppliedHtml(firstName: string, roleTitle: string): string {
@@ -362,23 +385,26 @@ function escHtml(str: string): string {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  const origin = req.headers.get('origin');
+  const cors = corsHeaders(origin);
+
   let body: { to?: string; templateId?: string; data?: Record<string, string> };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: cors });
   }
 
   const { to, templateId, data = {} } = body;
   if (!to || !templateId) {
-    return NextResponse.json({ error: 'Missing required fields: to, templateId' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing required fields: to, templateId' }, { status: 400, headers: cors });
   }
 
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     return NextResponse.json(
       { error: 'RESEND_API_KEY is not configured on the server' },
-      { status: 500 },
+      { status: 500, headers: cors },
     );
   }
 
@@ -398,7 +424,7 @@ export async function POST(req: Request) {
     subject = 'Your Nearwork account is ready';
     html = buildAccountCreatedHtml(firstName);
   } else {
-    return NextResponse.json({ error: `Unknown templateId: ${templateId}` }, { status: 400 });
+    return NextResponse.json({ error: `Unknown templateId: ${templateId}` }, { status: 400, headers: cors });
   }
 
   try {
@@ -414,13 +440,13 @@ export async function POST(req: Request) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('[send-email] Resend error:', err);
-      return NextResponse.json({ ok: false, error: 'Resend rejected the request', detail: err }, { status: 502 });
+      return NextResponse.json({ ok: false, error: 'Resend rejected the request', detail: err }, { status: 502, headers: cors });
     }
 
     const resData = await res.json().catch(() => ({}));
-    return NextResponse.json({ ok: true, id: resData?.id ?? null });
+    return NextResponse.json({ ok: true, id: resData?.id ?? null }, { headers: cors });
   } catch (e) {
     console.error('[send-email] fetch failed:', e);
-    return NextResponse.json({ ok: false, error: 'Failed to reach Resend' }, { status: 502 });
+    return NextResponse.json({ ok: false, error: 'Failed to reach Resend' }, { status: 502, headers: cors });
   }
 }

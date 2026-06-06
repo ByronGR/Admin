@@ -754,7 +754,7 @@ function KickoffInner() {
           <form ref={formRef} onInput={scheduleAutoSave} className="space-y-5">
 
             {/* ── S1 Role Overview ──────────────────────────────────────── */}
-            <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement">
+            <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement" partnerVisible>
 
               {/* Organization — required, always visible */}
               <div className={`mb-5 p-4 rounded-xl border-2 ${selectedOrgId ? 'border-[#E5E4E0] bg-white' : 'border-amber-300 bg-amber-50'}`}>
@@ -855,7 +855,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S2 Compensation ───────────────────────────────────────── */}
-            <Section id="s2" num={2} icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes">
+            <Section id="s2" num={2} icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes" partnerVisible>
 
               {/* Nearwork suggested rate (from Airtable) */}
               {selectedRole && (selectedRole.suggestedMin || selectedRole.suggestedMax) && (
@@ -891,7 +891,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S3 Role Description ───────────────────────────────────── */}
-            <Section id="s3" num={3} icon="📋" title="Role Description" desc="What this person will actually do and what success looks like">
+            <Section id="s3" num={3} icon="📋" title="Role Description" desc="What this person will actually do and what success looks like" partnerVisible>
               <Field label="Role Summary / Elevator Pitch" required><textarea name="roleSummary" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="2–4 sentences describing the role, its purpose, and why it matters…" /></Field>
               <div className="mt-4">
                 <Field label="Key Responsibilities">
@@ -912,7 +912,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S4 Requirements ───────────────────────────────────────── */}
-            <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications">
+            <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications" partnerVisible>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Must-Have Skills / Experience">
                   <DynamicList items={mustHaveSkills} setItems={setMustHaveSkills} disabled={isReadOnly} placeholder="e.g. 5+ years Python, REST API design…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
@@ -948,7 +948,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S5 Team & Culture ─────────────────────────────────────── */}
-            <Section id="s5" num={5} icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment">
+            <Section id="s5" num={5} icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment" partnerVisible>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Team Size"><input type="number" name="teamSize" disabled={isReadOnly} className={inp} placeholder="e.g. 8" /></Field>
                 <Field label="Reports To (Title)"><input name="reportsToTitle" disabled={isReadOnly} className={inp} placeholder="e.g. VP of Engineering" /></Field>
@@ -972,7 +972,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S7 Tools & Tech (now section 6 in the UI) ────────────── */}
-            <Section id="s7" num={6} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems">
+            <Section id="s7" num={6} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems" partnerVisible>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Required Tools / Software">
                   <DynamicList items={requiredTools} setItems={setRequiredTools} disabled={isReadOnly} placeholder="e.g. Jira, Slack, Figma…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
@@ -1050,7 +1050,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S9 Administrative (now section 8) ────────────────────── */}
-            <Section id="s9" num={8} icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations">
+            <Section id="s9" num={8} icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations" partnerVisible>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Contract Type">
                   <Select name="contractType" disabled={isReadOnly} options={['Employment (Payroll)','B2B Contractor','Freelance','Internship','Part-time Employment']} />
@@ -1072,7 +1072,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S10 Additional Notes (now section 9) ─────────────────── */}
-            <Section id="s10" num={9} icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above">
+            <Section id="s10" num={9} icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above" partnerVisible>
               <div className="mb-4">
                 <Field label="Additional Notes / Special Instructions"><textarea name="additionalNotes" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="Client preferences, special considerations, context for this search…" /></Field>
               </div>
@@ -1158,7 +1158,7 @@ const ta = `${inp} resize-y min-h-[80px] leading-relaxed`;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ id, num, icon, title, desc, children }: { id: string; num: number; icon: string; title: string; desc: string; children: ReactNode }) {
+function Section({ id, num, icon, title, desc, partnerVisible, children }: { id: string; num: number; icon: string; title: string; desc: string; partnerVisible?: boolean; children: ReactNode }) {
   return (
     <div id={id} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
@@ -1167,7 +1167,14 @@ function Section({ id, num, icon, title, desc, children }: { id: string; num: nu
           <div className="text-sm font-bold">{title}</div>
           <div className="text-xs text-[#9E9E9E] mt-0.5">{desc}</div>
         </div>
-        <span className="ml-auto text-base">{icon}</span>
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {partnerVisible && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#16A085] bg-[#E8F8F5] border border-[rgba(22,160,133,.25)] rounded-full px-2 py-0.5">
+              👁 Partner can see this
+            </span>
+          )}
+          <span className="text-base">{icon}</span>
+        </div>
       </div>
       <div className="p-5">{children}</div>
     </div>

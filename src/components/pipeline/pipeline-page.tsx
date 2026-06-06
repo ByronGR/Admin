@@ -129,6 +129,10 @@ export default function PipelinePage() {
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set of candidateId strings that still exist in the `candidates` collection.
+  // Used to filter out "ghost" pipeline entries after Firebase deletes. null means
+  // not yet loaded (show all while loading so there's no flash of missing content).
+  const [activeCandidateIds, setActiveCandidateIds] = useState<Set<string> | null>(null);
   // candidateId → Nearwork Score, loaded from the assessments collection so the
   // board cards can surface each candidate's score at a glance (spec 4d).
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
@@ -193,6 +197,19 @@ export default function PipelinePage() {
     return unsub;
   }, []);
 
+  // Build a set of valid candidateIds so the board can hide entries whose
+  // backing candidate doc was deleted from the candidates collection.
+  useEffect(() => {
+    getDocs(collection(db, 'candidates'))
+      .then((snap) => {
+        setActiveCandidateIds(new Set(snap.docs.map((d) => d.id)));
+      })
+      .catch(() => {
+        // Non-critical — if this fails, show all candidates (fail open).
+        setActiveCandidateIds(null);
+      });
+  }, []);
+
   // Load Nearwork Scores once for all candidates that have an assessment, keyed
   // by candidateId. We keep the highest score per candidate.
   useEffect(() => {
@@ -243,17 +260,30 @@ export default function PipelinePage() {
   }
 
   // Filter pipelines
-  const filtered = pipelines.filter((p) => {
-    const matchSearch =
-      !search ||
-      [p.title, p.orgName, p.code, p.recruiter]
-        .join(' ')
-        .toLowerCase()
-        .includes(search.toLowerCase());
-    const matchStatus =
-      statusFilter === 'all' || p.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filtered = pipelines
+    .filter((p) => {
+      const matchSearch =
+        !search ||
+        [p.title, p.orgName, p.code, p.recruiter]
+          .join(' ')
+          .toLowerCase()
+          .includes(search.toLowerCase());
+      const matchStatus =
+        statusFilter === 'all' || p.status === statusFilter;
+      return matchSearch && matchStatus;
+    })
+    .map((p) => {
+      // Remove "ghost" pipeline entries whose backing candidate doc was deleted
+      // from the `candidates` collection. While activeCandidateIds is loading
+      // (null), pass the full array so there's no flash of empty columns.
+      if (!activeCandidateIds) return p;
+      return {
+        ...p,
+        candidates: (p.candidates ?? []).filter(
+          (c) => activeCandidateIds.has(c.candidateId)
+        ),
+      };
+    });
 
   // Active pipeline
   const activePipeline = activePipelineCode

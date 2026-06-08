@@ -1629,6 +1629,7 @@ function ApplicantsPanel({
   const applicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview);
 
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [viewingApplicant, setViewingApplicant] = useState<PipelineCandidate | null>(null);
   const [fullProfile, setFullProfile] = useState<Candidate | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -1705,12 +1706,23 @@ function ApplicantsPanel({
   }
 
   async function openProfile(candidateId: string) {
+    const entry = applicants.find((a) => a.candidateId === candidateId) ?? null;
     setViewingId(candidateId);
+    setViewingApplicant(entry);
     setFullProfile(null);
     setLoadingProfile(true);
     try {
       const snap = await getDoc(doc(db, 'candidates', candidateId));
-      setFullProfile(snap.exists() ? ({ id: snap.id, ...snap.data() } as Candidate) : null);
+      if (snap.exists()) {
+        const data = { id: snap.id, ...snap.data() } as Candidate;
+        // Fill in CV from the pipeline entry if the candidate doc has none
+        if (!data.cvUrl && !data.resumeUrl && entry?.cvUrl) {
+          data.cvUrl = entry.cvUrl;
+        }
+        setFullProfile(data);
+      } else {
+        setFullProfile(null);
+      }
     } catch {
       setFullProfile(null);
     } finally {
@@ -1834,6 +1846,7 @@ function ApplicantsPanel({
         open={viewingId !== null}
         onClose={() => {
           setViewingId(null);
+          setViewingApplicant(null);
           setFullProfile(null);
         }}
         title={viewingName}
@@ -1845,9 +1858,23 @@ function ApplicantsPanel({
           </div>
         ) : fullProfile ? (
           <ApplicantProfile profile={fullProfile} />
+        ) : viewingApplicant ? (
+          // Candidate doc not created yet — show what we have from the application
+          <ApplicantProfile
+            profile={{
+              id: viewingApplicant.candidateId,
+              name: viewingApplicant.name,
+              email: viewingApplicant.email ?? '',
+              skills: viewingApplicant.skills ?? [],
+              cvUrl: viewingApplicant.cvUrl ?? undefined,
+              expectedSalary: viewingApplicant.expectedSalary ?? undefined,
+              source: viewingApplicant.source ?? 'jobs.nearwork.co',
+            }}
+            note="Full candidate profile not yet created — showing application data."
+          />
         ) : (
           <p className="py-8 text-center text-sm text-[var(--light)]">
-            Profile not found in the candidates database.
+            No profile data available.
           </p>
         )}
       </Modal>
@@ -1857,9 +1884,14 @@ function ApplicantsPanel({
 
 // ─── Applicant profile (shown inside the review modal) ───────────────────────
 
-function ApplicantProfile({ profile }: { profile: Candidate }) {
+function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string }) {
   return (
     <div className="space-y-5">
+      {note && (
+        <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+          {note}
+        </p>
+      )}
       {/* Key details */}
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
         {[

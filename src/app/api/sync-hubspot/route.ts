@@ -11,9 +11,6 @@ import { NextResponse } from 'next/server';
 // The `type` HubSpot property maps to the "Type" contact property with values:
 //   Candidate | Client | Hired
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 interface ClientPayload {
   email: string;
   name?: string;

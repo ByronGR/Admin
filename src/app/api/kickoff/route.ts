@@ -264,8 +264,14 @@ export async function POST(req: Request) {
       history.push({ action: 'submitted', by: actorName, byRole: 'nearwork', timestamp: now });
       update.history = history;
       await ref.set(update, { merge: true });
-      // Sync briefStatus to opening + pipeline so the list / app can show it without extra reads
-      const briefSync = { briefStatus: 'submitted', updatedAt: FieldValue.serverTimestamp() };
+      // Sync briefStatus (and orgId) to opening + pipeline so the org page can query them
+      const briefOrgId = body.orgId ? String(body.orgId) : String(existing?.orgId ?? '');
+      const briefOrgName = body.orgName ? String(body.orgName) : String(existing?.orgName ?? '');
+      const briefSync: Record<string, unknown> = {
+        briefStatus: 'submitted',
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(briefOrgId ? { orgId: briefOrgId, orgName: briefOrgName } : {}),
+      };
       await Promise.allSettled([
         db.collection('openings').doc(code).set(briefSync, { merge: true }),
         db.collection('pipelines').doc(code).set(briefSync, { merge: true }),
@@ -305,7 +311,13 @@ export async function POST(req: Request) {
     if (!snap.exists) return json({ ok: false, error: 'Brief not found' }, 404, origin);
     history.push({ action: 'reopened', by: actorName, byRole: 'nearwork', timestamp: now });
     await ref.set({ status: 'draft', updatedAt: FieldValue.serverTimestamp(), history }, { merge: true });
-    const reopenSync = { briefStatus: 'draft', updatedAt: FieldValue.serverTimestamp() };
+    const reopenOrgId = String(existing?.orgId ?? '');
+    const reopenOrgName = String(existing?.orgName ?? '');
+    const reopenSync: Record<string, unknown> = {
+      briefStatus: 'draft',
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(reopenOrgId ? { orgId: reopenOrgId, orgName: reopenOrgName } : {}),
+    };
     await Promise.allSettled([
       db.collection('openings').doc(code).set(reopenSync, { merge: true }),
       db.collection('pipelines').doc(code).set(reopenSync, { merge: true }),
@@ -409,9 +421,20 @@ export async function POST(req: Request) {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
+      // Always carry orgId/orgName through so the org page can find this opening + pipeline
+      const pubOrgId = String(existing.orgId ?? '');
+      const pubOrgName = String(existing.orgName ?? '');
+      if (pubOrgId) {
+        autoPublishPayload.orgId = pubOrgId;
+        autoPublishPayload.orgName = pubOrgName;
+      }
       await Promise.allSettled([
         db.collection('openings').doc(code).set(autoPublishPayload, { merge: true }),
-        db.collection('pipelines').doc(code).set({ briefStatus: 'approved', updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
+        db.collection('pipelines').doc(code).set({
+          briefStatus: 'approved',
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(pubOrgId ? { orgId: pubOrgId, orgName: pubOrgName } : {}),
+        }, { merge: true }),
       ]);
       await notifyNearworkStaff(
         `Brief approved — ${jobTitle}`,

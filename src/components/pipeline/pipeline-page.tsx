@@ -23,6 +23,7 @@ import {
   db,
   collection,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -53,6 +54,11 @@ import {
   X,
   Languages,
   LayoutGrid,
+  UserCheck,
+  XCircle,
+  ExternalLink,
+  FileText,
+  Inbox,
 } from 'lucide-react';
 import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
 
@@ -68,6 +74,10 @@ export const PIPELINE_STAGES = [
   { key: 'hired', label: 'Hired', clientAction: true },
   { key: 'not-selected', label: 'Not Selected', terminal: true },
 ] as const;
+
+// Stages shown in the Kanban board — "applied" is handled separately in the
+// Applicants tab so recruiters can review before the candidate enters the board.
+export const KANBAN_STAGES = PIPELINE_STAGES.filter((s) => s.key !== 'applied');
 
 type StageKey = (typeof PIPELINE_STAGES)[number]['key'];
 
@@ -611,6 +621,16 @@ export default function PipelinePage() {
             onOpenBrief={(c, code) =>
               setBriefModal({ open: true, candidate: c, pipelineCode: code })
             }
+            onApproveApplicant={async (candidateCode, pipelineCode) => {
+              await moveCandidateToStage(pipelineCode, candidateCode, 'background-check');
+            }}
+            onRequestReject={(candidateCode, pipelineCode) => {
+              const p = pipelines.find((pl) => pl.code === pipelineCode);
+              const cand = p?.candidates?.find((c) => c.candidateId === candidateCode);
+              setDropModal({ open: true, candidateId: candidateCode, pipelineCode });
+              setDropReason(cand?.dropOffReason ?? 'mia');
+              setDropNote(cand?.dropOffNote ?? '');
+            }}
           />
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-[var(--border)] bg-white py-16 text-center">
@@ -969,6 +989,10 @@ function PipelineRow({
     setConfirmDelete(false);
   }
 
+  const pendingApplicants = (pipeline.candidates ?? []).filter(
+    (c) => normalizeStage(c.stage) === 'applied'
+  ).length;
+
   const statusColor =
     pipeline.status === 'active'
       ? 'b-green'
@@ -998,6 +1022,12 @@ function PipelineRow({
           </p>
         </div>
         <div className="hidden items-center gap-4 sm:flex">
+          {pendingApplicants > 0 && (
+            <span className="flex items-center gap-1 rounded-full bg-[var(--green-soft)] px-2.5 py-0.5 text-[11px] font-700 text-[var(--green)]">
+              <Inbox className="h-3 w-3" />
+              {pendingApplicants} new
+            </span>
+          )}
           {pipeline.recruiter && (
             <span className="text-xs text-[var(--mid)]">{pipeline.recruiter}</span>
           )}
@@ -1076,6 +1106,8 @@ function PipelineWorkspace({
   onUpdateStatus,
   onAddCandidate,
   onOpenBrief,
+  onApproveApplicant,
+  onRequestReject,
 }: {
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
@@ -1087,11 +1119,18 @@ function PipelineWorkspace({
   onUpdateStatus: (id: string, status: string) => Promise<void>;
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
+  onApproveApplicant: (candidateCode: string, pipelineCode: string) => Promise<void>;
+  onRequestReject: (candidateCode: string, pipelineCode: string) => void;
 }) {
   const { showToast } = useToast();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'kanban' | 'chat'>('kanban');
+  const [activeTab, setActiveTab] = useState<'applicants' | 'kanban' | 'chat'>('applicants');
   const [showEdit, setShowEdit] = useState(false);
+
+  // Applicants = candidates in "applied" stage waiting for review
+  const applicantCount = (pipeline.candidates ?? []).filter(
+    (c) => normalizeStage(c.stage) === 'applied'
+  ).length;
 
   // The deal (spec 4g): how many candidates have been hired/placed in this
   // pipeline, alongside the partner (organization) name.
@@ -1248,6 +1287,25 @@ function PipelineWorkspace({
       {/* Tab bar */}
       <div className="flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-1" style={{ width: 'fit-content' }}>
         <button
+          onClick={() => setActiveTab('applicants')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
+            activeTab === 'applicants'
+              ? 'bg-white text-[var(--black)] shadow-sm'
+              : 'text-[var(--light)] hover:text-[var(--mid)]'
+          }`}
+        >
+          <Inbox className="h-3.5 w-3.5" />
+          Applicants
+          {applicantCount > 0 && (
+            <span
+              className="ml-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-800 text-white"
+              style={{ background: 'var(--green)' }}
+            >
+              {applicantCount}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab('kanban')}
           className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
             activeTab === 'kanban'
@@ -1256,7 +1314,7 @@ function PipelineWorkspace({
           }`}
         >
           <LayoutGrid className="h-3.5 w-3.5" />
-          Kanban
+          Pipeline
         </button>
         <button
           onClick={() => setActiveTab('chat')}
@@ -1272,7 +1330,13 @@ function PipelineWorkspace({
       </div>
 
       {/* Tab content */}
-      {activeTab === 'kanban' ? (
+      {activeTab === 'applicants' ? (
+        <ApplicantsPanel
+          pipeline={pipeline}
+          onApprove={(candidateCode) => onApproveApplicant(candidateCode, pipeline.code)}
+          onRequestReject={(candidateCode) => onRequestReject(candidateCode, pipeline.code)}
+        />
+      ) : activeTab === 'kanban' ? (
         <KanbanBoard
           pipeline={pipeline}
           scoreMap={scoreMap}
@@ -1326,7 +1390,7 @@ function KanbanBoard({
       onDragEnd={onDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-3" style={{ minHeight: compact ? 180 : 320 }}>
-        {PIPELINE_STAGES.map((stage) => {
+        {KANBAN_STAGES.map((stage) => {
           const stageCandidates = candidates.filter(
             (c) => normalizeStage(c.stage) === stage.key
           );
@@ -1534,6 +1598,301 @@ function CandidateCard({
             <Trash2 className="h-2.5 w-2.5" />
             Remove
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Applicants panel ─────────────────────────────────────────────────────────
+
+function ApplicantsPanel({
+  pipeline,
+  onApprove,
+  onRequestReject,
+}: {
+  pipeline: Pipeline;
+  onApprove: (candidateCode: string) => Promise<void>;
+  onRequestReject: (candidateCode: string) => void;
+}) {
+  const applicants = (pipeline.candidates ?? []).filter(
+    (c) => normalizeStage(c.stage) === 'applied'
+  );
+
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [fullProfile, setFullProfile] = useState<Candidate | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  async function openProfile(candidateId: string) {
+    setViewingId(candidateId);
+    setFullProfile(null);
+    setLoadingProfile(true);
+    try {
+      const snap = await getDoc(doc(db, 'candidates', candidateId));
+      setFullProfile(snap.exists() ? ({ id: snap.id, ...snap.data() } as Candidate) : null);
+    } catch {
+      setFullProfile(null);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }
+
+  async function handleApprove(candidateCode: string) {
+    setApprovingId(candidateCode);
+    try {
+      await onApprove(candidateCode);
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  const viewingName =
+    fullProfile?.name ??
+    applicants.find((a) => a.candidateId === viewingId)?.name ??
+    'Applicant';
+
+  if (applicants.length === 0) {
+    return (
+      <div className="flex h-52 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-white">
+        <Inbox className="h-8 w-8 text-[var(--light)]" />
+        <p className="text-sm font-500 text-[var(--mid)]">No pending applicants</p>
+        <p className="text-xs text-[var(--light)]">
+          Candidates who apply through jobs.nearwork.co will appear here for review.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-2">
+        <p className="text-xs text-[var(--light)] pb-1">
+          {applicants.length} applicant{applicants.length !== 1 ? 's' : ''} waiting for review
+          {' · '}Approve to add to the pipeline, or reject to dismiss.
+        </p>
+        {applicants.map((c) => {
+          const isApproving = approvingId === c.candidateId;
+          const appliedDate = c.addedAt
+            ? new Date(
+                typeof (c.addedAt as { toDate?: () => Date }).toDate === 'function'
+                  ? (c.addedAt as { toDate: () => Date }).toDate()
+                  : (c.addedAt as unknown as string)
+              ).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : null;
+          return (
+            <div
+              key={c.candidateId}
+              className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-white px-4 py-3 transition-colors hover:border-[var(--green)]"
+            >
+              {/* Avatar */}
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
+                style={{ background: 'var(--green)' }}
+              >
+                {initials(c.name)}
+              </div>
+
+              {/* Name + email */}
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm font-600 text-[var(--black)]">
+                  {c.name || 'No name'}
+                </p>
+                <p className="text-xs text-[var(--light)]">{c.email || '—'}</p>
+              </div>
+
+              {/* Applied date */}
+              {appliedDate && (
+                <span className="hidden shrink-0 text-[11px] text-[var(--light)] sm:block">
+                  {appliedDate}
+                </span>
+              )}
+
+              {/* Actions */}
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  onClick={() => openProfile(c.candidateId)}
+                  className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-600 text-[var(--mid)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
+                >
+                  View profile
+                </button>
+                <button
+                  onClick={() => handleApprove(c.candidateId)}
+                  disabled={isApproving}
+                  className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-600 text-white transition-opacity disabled:opacity-60"
+                  style={{ background: 'var(--green)' }}
+                >
+                  {isApproving ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <UserCheck className="h-3 w-3" />
+                  )}
+                  Add to pipeline
+                </button>
+                <button
+                  onClick={() => onRequestReject(c.candidateId)}
+                  className="rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-600 text-red-500 transition-colors hover:bg-red-50"
+                >
+                  <XCircle className="inline mr-1 h-3 w-3" />
+                  Reject
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Applicant profile modal */}
+      <Modal
+        open={viewingId !== null}
+        onClose={() => {
+          setViewingId(null);
+          setFullProfile(null);
+        }}
+        title={viewingName}
+        size="lg"
+      >
+        {loadingProfile ? (
+          <div className="flex h-32 items-center justify-center">
+            <Spinner />
+          </div>
+        ) : fullProfile ? (
+          <ApplicantProfile profile={fullProfile} />
+        ) : (
+          <p className="py-8 text-center text-sm text-[var(--light)]">
+            Profile not found in the candidates database.
+          </p>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+// ─── Applicant profile (shown inside the review modal) ───────────────────────
+
+function ApplicantProfile({ profile }: { profile: Candidate }) {
+  return (
+    <div className="space-y-5">
+      {/* Key details */}
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        {[
+          { label: 'Email', value: profile.email },
+          { label: 'Phone', value: profile.phone },
+          { label: 'City', value: profile.city || profile.location },
+          { label: 'English', value: profile.english },
+          {
+            label: 'Expected salary',
+            value: profile.expectedSalaryAmount
+              ? `${profile.expectedSalaryCurrency || 'USD'} ${profile.expectedSalaryAmount.toLocaleString()}/mo`
+              : profile.expectedSalary
+                ? String(profile.expectedSalary)
+                : undefined,
+          },
+          {
+            label: 'Experience',
+            value:
+              typeof profile.experience === 'number'
+                ? `${profile.experience} yr${profile.experience !== 1 ? 's' : ''}`
+                : undefined,
+          },
+        ]
+          .filter((item) => item.value)
+          .map((item) => (
+            <div key={item.label}>
+              <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+                {item.label}
+              </p>
+              <p className="mt-0.5 font-500 text-[var(--black)]">{item.value}</p>
+            </div>
+          ))}
+      </div>
+
+      {/* Skills */}
+      {Array.isArray(profile.skills) && profile.skills.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+            Skills
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {profile.skills.map((s) => (
+              <span
+                key={s}
+                className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-0.5 text-[11px] font-500 text-[var(--mid)]"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Work history */}
+      {Array.isArray(profile.workHistory) &&
+        profile.workHistory.some((w) => w.company || w.title) && (
+          <div>
+            <p className="mb-2 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+              Work history
+            </p>
+            <div className="space-y-2">
+              {profile.workHistory
+                .filter((w) => w.company || w.title)
+                .map((w, i) => (
+                  <div
+                    key={i}
+                    className="flex gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--bg)] text-[9px] font-800 text-[var(--mid)]">
+                      {i + 1}
+                    </div>
+                    <div>
+                      <p className="text-xs font-600 text-[var(--black)]">{w.title || '—'}</p>
+                      <p className="text-[11px] text-[var(--mid)]">{w.company || '—'}</p>
+                      {(w.from || w.to) && (
+                        <p className="mt-0.5 text-[10px] text-[var(--light)]">
+                          {w.from || '?'} → {w.to === 'present' ? 'Present' : w.to || '?'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+      {/* CV / Resume */}
+      {(profile.cvUrl || profile.resumeUrl) && (
+        <div>
+          <p className="mb-2 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+            CV / Resume
+          </p>
+          <a
+            href={profile.cvUrl || profile.resumeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] transition-colors hover:border-[var(--green)]"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Open CV
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </a>
+        </div>
+      )}
+
+      {/* LinkedIn */}
+      {profile.linkedIn && (
+        <div>
+          <p className="mb-1 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+            LinkedIn
+          </p>
+          <a
+            href={profile.linkedIn}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-[var(--green)] hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            {profile.linkedIn}
+          </a>
         </div>
       )}
     </div>

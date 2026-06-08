@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   db,
   collection,
-  getDocs,
+  onSnapshot,
   serverTimestamp,
   doc,
   getDoc,
@@ -81,21 +81,25 @@ export default function CandidatesPage() {
   const [matchSalary, setMatchSalary] = useState('');
 
   useEffect(() => {
-    load();
+    setLoading(true);
+    const unsub = onSnapshot(
+      collection(db, 'candidates'),
+      (snap) => {
+        setCandidates(
+          sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)), 'createdAt')
+        );
+        setLoading(false);
+      },
+      () => {
+        showToast('Failed to load candidates', 'error');
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, []);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const snap = await getDocs(collection(db, 'candidates'));
-      setCandidates(
-        sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)), 'createdAt')
-      );
-    } catch {
-      showToast('Failed to load candidates', 'error');
-    } finally {
-      setLoading(false);
-    }
+  function load() {
+    // no-op — list is kept live by the onSnapshot listener above
   }
 
   // Filter

@@ -22,7 +22,7 @@ export default function NewOpeningPage() {
 
   useEffect(() => {
     getDocs(collection(db, 'organizations'))
-      .then((snap) => setOrgs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization))))
+      .then((snap) => setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization))))
       .catch(() => showToast('Failed to load organizations', 'error'))
       .finally(() => setOrgsLoading(false));
   }, []);

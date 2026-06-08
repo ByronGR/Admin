@@ -167,7 +167,7 @@ function KickoffInner() {
   useEffect(() => {
     if (!user) return;
     getDocs(collection(db, 'organizations'))
-      .then((snap) => setOrgs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization))))
+      .then((snap) => setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization))))
       .catch(() => {/* non-critical */});
   }, [user]);
 

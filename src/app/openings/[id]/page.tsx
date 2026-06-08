@@ -29,7 +29,7 @@ export default function OpeningDetailPage() {
       setNotFound(true);
     } else {
       setOpening({ id: snap.id, ...snap.data() } as Opening);
-      setOrgs(orgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization)));
+      setOrgs(orgSnap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
     }
     setLoading(false);
   }

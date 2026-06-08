@@ -787,41 +787,76 @@ function OrgDetail({
   const [savingPoc, setSavingPoc] = useState(false);
 
   useEffect(() => {
-    // Query with ALL possible org-ID variants: Firestore doc ID (org.id) and the
-    // short code (org.shortId). The `orgId` field on pipelines/openings may have
-    // been written with either value depending on when the record was created.
+    // Three-tier strategy so pipelines/openings always surface on the org page
+    // regardless of how (or whether) `orgId` was written when the record was created:
+    //
+    // Tier 1 — exact orgId match: query with the Firestore doc ID (org.id) AND the
+    //           human-readable short code (org.shortId) — whichever was stored.
+    // Tier 2 — orgName fallback: if tier-1 returns nothing, query by `orgName` so
+    //           records created before the orgId propagation fix are still visible.
+    // Auto-heal: any doc found via tier-2 gets `orgId` written back so future
+    //            queries hit tier-1 directly.
+
     const orgIds = [...new Set([org.id, org.shortId].filter(Boolean))] as string[];
     const collectionsToQuery = ['pipelines', 'placements', 'openings'] as const;
 
-    const queries = orgIds.flatMap((oid) =>
+    const tier1Queries = orgIds.flatMap((oid) =>
       collectionsToQuery.map((col) =>
         getDocs(query(collection(db, col), where('orgId', '==', oid)))
       )
     );
 
-    Promise.all(queries).then((snaps) => {
-      // snaps layout: [pip/oid0, place/oid0, open/oid0, pip/oid1, place/oid1, open/oid1, ...]
+    Promise.all(tier1Queries).then(async (snaps) => {
       const colCount = collectionsToQuery.length;
       const pipelineMap: Record<string, Pipeline> = {};
       const placementMap: Record<string, Placement> = {};
       const openingMap: Record<string, Opening> = {};
 
-      snaps.forEach((snap, i) => {
-        const colIdx = i % colCount;
-        snap.docs.forEach((d) => {
-          const item = { ...d.data(), id: d.id };
-          if (colIdx === 0) pipelineMap[d.id]  = item as Pipeline;
-          else if (colIdx === 1) placementMap[d.id] = item as Placement;
-          else openingMap[d.id] = item as Opening;
+      const mergeDocs = (snapsSubset: typeof snaps) => {
+        snapsSubset.forEach((snap, i) => {
+          const colIdx = i % colCount;
+          snap.docs.forEach((d) => {
+            const item = { ...d.data(), id: d.id };
+            if (colIdx === 0) pipelineMap[d.id]  = item as Pipeline;
+            else if (colIdx === 1) placementMap[d.id] = item as Placement;
+            else openingMap[d.id] = item as Opening;
+          });
         });
-      });
+      };
+
+      mergeDocs(snaps);
+
+      // Tier-2 fallback: if nothing matched by orgId, try orgName
+      const foundSomething =
+        Object.keys(pipelineMap).length > 0 ||
+        Object.keys(placementMap).length > 0 ||
+        Object.keys(openingMap).length > 0;
+
+      if (!foundSomething && org.name) {
+        const tier2Queries = collectionsToQuery.map((col) =>
+          getDocs(query(collection(db, col), where('orgName', '==', org.name)))
+        );
+        const tier2Snaps = await Promise.all(tier2Queries);
+        mergeDocs(tier2Snaps);
+
+        // Auto-heal: stamp orgId on docs that were found via name fallback
+        const healOrgId = org.id || org.shortId || '';
+        if (healOrgId) {
+          const allHealDocs = tier2Snaps.flatMap((snap) => snap.docs);
+          allHealDocs.forEach((d) => {
+            if (!d.data().orgId) {
+              updateDoc(d.ref, { orgId: healOrgId }).catch(() => null);
+            }
+          });
+        }
+      }
 
       setPipelines(Object.values(pipelineMap));
       setPlacements(Object.values(placementMap));
       setOpenings(Object.values(openingMap));
       setDataLoading(false);
     }).catch(() => setDataLoading(false));
-  }, [org.id, org.shortId]);
+  }, [org.id, org.shortId, org.name]);
 
   // Load the real client accounts (App `users` docs) for this org so we can show
   // who has actually logged in vs. who is still just invited. Org membership is

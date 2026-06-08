@@ -319,8 +319,13 @@ export interface Candidate {
   experience?: number;        // years of experience (Admin-created candidates)
   workHistory?: WorkHistoryEntry[]; // jobs.nearwork.co full work history array
   english?: string;           // English level written by jobs.nearwork.co
+  role?: string;               // target/current job title (written by talent.nearwork.co)
+  targetRole?: string;         // alias used by talent.nearwork.co
+  headline?: string;           // short headline (alias of targetRole)
   currentRole?: string;
   currentCompany?: string;
+  activePipelineCode?: string; // which pipeline this candidate is currently in
+  activePipelineStage?: string; // their current stage in that pipeline
   expectedSalary?: number | string; // number (Admin) or formatted string (Jobs)
   expectedSalaryAmount?: number;
   expectedSalaryCurrency?: string;

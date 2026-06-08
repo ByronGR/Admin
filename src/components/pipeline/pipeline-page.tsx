@@ -349,6 +349,12 @@ export default function PipelinePage() {
       candidates: newCandidates,
       updatedAt: serverTimestamp(),
     });
+    // Mirror stage to the candidate doc so the Candidates list can show pipeline progress
+    updateDoc(doc(db, 'candidates', candidateCode), {
+      activePipelineCode: pipelineCode,
+      activePipelineStage: toStage,
+      updatedAt: serverTimestamp(),
+    }).catch(() => null);
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }
 
@@ -1670,6 +1676,12 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
           inPipeline: true,
           pipelineStage: 'applied',
         }),
+        // Mirror to candidates doc so the Candidates list shows pipeline progress immediately
+        updateDoc(doc(db, 'candidates', candId), {
+          activePipelineCode: pipeline.code,
+          activePipelineStage: 'applied',
+          updatedAt: serverTimestamp(),
+        }).catch(() => null),
       ]);
       showToast(`${app.candidateName || 'Applicant'} approved — added to Applied stage`, 'success');
     } catch (e) {

@@ -103,7 +103,7 @@ export default function CandidatesPage() {
     const q = search.toLowerCase();
     const matchSearch =
       !q ||
-      [c.name, c.email, c.currentRole, c.location, ...(c.skills ?? [])]
+      [c.name, c.email, c.role, c.currentRole, c.targetRole, c.headline, c.location, ...(c.skills ?? [])]
         .join(' ')
         .toLowerCase()
         .includes(q);
@@ -359,10 +359,17 @@ export default function CandidatesPage() {
                         </div>
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-xs text-[var(--mid)]">{c.currentRole ?? '—'}</p>
-                        {c.currentCompany && (
+                        <p className="truncate text-xs text-[var(--mid)]">
+                          {c.role || c.targetRole || c.currentRole || c.headline || '—'}
+                        </p>
+                        {c.activePipelineCode ? (
+                          <p className="truncate text-[10px] text-[var(--green)] font-500">
+                            {c.activePipelineCode}
+                            {c.activePipelineStage ? ` · ${c.activePipelineStage.replace(/-/g, ' ')}` : ''}
+                          </p>
+                        ) : c.currentCompany ? (
                           <p className="truncate text-[10px] text-[var(--light)]">{c.currentCompany}</p>
-                        )}
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {(c.skills ?? []).slice(0, 3).map((s, i) => (

@@ -418,6 +418,7 @@ export const DROP_OFF_REASON_LABELS: Record<DropOffReason, string> = {
 
 export interface PipelineCandidate {
   candidateId: string;
+  candidateCode?: string;        // CAND-XXXXX code (secondary identifier written by jobs.nearwork.co)
   name: string;
   email?: string;
   stage: PipelineStage;
@@ -426,12 +427,17 @@ export interface PipelineCandidate {
   dropOffNote?: string;          // recruiter free-text context for the drop-off
   score?: number;
   englishScore?: EnglishScore;
-  addedAt?: Timestamp;
+  addedAt?: Timestamp | string;
   updatedAt?: Timestamp;
+  resubmittedAt?: string;
   notes?: string;
   rating?: number;
   tags?: string[];
   applicationId?: string;
+  source?: string;               // where the candidate came from (e.g. 'jobs.nearwork.co')
+  cvUrl?: string;                // CV download URL copied from candidate profile
+  skills?: string[];             // skills from the application form
+  expectedSalary?: string;       // formatted salary expectation string
   // true while the applicant is in the pre-screening inbox (Applicants tab).
   // Cleared to false when a recruiter approves them into the Kanban pipeline.
   pendingReview?: boolean;

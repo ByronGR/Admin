@@ -688,6 +688,7 @@ function OrgDetail({
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [fixingLinks, setFixingLinks] = useState(false);
 
   // UI state
   const [editing, setEditing] = useState(false);
@@ -885,6 +886,67 @@ function OrgDetail({
     loadClientAccounts().catch(() => null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id, org.shortId]);
+
+  // One-click repair: search by orgName across all three collections and patch
+  // in the correct orgId so subsequent queries work without manual Firestore edits.
+  async function fixOrgLinks() {
+    setFixingLinks(true);
+    try {
+      const healId = org.id || org.shortId || '';
+      const cols = ['pipelines', 'placements', 'openings'] as const;
+      const snaps = await Promise.all(
+        cols.map((col) => getDocs(query(collection(db, col), where('orgName', '==', org.name))))
+      );
+      const patches: Promise<void>[] = [];
+      const found: { col: string; id: string }[] = [];
+      snaps.forEach((snap, i) => {
+        snap.docs.forEach((d) => {
+          found.push({ col: cols[i], id: d.id });
+          if (healId && d.data().orgId !== healId) {
+            patches.push(updateDoc(d.ref, { orgId: healId, orgName: org.name }));
+          }
+        });
+      });
+      await Promise.all(patches);
+      // Reload hiring data after patching
+      const reloaded = await Promise.all(
+        cols.map((col) => getDocs(query(collection(db, col), where('orgId', '==', healId))))
+      );
+      const pipelineMap: Record<string, Pipeline> = {};
+      const placementMap: Record<string, Placement> = {};
+      const openingMap: Record<string, Opening> = {};
+      reloaded.forEach((snap, i) => {
+        snap.docs.forEach((d) => {
+          const item = { ...d.data(), id: d.id };
+          if (i === 0) pipelineMap[d.id] = item as Pipeline;
+          else if (i === 1) placementMap[d.id] = item as Placement;
+          else openingMap[d.id] = item as Opening;
+        });
+      });
+      // Also merge in orgName-found docs (already patched above)
+      snaps.forEach((snap, i) => {
+        snap.docs.forEach((d) => {
+          const item = { ...d.data(), id: d.id, orgId: healId };
+          if (i === 0) pipelineMap[d.id] = item as Pipeline;
+          else if (i === 1) placementMap[d.id] = item as Placement;
+          else openingMap[d.id] = item as Opening;
+        });
+      });
+      setPipelines(Object.values(pipelineMap));
+      setPlacements(Object.values(placementMap));
+      setOpenings(Object.values(openingMap));
+      showToast(
+        found.length > 0
+          ? `Fixed ${patches.length} link${patches.length !== 1 ? 's' : ''} — found ${found.map((f) => f.id).join(', ')}`
+          : 'No linked records found by org name. Check that pipeline/opening docs have orgName set.',
+        found.length > 0 ? 'success' : 'error'
+      );
+    } catch (e) {
+      showToast('Fix failed: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+    } finally {
+      setFixingLinks(false);
+    }
+  }
 
   const pkg = getPkg(org.package);
   const isOpeningActive = (o: Opening) => o.status === 'open' || o.status === 'paused';
@@ -1780,9 +1842,20 @@ function OrgDetail({
             {dataLoading ? (
               <div className="flex justify-center py-4"><Spinner size="sm" /></div>
             ) : shownOpenings.length === 0 ? (
-              <p className="py-4 text-center text-xs text-[var(--light)]">
-                {openings.length === 0 ? 'No openings yet for this org.' : 'No active openings.'}
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-xs text-[var(--light)]">
+                  {openings.length === 0 ? 'No openings yet for this org.' : 'No active openings.'}
+                </p>
+                {openings.length === 0 && (
+                  <button
+                    onClick={fixOrgLinks}
+                    disabled={fixingLinks}
+                    className="mt-2 rounded-full border border-[var(--border)] px-3 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
+                  >
+                    {fixingLinks ? 'Fixing…' : 'Fix links'}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 {shownOpenings.map((o) => (
@@ -1834,9 +1907,20 @@ function OrgDetail({
             {dataLoading ? (
               <div className="flex justify-center py-4"><Spinner size="sm" /></div>
             ) : shownPipelines.length === 0 ? (
-              <p className="py-4 text-center text-xs text-[var(--light)]">
-                {pipelines.length === 0 ? 'No pipelines yet for this org.' : 'No active pipelines.'}
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-xs text-[var(--light)]">
+                  {pipelines.length === 0 ? 'No pipelines yet for this org.' : 'No active pipelines.'}
+                </p>
+                {pipelines.length === 0 && (
+                  <button
+                    onClick={fixOrgLinks}
+                    disabled={fixingLinks}
+                    className="mt-2 rounded-full border border-[var(--border)] px-3 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
+                  >
+                    {fixingLinks ? 'Fixing…' : 'Fix links'}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 {shownPipelines.map((p) => (

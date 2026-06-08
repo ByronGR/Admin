@@ -1623,12 +1623,62 @@ function ApplicantsPanel({
   onApprove: (candidateCode: string) => Promise<void>;
   onRequestReject: (candidateCode: string) => void;
 }) {
+  const { showToast } = useToast();
   const applicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview);
 
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [fullProfile, setFullProfile] = useState<Candidate | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncFromApplications() {
+    setSyncing(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'applications'), where('openingCode', '==', pipeline.code)));
+      if (snap.empty) {
+        showToast('No applications found for this pipeline code.', 'error');
+        return;
+      }
+      const existing = pipeline.candidates ?? [];
+      const toAdd: typeof existing = [];
+      snap.docs.forEach((d) => {
+        const app = d.data();
+        const candId = app.candidateId || app.candidateCode || '';
+        const alreadyIn = existing.some(
+          (c) => c.candidateId === candId || c.candidateCode === candId
+        );
+        if (!alreadyIn && candId) {
+          toAdd.push({
+            candidateId: candId,
+            candidateCode: app.candidateCode || candId,
+            name: app.candidateName || app.name || '',
+            email: app.email || '',
+            stage: 'applied',
+            pendingReview: true,
+            addedAt: new Date().toISOString(),
+            source: 'jobs.nearwork.co (synced)',
+            cvUrl: app.cvUrl || null,
+            skills: Array.isArray(app.skills) ? app.skills : [],
+            expectedSalary: app.expectedSalary || '',
+          } as PipelineCandidate);
+        }
+      });
+      if (toAdd.length === 0) {
+        showToast(`Found ${snap.size} application(s) but all are already in the pipeline.`, 'success');
+        return;
+      }
+      await updateDoc(doc(db, 'pipelines', pipeline.id), {
+        candidates: [...existing, ...toAdd],
+        updatedAt: serverTimestamp(),
+      });
+      showToast(`Synced ${toAdd.length} applicant(s) into the pipeline.`, 'success');
+    } catch (e) {
+      showToast('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function openProfile(candidateId: string) {
     setViewingId(candidateId);
@@ -1666,6 +1716,13 @@ function ApplicantsPanel({
         <p className="text-xs text-[var(--light)]">
           Candidates who apply through jobs.nearwork.co will appear here for review.
         </p>
+        <button
+          onClick={syncFromApplications}
+          disabled={syncing}
+          className="mt-1 rounded-full border border-[var(--border)] px-3 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
+        >
+          {syncing ? 'Syncing…' : 'Sync applicants'}
+        </button>
       </div>
     );
   }

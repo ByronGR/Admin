@@ -13,6 +13,7 @@ import {
   updateDoc,
   doc,
   onSnapshot,
+  isNearworkEmail,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -249,8 +250,14 @@ export default function DashboardPage() {
       const candidates = docsOf<Candidate>(candidatesRes, 'candidates');
       const pipelines = docsOf<Pipeline>(pipelinesRes, 'pipelines');
       const placements = docsOf<Placement>(placementsRes, 'placements');
+      // Filter to Nearwork staff only — the users collection also holds candidate
+      // and client accounts which must not appear in the recruiter bandwidth widget.
       const staff =
-        staffRes.status === 'fulfilled' ? staffRes.value.docs.map((d) => d.data()) : [];
+        staffRes.status === 'fulfilled'
+          ? staffRes.value.docs
+              .map((d) => d.data())
+              .filter((m) => isNearworkEmail((m.email as string) ?? ''))
+          : [];
 
       // Save raw for report builder
       setRawCandidates(candidates);

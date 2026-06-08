@@ -286,7 +286,9 @@ export default function PipelinePage() {
       return {
         ...p,
         candidates: (p.candidates ?? []).filter(
-          (c) => activeCandidateIds.has(c.candidateId)
+          // Always keep pendingReview applicants even if their candidateId isn't
+          // in the candidates collection yet (they're awaiting admin approval).
+          (c) => c.pendingReview || activeCandidateIds.has(c.candidateId)
         ),
       };
     });
@@ -1641,17 +1643,34 @@ function ApplicantsPanel({
         return;
       }
       const existing = pipeline.candidates ?? [];
+
+      // Strip any pendingReview entries whose candidateId is a Firebase UID (not a
+      // CAND-XXXXX code) — these were created by an old bug and are invisible to the
+      // ATS because activeCandidateIds filters them out.
+      const isCandCode = (id: string) => id.startsWith('CAND-');
+      const cleaned = existing.filter((c) => !c.pendingReview || isCandCode(c.candidateId));
+
       const toAdd: typeof existing = [];
       snap.docs.forEach((d) => {
         const app = d.data();
-        const candId = app.candidateId || app.candidateCode || '';
-        const alreadyIn = existing.some(
+        // Prefer candidateCode (always CAND-XXXXX). Fall back to candidateId only
+        // if it already looks like a CAND code — old application docs stored a
+        // Firebase UID in candidateId before the fix, so we skip those.
+        const candId: string =
+          app.candidateCode ||
+          (typeof app.candidateId === 'string' && isCandCode(app.candidateId as string)
+            ? (app.candidateId as string)
+            : '');
+
+        if (!candId) return; // no valid CAND code — skip
+
+        const alreadyIn = cleaned.some(
           (c) => c.candidateId === candId || c.candidateCode === candId
         );
-        if (!alreadyIn && candId) {
+        if (!alreadyIn) {
           toAdd.push({
             candidateId: candId,
-            candidateCode: app.candidateCode || candId,
+            candidateCode: candId,
             name: app.candidateName || app.name || '',
             email: app.email || '',
             stage: 'applied',
@@ -1664,15 +1683,20 @@ function ApplicantsPanel({
           } as PipelineCandidate);
         }
       });
-      if (toAdd.length === 0) {
-        showToast(`Found ${snap.size} application(s) but all are already in the pipeline.`, 'success');
+
+      const removedStale = existing.length - cleaned.length;
+      if (toAdd.length === 0 && removedStale === 0) {
+        showToast(`Found ${snap.size} application(s) — all already in the pipeline.`, 'success');
         return;
       }
       await updateDoc(doc(db, 'pipelines', pipeline.id), {
-        candidates: [...existing, ...toAdd],
+        candidates: [...cleaned, ...toAdd],
         updatedAt: serverTimestamp(),
       });
-      showToast(`Synced ${toAdd.length} applicant(s) into the pipeline.`, 'success');
+      const parts: string[] = [];
+      if (toAdd.length > 0) parts.push(`Added ${toAdd.length} applicant(s)`);
+      if (removedStale > 0) parts.push(`removed ${removedStale} stale entry/entries`);
+      showToast(parts.join(', ') + '.', 'success');
     } catch (e) {
       showToast('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
     } finally {

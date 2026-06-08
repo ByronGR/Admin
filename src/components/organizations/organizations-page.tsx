@@ -797,54 +797,56 @@ function OrgDetail({
     //           records created before the orgId propagation fix are still visible.
     // Auto-heal: any doc found via tier-2 gets `orgId` written back so future
     //            queries hit tier-1 directly.
+    //
+    // NOTE: Queries are run per-collection with allSettled so one failing collection
+    // (e.g. placements permissions) never blocks pipelines or openings from showing.
 
     const orgIds = [...new Set([org.id, org.shortId].filter(Boolean))] as string[];
-    const collectionsToQuery = ['pipelines', 'placements', 'openings'] as const;
 
-    const tier1Queries = orgIds.flatMap((oid) =>
-      collectionsToQuery.map((col) =>
-        getDocs(query(collection(db, col), where('orgId', '==', oid)))
-      )
-    );
+    async function queryByField(col: string, field: string, value: string) {
+      try {
+        return await getDocs(query(collection(db, col), where(field, '==', value)));
+      } catch {
+        return null;
+      }
+    }
 
-    Promise.all(tier1Queries).then(async (snaps) => {
-      const colCount = collectionsToQuery.length;
+    async function run() {
       const pipelineMap: Record<string, Pipeline> = {};
       const placementMap: Record<string, Placement> = {};
       const openingMap: Record<string, Opening> = {};
 
-      const mergeDocs = (snapsSubset: typeof snaps) => {
-        snapsSubset.forEach((snap, i) => {
-          const colIdx = i % colCount;
-          snap.docs.forEach((d) => {
-            const item = { ...d.data(), id: d.id };
-            if (colIdx === 0) pipelineMap[d.id]  = item as Pipeline;
-            else if (colIdx === 1) placementMap[d.id] = item as Placement;
-            else openingMap[d.id] = item as Opening;
-          });
-        });
-      };
+      // Tier 1: query each collection independently so one failure doesn't block others
+      const tier1 = await Promise.all(
+        orgIds.flatMap((oid) => [
+          queryByField('pipelines', 'orgId', oid).then(s => s?.docs.forEach(d => { pipelineMap[d.id] = { ...d.data(), id: d.id } as Pipeline; })),
+          queryByField('placements', 'orgId', oid).then(s => s?.docs.forEach(d => { placementMap[d.id] = { ...d.data(), id: d.id } as Placement; })),
+          queryByField('openings',   'orgId', oid).then(s => s?.docs.forEach(d => { openingMap[d.id]   = { ...d.data(), id: d.id } as Opening; })),
+        ])
+      );
+      void tier1;
 
-      mergeDocs(snaps);
-
-      // Tier-2 fallback: if nothing matched by orgId, try orgName
+      // Tier-2 fallback: if nothing found by orgId, try orgName
       const foundSomething =
         Object.keys(pipelineMap).length > 0 ||
         Object.keys(placementMap).length > 0 ||
         Object.keys(openingMap).length > 0;
 
       if (!foundSomething && org.name) {
-        const tier2Queries = collectionsToQuery.map((col) =>
-          getDocs(query(collection(db, col), where('orgName', '==', org.name)))
-        );
-        const tier2Snaps = await Promise.all(tier2Queries);
-        mergeDocs(tier2Snaps);
-
-        // Auto-heal: stamp orgId on docs that were found via name fallback
         const healOrgId = org.id || org.shortId || '';
+        const tier2 = await Promise.all([
+          queryByField('pipelines', 'orgName', org.name),
+          queryByField('placements', 'orgName', org.name),
+          queryByField('openings',   'orgName', org.name),
+        ]);
+        const [pSnap, plSnap, oSnap] = tier2;
+        pSnap?.docs.forEach(d => { pipelineMap[d.id] = { ...d.data(), id: d.id } as Pipeline; });
+        plSnap?.docs.forEach(d => { placementMap[d.id] = { ...d.data(), id: d.id } as Placement; });
+        oSnap?.docs.forEach(d => { openingMap[d.id] = { ...d.data(), id: d.id } as Opening; });
+
+        // Auto-heal: stamp orgId on docs found via name so future tier-1 queries work
         if (healOrgId) {
-          const allHealDocs = tier2Snaps.flatMap((snap) => snap.docs);
-          allHealDocs.forEach((d) => {
+          [...(pSnap?.docs ?? []), ...(plSnap?.docs ?? []), ...(oSnap?.docs ?? [])].forEach((d) => {
             if (!d.data().orgId) {
               updateDoc(d.ref, { orgId: healOrgId }).catch(() => null);
             }
@@ -856,7 +858,9 @@ function OrgDetail({
       setPlacements(Object.values(placementMap));
       setOpenings(Object.values(openingMap));
       setDataLoading(false);
-    }).catch(() => setDataLoading(false));
+    }
+
+    run().catch(() => setDataLoading(false));
   }, [org.id, org.shortId, org.name]);
 
   // Load the real client accounts (App `users` docs) for this org so we can show

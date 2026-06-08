@@ -285,7 +285,10 @@ export default function OrganizationsPage() {
     setLoading(true);
     try {
       const snap = await getDocs(collection(db, 'organizations'));
-      setOrgs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Organization)));
+      // Spread data first, then override `id` with the Firestore doc ID so a
+      // data field named `id` (e.g. a short-code like "TKQKCC") never shadows
+      // the real document ID that Firestore operations (updateDoc, queries) need.
+      setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
     } catch {
       showToast('Failed to load organizations', 'error');
     } finally {
@@ -784,17 +787,41 @@ function OrgDetail({
   const [savingPoc, setSavingPoc] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      getDocs(query(collection(db, 'pipelines'), where('orgId', '==', org.id))),
-      getDocs(query(collection(db, 'placements'), where('orgId', '==', org.id))),
-      getDocs(query(collection(db, 'openings'), where('orgId', '==', org.id))),
-    ]).then(([pSnap, plSnap, oSnap]) => {
-      setPipelines(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Pipeline)));
-      setPlacements(plSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)));
-      setOpenings(oSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+    // Query with ALL possible org-ID variants: Firestore doc ID (org.id) and the
+    // short code (org.shortId). The `orgId` field on pipelines/openings may have
+    // been written with either value depending on when the record was created.
+    const orgIds = [...new Set([org.id, org.shortId].filter(Boolean))] as string[];
+    const collectionsToQuery = ['pipelines', 'placements', 'openings'] as const;
+
+    const queries = orgIds.flatMap((oid) =>
+      collectionsToQuery.map((col) =>
+        getDocs(query(collection(db, col), where('orgId', '==', oid)))
+      )
+    );
+
+    Promise.all(queries).then((snaps) => {
+      // snaps layout: [pip/oid0, place/oid0, open/oid0, pip/oid1, place/oid1, open/oid1, ...]
+      const colCount = collectionsToQuery.length;
+      const pipelineMap: Record<string, Pipeline> = {};
+      const placementMap: Record<string, Placement> = {};
+      const openingMap: Record<string, Opening> = {};
+
+      snaps.forEach((snap, i) => {
+        const colIdx = i % colCount;
+        snap.docs.forEach((d) => {
+          const item = { ...d.data(), id: d.id };
+          if (colIdx === 0) pipelineMap[d.id]  = item as Pipeline;
+          else if (colIdx === 1) placementMap[d.id] = item as Placement;
+          else openingMap[d.id] = item as Opening;
+        });
+      });
+
+      setPipelines(Object.values(pipelineMap));
+      setPlacements(Object.values(placementMap));
+      setOpenings(Object.values(openingMap));
       setDataLoading(false);
     }).catch(() => setDataLoading(false));
-  }, [org.id]);
+  }, [org.id, org.shortId]);
 
   // Load the real client accounts (App `users` docs) for this org so we can show
   // who has actually logged in vs. who is still just invited. Org membership is

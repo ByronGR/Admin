@@ -1649,7 +1649,24 @@ function ApplicantsPanel({
       // CAND-XXXXX code) — these were created by an old bug and are invisible to the
       // ATS because activeCandidateIds filters them out.
       const isCandCode = (id: string) => id.startsWith('CAND-');
-      const cleaned = existing.filter((c) => !c.pendingReview || isCandCode(c.candidateId));
+      let cleaned = existing.filter((c) => !c.pendingReview || isCandCode(c.candidateId));
+      const removedStale = existing.length - cleaned.length;
+
+      // Build a set of emails that appear in real applications so we can
+      // remove any manually-added pendingReview:false (Screening) entries for
+      // those same people. Candidates must go through the Applicants inbox
+      // vetting step before appearing in the client portal.
+      const appEmails = new Set<string>();
+      snap.docs.forEach((d) => {
+        const e = ((d.data().email as string) ?? '').trim().toLowerCase();
+        if (e) appEmails.add(e);
+      });
+      const removedDuplicates = cleaned.filter(
+        (c) => !c.pendingReview && c.email && appEmails.has(c.email.trim().toLowerCase())
+      ).length;
+      cleaned = cleaned.filter(
+        (c) => c.pendingReview || !c.email || !appEmails.has(c.email.trim().toLowerCase())
+      );
 
       const toAdd: typeof existing = [];
       snap.docs.forEach((d) => {
@@ -1685,8 +1702,7 @@ function ApplicantsPanel({
         }
       });
 
-      const removedStale = existing.length - cleaned.length;
-      if (toAdd.length === 0 && removedStale === 0) {
+      if (toAdd.length === 0 && removedStale === 0 && removedDuplicates === 0) {
         showToast(`Found ${snap.size} application(s) — all already in the pipeline.`, 'success');
         return;
       }
@@ -1697,6 +1713,7 @@ function ApplicantsPanel({
       const parts: string[] = [];
       if (toAdd.length > 0) parts.push(`Added ${toAdd.length} applicant(s)`);
       if (removedStale > 0) parts.push(`removed ${removedStale} stale entry/entries`);
+      if (removedDuplicates > 0) parts.push(`moved ${removedDuplicates} to Applicants inbox`);
       showToast(parts.join(', ') + '.', 'success');
     } catch (e) {
       showToast('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');

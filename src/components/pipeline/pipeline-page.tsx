@@ -1900,11 +1900,13 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
         ]
           .filter((item) => item.value)
           .map((item) => (
-            <div key={item.label}>
+            <div key={item.label} className="min-w-0">
               <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                 {item.label}
               </p>
-              <p className="mt-0.5 font-500 text-[var(--black)]">{item.value}</p>
+              <p className="mt-0.5 truncate font-500 text-[var(--black)]" title={item.value}>
+                {item.value}
+              </p>
             </div>
           ))}
       </div>

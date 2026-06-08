@@ -75,10 +75,6 @@ export const PIPELINE_STAGES = [
   { key: 'not-selected', label: 'Not Selected', terminal: true },
 ] as const;
 
-// Stages shown in the Kanban board — "applied" is handled separately in the
-// Applicants tab so recruiters can review before the candidate enters the board.
-export const KANBAN_STAGES = PIPELINE_STAGES.filter((s) => s.key !== 'applied');
-
 type StageKey = (typeof PIPELINE_STAGES)[number]['key'];
 
 function normalizeStage(stage: string): StageKey {
@@ -446,6 +442,22 @@ export default function PipelinePage() {
     }
   }
 
+  // Approve a candidate from the Applicants inbox into the Kanban at Applied stage.
+  async function approvePipelineApplicant(candidateCode: string, pipelineCode: string) {
+    const pipeline = pipelines.find((p) => p.code === pipelineCode);
+    if (!pipeline) return;
+    const newCandidates = (pipeline.candidates ?? []).map((c) =>
+      c.candidateId !== candidateCode
+        ? c
+        : { ...c, pendingReview: false, stage: 'applied' as StageKey }
+    );
+    await updateDoc(doc(db, 'pipelines', pipeline.id), {
+      candidates: newCandidates,
+      updatedAt: serverTimestamp(),
+    });
+    showToast('Applicant approved — added to Applied stage', 'success');
+  }
+
   async function removeCandidateFromPipeline(candidateCode: string, pipelineCode: string) {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
@@ -621,9 +633,7 @@ export default function PipelinePage() {
             onOpenBrief={(c, code) =>
               setBriefModal({ open: true, candidate: c, pipelineCode: code })
             }
-            onApproveApplicant={async (candidateCode, pipelineCode) => {
-              await moveCandidateToStage(pipelineCode, candidateCode, 'background-check');
-            }}
+            onApproveApplicant={approvePipelineApplicant}
             onRequestReject={(candidateCode, pipelineCode) => {
               const p = pipelines.find((pl) => pl.code === pipelineCode);
               const cand = p?.candidates?.find((c) => c.candidateId === candidateCode);
@@ -989,9 +999,7 @@ function PipelineRow({
     setConfirmDelete(false);
   }
 
-  const pendingApplicants = (pipeline.candidates ?? []).filter(
-    (c) => normalizeStage(c.stage) === 'applied'
-  ).length;
+  const pendingApplicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview).length;
 
   const statusColor =
     pipeline.status === 'active'
@@ -1127,10 +1135,8 @@ function PipelineWorkspace({
   const [activeTab, setActiveTab] = useState<'applicants' | 'kanban' | 'chat'>('applicants');
   const [showEdit, setShowEdit] = useState(false);
 
-  // Applicants = candidates in "applied" stage waiting for review
-  const applicantCount = (pipeline.candidates ?? []).filter(
-    (c) => normalizeStage(c.stage) === 'applied'
-  ).length;
+  // Applicants = candidates in the pre-screening inbox (pendingReview: true)
+  const applicantCount = (pipeline.candidates ?? []).filter((c) => c.pendingReview).length;
 
   // The deal (spec 4g): how many candidates have been hired/placed in this
   // pipeline, alongside the partner (organization) name.
@@ -1380,7 +1386,9 @@ function KanbanBoard({
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
   compact?: boolean;
 }) {
-  const candidates = pipeline.candidates ?? [];
+  // Exclude candidates still in the pre-screening inbox (pendingReview: true).
+  // They are shown in the Applicants tab and only enter the Kanban once approved.
+  const candidates = (pipeline.candidates ?? []).filter((c) => !c.pendingReview);
 
   return (
     <DndContext
@@ -1390,7 +1398,7 @@ function KanbanBoard({
       onDragEnd={onDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-3" style={{ minHeight: compact ? 180 : 320 }}>
-        {KANBAN_STAGES.map((stage) => {
+        {PIPELINE_STAGES.map((stage) => {
           const stageCandidates = candidates.filter(
             (c) => normalizeStage(c.stage) === stage.key
           );
@@ -1615,9 +1623,7 @@ function ApplicantsPanel({
   onApprove: (candidateCode: string) => Promise<void>;
   onRequestReject: (candidateCode: string) => void;
 }) {
-  const applicants = (pipeline.candidates ?? []).filter(
-    (c) => normalizeStage(c.stage) === 'applied'
-  );
+  const applicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview);
 
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [fullProfile, setFullProfile] = useState<Candidate | null>(null);

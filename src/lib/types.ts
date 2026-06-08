@@ -432,6 +432,9 @@ export interface PipelineCandidate {
   rating?: number;
   tags?: string[];
   applicationId?: string;
+  // true while the applicant is in the pre-screening inbox (Applicants tab).
+  // Cleared to false when a recruiter approves them into the Kanban pipeline.
+  pendingReview?: boolean;
 }
 
 export interface Pipeline {

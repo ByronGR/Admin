@@ -32,6 +32,7 @@ import {
   where,
   addDoc,
   onSnapshot,
+  arrayUnion,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -286,9 +287,9 @@ export default function PipelinePage() {
       return {
         ...p,
         candidates: (p.candidates ?? []).filter(
-          // Always keep pendingReview applicants even if their candidateId isn't
-          // in the candidates collection yet (they're awaiting admin approval).
-          (c) => c.pendingReview || activeCandidateIds.has(c.candidateId)
+          // Only keep candidates whose ID exists in the candidates collection.
+          // All pipeline candidates are approved — pendingReview entries are gone.
+          (c) => activeCandidateIds.has(c.candidateId)
         ),
       };
     });
@@ -444,21 +445,7 @@ export default function PipelinePage() {
     }
   }
 
-  // Approve a candidate from the Applicants inbox into the Kanban at Applied stage.
-  async function approvePipelineApplicant(candidateCode: string, pipelineCode: string) {
-    const pipeline = pipelines.find((p) => p.code === pipelineCode);
-    if (!pipeline) return;
-    const newCandidates = (pipeline.candidates ?? []).map((c) =>
-      c.candidateId !== candidateCode
-        ? c
-        : { ...c, pendingReview: false, stage: 'applied' as StageKey }
-    );
-    await updateDoc(doc(db, 'pipelines', pipeline.id), {
-      candidates: newCandidates,
-      updatedAt: serverTimestamp(),
-    });
-    showToast('Applicant approved — added to Applied stage', 'success');
-  }
+  // (approve is now handled inside ApplicantsPanel directly)
 
   async function removeCandidateFromPipeline(candidateCode: string, pipelineCode: string) {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
@@ -635,14 +622,6 @@ export default function PipelinePage() {
             onOpenBrief={(c, code) =>
               setBriefModal({ open: true, candidate: c, pipelineCode: code })
             }
-            onApproveApplicant={approvePipelineApplicant}
-            onRequestReject={(candidateCode, pipelineCode) => {
-              const p = pipelines.find((pl) => pl.code === pipelineCode);
-              const cand = p?.candidates?.find((c) => c.candidateId === candidateCode);
-              setDropModal({ open: true, candidateId: candidateCode, pipelineCode });
-              setDropReason(cand?.dropOffReason ?? 'mia');
-              setDropNote(cand?.dropOffNote ?? '');
-            }}
           />
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-[var(--border)] bg-white py-16 text-center">
@@ -1116,8 +1095,6 @@ function PipelineWorkspace({
   onUpdateStatus,
   onAddCandidate,
   onOpenBrief,
-  onApproveApplicant,
-  onRequestReject,
 }: {
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
@@ -1129,16 +1106,25 @@ function PipelineWorkspace({
   onUpdateStatus: (id: string, status: string) => Promise<void>;
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
-  onApproveApplicant: (candidateCode: string, pipelineCode: string) => Promise<void>;
-  onRequestReject: (candidateCode: string, pipelineCode: string) => void;
 }) {
   const { showToast } = useToast();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'applicants' | 'kanban' | 'chat'>('applicants');
   const [showEdit, setShowEdit] = useState(false);
 
-  // Applicants = candidates in the pre-screening inbox (pendingReview: true)
-  const applicantCount = (pipeline.candidates ?? []).filter((c) => c.pendingReview).length;
+  // Live count of pending applications (not yet approved/rejected) for badge
+  const [applicantCount, setApplicantCount] = useState(0);
+  useEffect(() => {
+    const q = query(collection(db, 'applications'), where('openingCode', '==', pipeline.code));
+    const unsub = onSnapshot(q, (snap) => {
+      const pending = snap.docs.filter((d) => {
+        const s = d.data().status as string | undefined;
+        return !s || s === 'applied' || s === 'pending';
+      }).length;
+      setApplicantCount(pending);
+    });
+    return () => unsub();
+  }, [pipeline.code]);
 
   // The deal (spec 4g): how many candidates have been hired/placed in this
   // pipeline, alongside the partner (organization) name.
@@ -1339,11 +1325,7 @@ function PipelineWorkspace({
 
       {/* Tab content */}
       {activeTab === 'applicants' ? (
-        <ApplicantsPanel
-          pipeline={pipeline}
-          onApprove={(candidateCode) => onApproveApplicant(candidateCode, pipeline.code)}
-          onRequestReject={(candidateCode) => onRequestReject(candidateCode, pipeline.code)}
-        />
+        <ApplicantsPanel pipeline={pipeline} />
       ) : activeTab === 'kanban' ? (
         <KanbanBoard
           pipeline={pipeline}
@@ -1388,9 +1370,8 @@ function KanbanBoard({
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
   compact?: boolean;
 }) {
-  // Exclude candidates still in the pre-screening inbox (pendingReview: true).
-  // They are shown in the Applicants tab and only enter the Kanban once approved.
-  const candidates = (pipeline.candidates ?? []).filter((c) => !c.pendingReview);
+  // All pipeline candidates are approved — show them all in the Kanban.
+  const candidates = pipeline.candidates ?? [];
 
   return (
     <DndContext
@@ -1615,126 +1596,116 @@ function CandidateCard({
 }
 
 // ─── Applicants panel ─────────────────────────────────────────────────────────
+// Reads directly from the `applications` Firestore collection.
+// Candidates never touch `pipeline.candidates` until a Nearwork recruiter
+// approves them here — at which point they are added to the pipeline at the
+// "Applied" stage and become visible in the client portal.
 
-function ApplicantsPanel({
-  pipeline,
-  onApprove,
-  onRequestReject,
-}: {
-  pipeline: Pipeline;
-  onApprove: (candidateCode: string) => Promise<void>;
-  onRequestReject: (candidateCode: string) => void;
-}) {
+interface AppDoc {
+  id: string;
+  candidateId: string;
+  candidateCode?: string;
+  candidateName: string;
+  candidateEmail: string;
+  openingCode: string;
+  cvUrl?: string | null;
+  skills?: string[];
+  expectedSalary?: string;
+  submittedAt?: string;
+  status?: string;
+}
+
+function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
   const { showToast } = useToast();
-  const applicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview);
 
+  const [applications, setApplications] = useState<AppDoc[]>([]);
+  const [loadingApps, setLoadingApps] = useState(true);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [viewingApplicant, setViewingApplicant] = useState<PipelineCandidate | null>(null);
+  const [viewingApp, setViewingApp] = useState<AppDoc | null>(null);
   const [fullProfile, setFullProfile] = useState<Candidate | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
-  async function syncFromApplications() {
-    setSyncing(true);
+  // Live listener — only show applications not yet approved or rejected
+  useEffect(() => {
+    const q = query(collection(db, 'applications'), where('openingCode', '==', pipeline.code));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const pending = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as AppDoc)
+          .filter((a) => !a.status || a.status === 'applied' || a.status === 'pending');
+        setApplications(pending);
+        setLoadingApps(false);
+      },
+      () => setLoadingApps(false),
+    );
+    return () => unsub();
+  }, [pipeline.code]);
+
+  async function handleApprove(app: AppDoc) {
+    setApprovingId(app.id);
     try {
-      const snap = await getDocs(query(collection(db, 'applications'), where('openingCode', '==', pipeline.code)));
-      if (snap.empty) {
-        showToast('No applications found for this pipeline code.', 'error');
-        return;
-      }
-      const existing = pipeline.candidates ?? [];
-
-      // Strip any pendingReview entries whose candidateId is a Firebase UID (not a
-      // CAND-XXXXX code) — these were created by an old bug and are invisible to the
-      // ATS because activeCandidateIds filters them out.
-      const isCandCode = (id: string) => id.startsWith('CAND-');
-      let cleaned = existing.filter((c) => !c.pendingReview || isCandCode(c.candidateId));
-      const removedStale = existing.length - cleaned.length;
-
-      // Build a set of emails that appear in real applications so we can
-      // remove any manually-added pendingReview:false (Screening) entries for
-      // those same people. Candidates must go through the Applicants inbox
-      // vetting step before appearing in the client portal.
-      const appEmails = new Set<string>();
-      snap.docs.forEach((d) => {
-        const e = ((d.data().email as string) ?? '').trim().toLowerCase();
-        if (e) appEmails.add(e);
-      });
-      const removedDuplicates = cleaned.filter(
-        (c) => !c.pendingReview && c.email && appEmails.has(c.email.trim().toLowerCase())
-      ).length;
-      cleaned = cleaned.filter(
-        (c) => c.pendingReview || !c.email || !appEmails.has(c.email.trim().toLowerCase())
-      );
-
-      const toAdd: typeof existing = [];
-      snap.docs.forEach((d) => {
-        const app = d.data();
-        // Prefer candidateCode (always CAND-XXXXX). Fall back to candidateId only
-        // if it already looks like a CAND code — old application docs stored a
-        // Firebase UID in candidateId before the fix, so we skip those.
-        const candId: string =
-          app.candidateCode ||
-          (typeof app.candidateId === 'string' && isCandCode(app.candidateId as string)
-            ? (app.candidateId as string)
-            : '');
-
-        if (!candId) return; // no valid CAND code — skip
-
-        const alreadyIn = cleaned.some(
-          (c) => c.candidateId === candId || c.candidateCode === candId
-        );
-        if (!alreadyIn) {
-          toAdd.push({
-            candidateId: candId,
-            candidateCode: candId,
-            name: app.candidateName || app.name || '',
-            email: app.email || '',
-            stage: 'applied',
-            pendingReview: true,
-            addedAt: new Date().toISOString(),
-            source: 'jobs.nearwork.co (synced)',
-            cvUrl: app.cvUrl || null,
-            skills: Array.isArray(app.skills) ? app.skills : [],
-            expectedSalary: app.expectedSalary || '',
-          } as PipelineCandidate);
-        }
-      });
-
-      if (toAdd.length === 0 && removedStale === 0 && removedDuplicates === 0) {
-        showToast(`Found ${snap.size} application(s) — all already in the pipeline.`, 'success');
-        return;
-      }
-      await updateDoc(doc(db, 'pipelines', pipeline.id), {
-        candidates: [...cleaned, ...toAdd],
-        updatedAt: serverTimestamp(),
-      });
-      const parts: string[] = [];
-      if (toAdd.length > 0) parts.push(`Added ${toAdd.length} applicant(s)`);
-      if (removedStale > 0) parts.push(`removed ${removedStale} stale entry/entries`);
-      if (removedDuplicates > 0) parts.push(`moved ${removedDuplicates} to Applicants inbox`);
-      showToast(parts.join(', ') + '.', 'success');
+      const candId = app.candidateCode || app.candidateId;
+      const newEntry = {
+        candidateId: candId,
+        candidateCode: candId,
+        name: app.candidateName || '',
+        email: app.candidateEmail || '',
+        stage: 'applied' as StageKey,
+        addedAt: new Date().toISOString(),
+        source: 'jobs.nearwork.co',
+        cvUrl: app.cvUrl ?? null,
+        skills: app.skills ?? [],
+        expectedSalary: app.expectedSalary ?? '',
+      };
+      await Promise.all([
+        updateDoc(doc(db, 'pipelines', pipeline.id), {
+          candidates: arrayUnion(newEntry),
+          updatedAt: serverTimestamp(),
+        }),
+        updateDoc(doc(db, 'applications', app.id), {
+          status: 'approved',
+          inPipeline: true,
+          pipelineStage: 'applied',
+        }),
+      ]);
+      showToast(`${app.candidateName || 'Applicant'} approved — added to Applied stage`, 'success');
     } catch (e) {
-      showToast('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+      showToast('Approve failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');
     } finally {
-      setSyncing(false);
+      setApprovingId(null);
     }
   }
 
-  async function openProfile(candidateId: string) {
-    const entry = applicants.find((a) => a.candidateId === candidateId) ?? null;
-    setViewingId(candidateId);
-    setViewingApplicant(entry);
+  async function handleReject(app: AppDoc) {
+    setRejectingId(app.id);
+    try {
+      await updateDoc(doc(db, 'applications', app.id), {
+        status: 'rejected',
+        rejectedAt: new Date().toISOString(),
+      });
+      showToast(`${app.candidateName || 'Applicant'} rejected`, 'success');
+    } catch (e) {
+      showToast('Reject failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');
+    } finally {
+      setRejectingId(null);
+    }
+  }
+
+  async function openProfile(app: AppDoc) {
+    setViewingId(app.id);
+    setViewingApp(app);
     setFullProfile(null);
     setLoadingProfile(true);
     try {
-      const snap = await getDoc(doc(db, 'candidates', candidateId));
+      const candId = app.candidateCode || app.candidateId;
+      const snap = await getDoc(doc(db, 'candidates', candId));
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() } as Candidate;
-        // Fill in CV from the pipeline entry if the candidate doc has none
-        if (!data.cvUrl && !data.resumeUrl && entry?.cvUrl) {
-          data.cvUrl = entry.cvUrl;
+        if (!data.cvUrl && !data.resumeUrl && app.cvUrl) {
+          data.cvUrl = app.cvUrl;
         }
         setFullProfile(data);
       } else {
@@ -1747,21 +1718,17 @@ function ApplicantsPanel({
     }
   }
 
-  async function handleApprove(candidateCode: string) {
-    setApprovingId(candidateCode);
-    try {
-      await onApprove(candidateCode);
-    } finally {
-      setApprovingId(null);
-    }
+  const viewingName = fullProfile?.name ?? viewingApp?.candidateName ?? 'Applicant';
+
+  if (loadingApps) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
-  const viewingName =
-    fullProfile?.name ??
-    applicants.find((a) => a.candidateId === viewingId)?.name ??
-    'Applicant';
-
-  if (applicants.length === 0) {
+  if (applications.length === 0) {
     return (
       <div className="flex h-52 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-white">
         <Inbox className="h-8 w-8 text-[var(--light)]" />
@@ -1769,13 +1736,6 @@ function ApplicantsPanel({
         <p className="text-xs text-[var(--light)]">
           Candidates who apply through jobs.nearwork.co will appear here for review.
         </p>
-        <button
-          onClick={syncFromApplications}
-          disabled={syncing}
-          className="mt-1 rounded-full border border-[var(--border)] px-3 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
-        >
-          {syncing ? 'Syncing…' : 'Sync applicants'}
-        </button>
       </div>
     );
   }
@@ -1784,21 +1744,19 @@ function ApplicantsPanel({
     <>
       <div className="space-y-2">
         <p className="text-xs text-[var(--light)] pb-1">
-          {applicants.length} applicant{applicants.length !== 1 ? 's' : ''} waiting for review
+          {applications.length} applicant{applications.length !== 1 ? 's' : ''} waiting for review
           {' · '}Approve to add to the pipeline, or reject to dismiss.
         </p>
-        {applicants.map((c) => {
-          const isApproving = approvingId === c.candidateId;
-          const appliedDate = c.addedAt
-            ? new Date(
-                typeof (c.addedAt as { toDate?: () => Date }).toDate === 'function'
-                  ? (c.addedAt as { toDate: () => Date }).toDate()
-                  : (c.addedAt as unknown as string)
-              ).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        {applications.map((app) => {
+          const isApproving = approvingId === app.id;
+          const isRejecting = rejectingId === app.id;
+          const appliedDate = app.submittedAt
+            ? new Date(app.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric'
+            })
             : null;
           return (
             <div
-              key={c.candidateId}
+              key={app.id}
               className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-white px-4 py-3 transition-colors hover:border-[var(--green)]"
             >
               {/* Avatar */}
@@ -1806,15 +1764,15 @@ function ApplicantsPanel({
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
                 style={{ background: 'var(--green)' }}
               >
-                {initials(c.name)}
+                {initials(app.candidateName)}
               </div>
 
               {/* Name + email */}
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-600 text-[var(--black)]">
-                  {c.name || 'No name'}
+                  {app.candidateName || 'No name'}
                 </p>
-                <p className="text-xs text-[var(--light)]">{c.email || '—'}</p>
+                <p className="text-xs text-[var(--light)]">{app.candidateEmail || '—'}</p>
               </div>
 
               {/* Applied date */}
@@ -1827,29 +1785,26 @@ function ApplicantsPanel({
               {/* Actions */}
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
-                  onClick={() => openProfile(c.candidateId)}
+                  onClick={() => openProfile(app)}
                   className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-600 text-[var(--mid)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
                 >
                   View profile
                 </button>
                 <button
-                  onClick={() => handleApprove(c.candidateId)}
-                  disabled={isApproving}
+                  onClick={() => handleApprove(app)}
+                  disabled={isApproving || isRejecting}
                   className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-600 text-white transition-opacity disabled:opacity-60"
                   style={{ background: 'var(--green)' }}
                 >
-                  {isApproving ? (
-                    <Spinner size="sm" />
-                  ) : (
-                    <UserCheck className="h-3 w-3" />
-                  )}
+                  {isApproving ? <Spinner size="sm" /> : <UserCheck className="h-3 w-3" />}
                   Add to pipeline
                 </button>
                 <button
-                  onClick={() => onRequestReject(c.candidateId)}
-                  className="rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-600 text-red-500 transition-colors hover:bg-red-50"
+                  onClick={() => handleReject(app)}
+                  disabled={isApproving || isRejecting}
+                  className="rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-600 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
                 >
-                  <XCircle className="inline mr-1 h-3 w-3" />
+                  {isRejecting ? <Spinner size="sm" /> : <XCircle className="inline mr-1 h-3 w-3" />}
                   Reject
                 </button>
               </div>
@@ -1863,7 +1818,7 @@ function ApplicantsPanel({
         open={viewingId !== null}
         onClose={() => {
           setViewingId(null);
-          setViewingApplicant(null);
+          setViewingApp(null);
           setFullProfile(null);
         }}
         title={viewingName}
@@ -1875,17 +1830,16 @@ function ApplicantsPanel({
           </div>
         ) : fullProfile ? (
           <ApplicantProfile profile={fullProfile} />
-        ) : viewingApplicant ? (
-          // Candidate doc not created yet — show what we have from the application
+        ) : viewingApp ? (
           <ApplicantProfile
             profile={{
-              id: viewingApplicant.candidateId,
-              name: viewingApplicant.name,
-              email: viewingApplicant.email ?? '',
-              skills: viewingApplicant.skills ?? [],
-              cvUrl: viewingApplicant.cvUrl ?? undefined,
-              expectedSalary: viewingApplicant.expectedSalary ?? undefined,
-              source: viewingApplicant.source ?? 'jobs.nearwork.co',
+              id: viewingApp.candidateId,
+              name: viewingApp.candidateName,
+              email: viewingApp.candidateEmail ?? '',
+              skills: viewingApp.skills ?? [],
+              cvUrl: viewingApp.cvUrl ?? undefined,
+              expectedSalary: viewingApp.expectedSalary ?? undefined,
+              source: 'jobs.nearwork.co',
             }}
             note="Full candidate profile not yet created — showing application data."
           />

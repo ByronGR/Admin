@@ -1994,6 +1994,57 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
           </div>
         )}
 
+      {/* Languages */}
+      {Array.isArray(profile.languages) && profile.languages.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+            Languages
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {profile.languages.map((lang) => (
+              <span
+                key={lang}
+                className="flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-600 text-blue-700"
+              >
+                <Languages className="h-3 w-3" />
+                {lang}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Certifications */}
+      {Array.isArray(profile.certifications) && profile.certifications.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
+            Certifications &amp; courses
+          </p>
+          <div className="space-y-2">
+            {profile.certifications.map((c, i) => (
+              <div key={i} className="flex gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-[9px] font-800 text-amber-600">
+                  ✓
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-600 text-[var(--black)]">{c.name}</p>
+                  {c.issuer && <p className="text-[11px] text-[var(--mid)]">{c.issuer}</p>}
+                  {c.date && <p className="mt-0.5 text-[10px] text-[var(--light)]">{c.date}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      {profile.summary && (
+        <div>
+          <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Summary</p>
+          <p className="text-xs leading-relaxed text-[var(--mid)]">{profile.summary}</p>
+        </div>
+      )}
+
       {/* CV / Resume */}
       {(profile.cvUrl || profile.resumeUrl) && (
         <div>

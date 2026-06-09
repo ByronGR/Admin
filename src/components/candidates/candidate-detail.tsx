@@ -40,6 +40,8 @@ import {
   Award,
   Activity,
   Briefcase,
+  Languages,
+  GraduationCap,
 } from 'lucide-react';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
@@ -715,6 +717,56 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Languages */}
+        {Array.isArray(candidate.languages) && candidate.languages.length > 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-600 text-[var(--black)]">
+              <Languages className="h-4 w-4 text-blue-500" /> Languages
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {candidate.languages.map((lang) => (
+                <span
+                  key={lang}
+                  className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-600 text-blue-700"
+                >
+                  <Languages className="h-3 w-3" />{lang}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Certifications & courses */}
+        {Array.isArray(candidate.certifications) && candidate.certifications.length > 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-600 text-[var(--black)]">
+              <GraduationCap className="h-4 w-4 text-amber-500" /> Certifications &amp; courses
+            </h3>
+            <div className="space-y-2.5">
+              {candidate.certifications.map((c, i) => (
+                <div key={i} className="flex gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-xs font-800 text-amber-600">
+                    ✓
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-600 text-[var(--black)]">{c.name}</p>
+                    {c.issuer && <p className="text-[11px] text-[var(--mid)]">{c.issuer}</p>}
+                    {c.date && <p className="mt-0.5 text-[10px] text-[var(--light)]">{c.date}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        {candidate.summary && (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+            <h3 className="mb-2 text-sm font-600 text-[var(--black)]">Summary</h3>
+            <p className="text-xs leading-relaxed text-[var(--mid)]">{candidate.summary}</p>
           </div>
         )}
 

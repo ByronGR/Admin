@@ -293,6 +293,12 @@ export interface WorkHistoryEntry {
   contact?: string;
 }
 
+export interface CertificationEntry {
+  name: string;
+  issuer?: string;
+  date?: string;
+}
+
 export interface Candidate {
   id: string;
   // Short, human-readable ID (e.g. "K7M2PX"). For candidates created in Admin
@@ -317,7 +323,10 @@ export interface Candidate {
   tags?: string[];
   skills?: string[];
   experience?: number;        // years of experience (Admin-created candidates)
-  workHistory?: WorkHistoryEntry[]; // jobs.nearwork.co full work history array
+  workHistory?: WorkHistoryEntry[];       // full work history (talent.nearwork.co)
+  languages?: string[];                   // other languages besides English
+  certifications?: CertificationEntry[];  // certificates & courses
+  summary?: string;                       // professional summary / bio
   english?: string;           // English level written by jobs.nearwork.co
   role?: string;               // target/current job title (written by talent.nearwork.co)
   targetRole?: string;         // alias used by talent.nearwork.co

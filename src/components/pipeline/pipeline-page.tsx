@@ -1868,8 +1868,39 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
 // ─── Applicant profile (shown inside the review modal) ───────────────────────
 
 function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string }) {
+  const photoSrc = profile.photoUrl;
+  const initials = (profile.name || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <div className="space-y-5">
+      {/* Avatar */}
+      <div className="flex items-center gap-3">
+        {photoSrc ? (
+          <img
+            src={photoSrc}
+            alt={profile.name}
+            className="h-14 w-14 rounded-full object-cover border border-[var(--border)]"
+          />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] border border-[var(--border)] text-base font-700 text-[var(--mid)]">
+            {initials}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate font-700 text-[var(--black)]">{profile.name}</p>
+          {(profile.role || profile.targetRole || profile.headline) && (
+            <p className="truncate text-xs text-[var(--mid)]">
+              {profile.role || profile.targetRole || profile.headline}
+            </p>
+          )}
+        </div>
+      </div>
+
       {note && (
         <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
           {note}
@@ -1880,7 +1911,7 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
         {[
           { label: 'Email', value: profile.email },
           { label: 'Phone', value: profile.phone },
-          { label: 'City', value: profile.city || profile.location },
+          { label: 'City', value: profile.location || profile.city },
           { label: 'English', value: profile.english },
           {
             label: 'Expected salary',

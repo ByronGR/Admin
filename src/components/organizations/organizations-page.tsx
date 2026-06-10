@@ -279,15 +279,28 @@ function orgStatusVariant(status: string) {
   return 'amber';
 }
 
-// ─── Org avatar (logo or initials) ───────────────────────────────────────────
+// ─── Org avatar (logo, live favicon, or initials) ────────────────────────────
+
+function faviconUrl(website?: string | null): string | null {
+  if (!website) return null;
+  try {
+    const url = website.startsWith('http') ? website : `https://${website}`;
+    return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=128`;
+  } catch {
+    return null;
+  }
+}
 
 function OrgAvatar({ org, size = 'md' }: { org: Organization; size?: 'sm' | 'md' | 'lg' }) {
   const sizes = { sm: 'h-8 w-8 text-xs', md: 'h-12 w-12 text-sm', lg: 'h-16 w-16 text-base' };
-  if (org.logo) {
+  const [imgError, setImgError] = useState(false);
+  const src = org.logo || (!imgError ? faviconUrl(org.website) : null);
+  if (src) {
     return (
       <img
-        src={org.logo}
+        src={src}
         alt={org.name}
+        onError={() => setImgError(true)}
         className={`${sizes[size]} rounded-xl object-cover shrink-0`}
       />
     );
@@ -317,7 +330,7 @@ export default function OrganizationsPage() {
   const [newModal, setNewModal] = useState(false);
   const [form, setForm] = useState({
     name: '', website: '', country: '', city: '',
-    industry: '', package: '', contractType: '', hubspotLink: '',
+    industry: '', contractType: '', hubspotLink: '',
     status: 'active', inviteEmail: '',
   });
   const [saving, setSaving] = useState(false);
@@ -386,7 +399,7 @@ export default function OrganizationsPage() {
         country: form.country || null,
         city: form.city || null,
         industry: form.industry || null,
-        package: form.package || null,
+        package: null,
         contractType: form.contractType || null,
         hubspotLink: form.hubspotLink || null,
         status: form.status,
@@ -398,7 +411,7 @@ export default function OrganizationsPage() {
 
       // Close modal & refresh immediately — don't let invite delays block this
       setNewModal(false);
-      setForm({ name: '', website: '', country: '', city: '', industry: '', package: '', contractType: '', hubspotLink: '', status: 'active', inviteEmail: '' });
+      setForm({ name: '', website: '', country: '', city: '', industry: '', contractType: '', hubspotLink: '', status: 'active', inviteEmail: '' });
       showToast('Organization created', 'success');
       await load();
 
@@ -597,48 +610,6 @@ export default function OrganizationsPage() {
               autoFocus
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
             />
-          </div>
-
-          {/* Package selector */}
-          <div className="sm:col-span-2">
-            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Plan</label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {(['essential', 'growth', 'scale', 'eor', 'spp'] as const).map((key) => {
-                const p = PACKAGES[key];
-                const selected = form.package === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, package: key }))}
-                    className={`rounded-xl border p-3 text-left transition-all ${
-                      selected ? 'shadow-sm' : 'border-[var(--border)] hover:border-[var(--green)]'
-                    }`}
-                    style={selected ? { borderColor: p.color, background: p.bg } : {}}
-                  >
-                    <p className="text-xs font-700" style={{ color: selected ? p.color : 'var(--black)' }}>
-                      {p.label}
-                    </p>
-                    <p className="mt-0.5 text-[10px]" style={{ color: selected ? p.color : 'var(--light)' }}>
-                      {p.price}
-                    </p>
-                    <p className="text-[10px]" style={{ color: selected ? p.color : 'var(--light)' }}>
-                      {p.fee}
-                    </p>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, package: '' }))}
-                className={`rounded-xl border p-3 text-left transition-all ${
-                  !form.package ? 'border-[var(--black)] bg-[var(--bg)]' : 'border-[var(--border)] hover:border-[var(--green)]'
-                }`}
-              >
-                <p className="text-xs font-700 text-[var(--mid)]">None</p>
-                <p className="mt-0.5 text-[10px] text-[var(--light)]">No plan yet</p>
-              </button>
-            </div>
           </div>
 
           <div>

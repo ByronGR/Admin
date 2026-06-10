@@ -49,6 +49,64 @@ const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = 
   direct: { color: '#555555', bg: '#F5F5F5' },
 };
 
+// ─── Stripe billing (Billing tab) ──────────────────────────────────────────────
+
+interface StripeBillingData {
+  customer: { id: string; name: string | null; email: string | null; currency: string | null; balance: number };
+  totalPaid: number;
+  mrr: number;
+  currency: string;
+  subscriptions: {
+    id: string;
+    status: string;
+    currentPeriodEnd: string | null;
+    items: { name: string; amount: number; currency: string; interval: string }[];
+  }[];
+  invoices: {
+    id: string;
+    number: string | null;
+    amount: number;
+    currency: string;
+    status: string | null;
+    created: string;
+    hostedInvoiceUrl: string | null;
+  }[];
+}
+
+function fmtMoney(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), maximumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `$${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  }
+}
+
+function invoiceStatusVariant(status: string | null): 'green' | 'amber' | 'red' | 'neutral' {
+  switch (status) {
+    case 'paid': return 'green';
+    case 'open': return 'amber';
+    case 'uncollectible': return 'red';
+    case 'void': return 'neutral';
+    default: return 'neutral';
+  }
+}
+
+function subStatusVariant(status: string): 'green' | 'amber' | 'red' | 'neutral' {
+  switch (status) {
+    case 'active':
+    case 'trialing':
+      return 'green';
+    case 'past_due':
+    case 'unpaid':
+    case 'incomplete':
+      return 'red';
+    case 'canceled':
+    case 'incomplete_expired':
+      return 'neutral';
+    default: return 'neutral';
+  }
+}
+
 // ─── Package definitions (from nearwork.co/pricing) ───────────────────────────
 
 interface PkgInfo {
@@ -708,6 +766,7 @@ function OrgDetail({
     package: org.package ?? '',
     contractType: org.contractType ?? '',
     hubspotLink: org.hubspotLink ?? '',
+    stripeCustomerId: org.stripeCustomerId ?? '',
     status: org.status ?? 'active',
   });
 
@@ -739,7 +798,12 @@ function OrgDetail({
   const [savingAction, setSavingAction] = useState(false);
 
   // Detail tab navigation
-  const [tab, setTab] = useState<'overview' | 'hiring' | 'team' | 'people'>('overview');
+  const [tab, setTab] = useState<'overview' | 'hiring' | 'team' | 'people' | 'billing'>('overview');
+
+  // Billing (Stripe) state
+  const [billingData, setBillingData] = useState<StripeBillingData | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState('');
 
   // Openings/Pipelines view toggles
   const [showInactiveOpenings, setShowInactiveOpenings] = useState(false);
@@ -890,6 +954,28 @@ function OrgDetail({
     loadClientAccounts().catch(() => null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id, org.shortId]);
+
+  // ── Billing (Stripe) ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (tab !== 'billing' || !org.stripeCustomerId) return;
+    let cancelled = false;
+    setBillingLoading(true);
+    setBillingError('');
+    setBillingData(null);
+    fetch(`/api/stripe/customer?customerId=${encodeURIComponent(org.stripeCustomerId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.ok) {
+          setBillingData(data as StripeBillingData);
+        } else {
+          setBillingError(data.skipped ? 'Stripe is not configured (missing STRIPE_SECRET_KEY).' : (data.error || 'Failed to load billing data'));
+        }
+      })
+      .catch(() => { if (!cancelled) setBillingError('Failed to load billing data'); })
+      .finally(() => { if (!cancelled) setBillingLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, org.stripeCustomerId]);
 
   // One-click repair: search by orgName across all three collections and patch
   // in the correct orgId so subsequent queries work without manual Firestore edits.
@@ -1108,6 +1194,7 @@ function OrgDetail({
         package: editForm.package ? (editForm.package as OrgPackage) : null,
         contractType: editForm.contractType ? (editForm.contractType as OrgContractType) : null,
         hubspotLink: editForm.hubspotLink || null,
+        stripeCustomerId: editForm.stripeCustomerId.trim() || null,
         status: editForm.status,
         updatedAt: serverTimestamp(),
       };
@@ -1442,14 +1529,15 @@ function OrgDetail({
             ) : (
               /* Edit form */
               <div className="grid gap-3 sm:grid-cols-2">
-                {(['name', 'website', 'country', 'city', 'industry', 'hubspotLink'] as const).map((key) => (
-                  <div key={key} className={key === 'name' || key === 'hubspotLink' ? 'sm:col-span-2' : ''}>
+                {(['name', 'website', 'country', 'city', 'industry', 'hubspotLink', 'stripeCustomerId'] as const).map((key) => (
+                  <div key={key} className={key === 'name' || key === 'hubspotLink' || key === 'stripeCustomerId' ? 'sm:col-span-2' : ''}>
                     <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                      {key === 'hubspotLink' ? 'HubSpot link' : key.charAt(0).toUpperCase() + key.slice(1)}
+                      {key === 'hubspotLink' ? 'HubSpot link' : key === 'stripeCustomerId' ? 'Stripe Customer ID' : key.charAt(0).toUpperCase() + key.slice(1)}
                     </label>
                     <input
                       value={(editForm as Record<string, string>)[key]}
                       onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
+                      placeholder={key === 'stripeCustomerId' ? 'cus_...' : undefined}
                       className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)]"
                     />
                   </div>
@@ -1668,7 +1756,7 @@ function OrgDetail({
 
       {/* Tab nav */}
       <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
-        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['team', 'Team'], ['people', 'People']] as const).map(([key, label]) => (
+        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['team', 'Team'], ['people', 'People'], ['billing', 'Billing']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -2290,6 +2378,103 @@ function OrgDetail({
             </div>
           )}
         </div>
+      </div>
+      )}
+
+      {/* ── Billing tab ── */}
+      {tab === 'billing' && (
+      <div className="space-y-5">
+        {!org.stripeCustomerId ? (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-6 text-center">
+            <DollarSign className="mx-auto h-6 w-6 text-[var(--light)]" />
+            <p className="mt-2 text-xs text-[var(--light)]">
+              No Stripe customer linked. Add a Stripe Customer ID under Edit details to see billing data.
+            </p>
+            <button
+              onClick={() => setEditing(true)}
+              className="mt-3 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+            >
+              Edit details
+            </button>
+          </div>
+        ) : billingLoading ? (
+          <div className="flex justify-center rounded-2xl border border-[var(--border)] bg-white p-10">
+            <Spinner />
+          </div>
+        ) : billingError ? (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-6 text-center">
+            <AlertTriangle className="mx-auto h-6 w-6 text-[var(--light)]" />
+            <p className="mt-2 text-xs text-[var(--light)]">{billingError}</p>
+          </div>
+        ) : billingData ? (
+          <>
+            {/* Stat cards */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+                <div className="mb-2 flex items-center gap-1.5 text-xs text-[var(--light)]">
+                  <DollarSign className="h-3.5 w-3.5" />Total paid
+                </div>
+                <p className="text-2xl font-800 tracking-tight text-[var(--black)]">{fmtMoney(billingData.totalPaid, billingData.currency)}</p>
+                <p className="mt-0.5 text-[10px] text-[var(--light)]">Lifetime, all paid invoices</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+                <div className="mb-2 flex items-center gap-1.5 text-xs text-[var(--light)]">
+                  <TrendingUp className="h-3.5 w-3.5" />MRR
+                </div>
+                <p className="text-2xl font-800 tracking-tight text-[var(--black)]">{fmtMoney(billingData.mrr, billingData.currency)}</p>
+                <p className="mt-0.5 text-[10px] text-[var(--light)]">From active subscriptions</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+                <div className="mb-2 flex items-center gap-1.5 text-xs text-[var(--light)]">
+                  <Activity className="h-3.5 w-3.5" />Subscription status
+                </div>
+                {billingData.subscriptions.length === 0 ? (
+                  <p className="mt-1 text-xs text-[var(--light)]">No subscriptions</p>
+                ) : (
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {billingData.subscriptions.map((sub) => (
+                      <Badge key={sub.id} label={sub.status} variant={subStatusVariant(sub.status)} />
+                    ))}
+                  </div>
+                )}
+                <p className="mt-1.5 text-[10px] text-[var(--light)]">
+                  {billingData.customer.email || billingData.customer.id}
+                </p>
+              </div>
+            </div>
+
+            {/* Last payments */}
+            <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-700 text-[var(--black)]">
+                <DollarSign className="h-4 w-4 text-[var(--green)]" />Last payments
+              </h3>
+              {billingData.invoices.length === 0 ? (
+                <p className="rounded-xl bg-[var(--bg)] px-4 py-5 text-center text-xs text-[var(--light)]">No invoices yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {billingData.invoices.map((inv) => (
+                    <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-600 text-[var(--black)]">{inv.number || inv.id}</p>
+                        <p className="text-[10px] text-[var(--light)]">{fmtDate(inv.created)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-700 text-[var(--black)]">{fmtMoney(inv.amount / 100, inv.currency)}</span>
+                        <Badge label={inv.status ?? 'unknown'} variant={invoiceStatusVariant(inv.status)} />
+                        {inv.hostedInvoiceUrl && (
+                          <a href={inv.hostedInvoiceUrl} target="_blank" rel="noopener noreferrer"
+                            className="rounded-md p-1 text-[var(--light)] hover:text-[var(--green)]" title="View invoice">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : null}
       </div>
       )}
 

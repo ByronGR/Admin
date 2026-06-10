@@ -143,6 +143,7 @@ export interface Organization {
   cacEntries?: CACEntry[];
   // ─── Account Intelligence (internal — never shown to the partner) ───────────
   totalSpend?: number;                    // lifetime spend; later pulled from Stripe → drives Tier
+  stripeCustomerId?: string;              // Stripe Customer ID (cus_xxx) — manual link, drives Billing tab
   healthGrade?: AccountHealthGrade;       // current Account Health
   healthUpdatedAt?: string;               // ISO timestamp of last health change
   healthHistory?: HealthHistoryEntry[];   // trend log; a note is required on every change

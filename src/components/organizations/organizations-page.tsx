@@ -739,6 +739,7 @@ function OrgDetail({
     hubspotLink: org.hubspotLink ?? '',
     stripeCustomerId: org.stripeCustomerId ?? '',
     status: org.status ?? 'active',
+    internal: org.internal ?? false,
   });
 
   // Users state
@@ -1167,6 +1168,7 @@ function OrgDetail({
         hubspotLink: editForm.hubspotLink || null,
         stripeCustomerId: editForm.stripeCustomerId.trim() || null,
         status: editForm.status,
+        internal: editForm.internal,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'organizations', org.id), data);
@@ -1476,6 +1478,9 @@ function OrgDetail({
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-700 text-[var(--black)]">{org.name}</h2>
                   <Badge label={org.status ?? 'active'} variant={orgStatusVariant(org.status ?? 'active') as 'green' | 'amber' | 'red'} />
+                  {org.internal && (
+                    <span className="rounded-full bg-[var(--bg)] px-2.5 py-0.5 text-[10px] font-700 text-[var(--mid)]">Internal</span>
+                  )}
                   {pkg && (
                     <span className="rounded-full px-2.5 py-0.5 text-[10px] font-700" style={{ background: pkg.bg, color: pkg.color }}>
                       {pkg.label}
@@ -1506,7 +1511,7 @@ function OrgDetail({
                       {key === 'hubspotLink' ? 'HubSpot link' : key === 'stripeCustomerId' ? 'Stripe Customer ID' : key.charAt(0).toUpperCase() + key.slice(1)}
                     </label>
                     <input
-                      value={(editForm as Record<string, string>)[key]}
+                      value={(editForm as unknown as Record<string, string>)[key]}
                       onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
                       placeholder={key === 'stripeCustomerId' ? 'cus_...' : undefined}
                       className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--green)]"
@@ -1522,6 +1527,18 @@ function OrgDetail({
                     <option value="inactive">Inactive</option>
                     <option value="suspended">Suspended</option>
                   </select>
+                </div>
+                <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+                  <input
+                    id="org-internal-toggle"
+                    type="checkbox"
+                    checked={editForm.internal}
+                    onChange={(e) => setEditForm((f) => ({ ...f, internal: e.target.checked }))}
+                    className="h-4 w-4 rounded border-[var(--border)]"
+                  />
+                  <label htmlFor="org-internal-toggle" className="text-xs font-500 text-[var(--mid)]">
+                    Internal organization (Nearwork's own — staff can approve its kick-off briefs)
+                  </label>
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Contract type</label>

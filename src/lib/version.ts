@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.12.3';
+export const APP_VERSION = '0.13.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.13.0',
+    date: '2026-06-10',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Organizations can be flagged "Internal" (e.g. Nearwork\'s own lead-tracking org) — for these orgs, Nearwork staff can approve/request changes on kick-off briefs themselves, since there\'s no separate client to do it.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.12.3',
     date: '2026-06-02',

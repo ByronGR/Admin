@@ -332,11 +332,18 @@ export async function POST(req: Request) {
     const existing = snap.data() as Record<string, unknown>;
 
     // Clients may only act on their own org's brief. Nearwork staff are blocked from
-    // the client-side decision so the two-party approval stays honest.
-    if (isNearwork) return json({ ok: false, error: 'Client approval must come from the client' }, 403, origin);
+    // the client-side decision so the two-party approval stays honest — except for
+    // orgs flagged `internal` (e.g. Nearwork's own lead-tracking org), where staff
+    // are the only "client" there is.
     const orgId = String(existing.orgId ?? '');
-    const allowed = await clientBelongsToOrg(uid, email, orgId);
-    if (!allowed) return json({ ok: false, error: 'Not authorised for this brief' }, 403, origin);
+    if (isNearwork) {
+      const orgSnap = orgId ? await db.collection('organizations').doc(orgId).get() : null;
+      const isInternalOrg = !!orgSnap?.exists && orgSnap.data()?.internal === true;
+      if (!isInternalOrg) return json({ ok: false, error: 'Client approval must come from the client' }, 403, origin);
+    } else {
+      const allowed = await clientBelongsToOrg(uid, email, orgId);
+      if (!allowed) return json({ ok: false, error: 'Not authorised for this brief' }, 403, origin);
+    }
 
     if (String(existing.status ?? 'draft') !== 'submitted') {
       return json({ ok: false, error: 'This brief is not awaiting your review.' }, 409, origin);
@@ -367,7 +374,7 @@ export async function POST(req: Request) {
     const jobTitle = String(existing.jobTitle ?? code);
 
     if (action === 'approve') {
-      history.push({ action: 'approved', by: actorName, byRole: 'client', timestamp: now });
+      history.push({ action: 'approved', by: actorName, byRole: isNearwork ? 'nearwork' : 'client', timestamp: now });
       await ref.set({
         status: 'approved',
         clientApprovedBy: actorName,
@@ -446,7 +453,7 @@ export async function POST(req: Request) {
     // request_changes
     const note = String(body.note ?? '').trim();
     if (!note) return json({ ok: false, error: 'A note describing the requested changes is required' }, 400, origin);
-    history.push({ action: 'changes_requested', by: actorName, byRole: 'client', timestamp: now, note });
+    history.push({ action: 'changes_requested', by: actorName, byRole: isNearwork ? 'nearwork' : 'client', timestamp: now, note });
     await ref.set({
       status: 'changes_requested',
       updatedAt: FieldValue.serverTimestamp(),

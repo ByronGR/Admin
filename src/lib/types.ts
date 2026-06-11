@@ -133,6 +133,7 @@ export interface Organization {
   address?: string;
   logo?: string;
   status?: 'active' | 'inactive' | 'prospect' | 'suspended';
+  internal?: boolean;          // Nearwork's own org (e.g. lead-tracking) — staff can self-approve kick-off briefs
   package?: OrgPackage;
   contractType?: OrgContractType;
   hubspotLink?: string;

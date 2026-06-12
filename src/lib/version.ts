@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.13.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.13.1',
+    date: '2026-06-11',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Openings can now have their salary hidden from jobs.nearwork.co — toggle "Hide salary" while editing an opening to show "Salary on request" on the public listing instead of the $min–$max range.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.13.0',
     date: '2026-06-10',

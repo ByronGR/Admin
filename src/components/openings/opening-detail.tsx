@@ -109,6 +109,7 @@ export function OpeningDetail({
     priority:       opening.priority       ?? 'medium',
     salaryMin:      String(opening.salaryMin ?? ''),
     salaryMax:      String(opening.salaryMax ?? ''),
+    hideSalary:     opening.hideSalary ?? false,
     location:       opening.location       ?? '',
   });
 
@@ -236,6 +237,7 @@ export function OpeningDetail({
         priority:       editForm.priority,
         salaryMin:      editForm.salaryMin ? Number(editForm.salaryMin) : null,
         salaryMax:      editForm.salaryMax ? Number(editForm.salaryMax) : null,
+        hideSalary:     editForm.hideSalary,
         ...(goneFromJobs && opening.published ? { published: false } : {}),
         updatedAt: serverTimestamp(),
       });
@@ -494,7 +496,7 @@ export function OpeningDetail({
               { label: 'Location',        value: opening.location },
               { label: 'Type',            value: opening.type?.replace('_', ' ') },
               { label: 'Priority',        value: opening.priority },
-              { label: 'Salary',          value: opening.salaryMin && opening.salaryMax ? `$${opening.salaryMin}–$${opening.salaryMax}/mo` : '—' },
+              { label: 'Salary',          value: opening.salaryMin && opening.salaryMax ? `${opening.hideSalary ? '🔒 ' : ''}$${opening.salaryMin}–$${opening.salaryMax}/mo${opening.hideSalary ? ' (hidden from Jobs)' : ''}` : '—' },
               { label: 'Sourcer',         value: opening.sourcer },
               { label: 'Recruiter',       value: opening.recruiter },
               { label: 'Hiring Manager',  value: opening.hiringManager },
@@ -533,6 +535,18 @@ export function OpeningDetail({
                 />
               </div>
             ))}
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <input
+                id="hideSalary"
+                type="checkbox"
+                checked={editForm.hideSalary}
+                onChange={(e) => setEditForm((f) => ({ ...f, hideSalary: e.target.checked }))}
+                className="h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+              />
+              <label htmlFor="hideSalary" className="text-xs text-[var(--mid)]">
+                Hide salary on jobs.nearwork.co (listing will show &quot;Salary on request&quot;)
+              </label>
+            </div>
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
               <StaffPicker compact value={editForm.recruiter} onChange={(name) => setEditForm((f) => ({ ...f, recruiter: name }))} placeholder="Search team" />

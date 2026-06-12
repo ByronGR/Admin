@@ -209,6 +209,7 @@ export interface Opening {
   salaryMin?: number;
   salaryMax?: number;
   salaryCurrency?: string;
+  hideSalary?: boolean;
   description?: string;
   requirements?: string[];
   responsibilities?: string[];

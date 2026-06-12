@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.13.1';
+export const APP_VERSION = '0.14.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.14.0',
+    date: '2026-06-11',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profiles now have an "English assessment" card where staff can directly record a CEFR level (A1–C2) and comments — independent of the pipeline English-score gate. Visible to staff in Admin and to clients on the candidate profile in the client portal.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.13.1',
     date: '2026-06-11',

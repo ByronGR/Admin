@@ -9,10 +9,14 @@ import {
   query,
   where,
   addDoc,
+  doc,
+  updateDoc,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
+import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
@@ -26,6 +30,7 @@ import type {
   Assessment,
   Placement,
   CEFRLevel,
+  EnglishScore,
 } from '@/lib/types';
 import { DISC_LABELS } from '@/lib/question-bank';
 import {
@@ -42,6 +47,8 @@ import {
   Briefcase,
   Languages,
   GraduationCap,
+  Volume2,
+  Pencil,
 } from 'lucide-react';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
@@ -53,6 +60,8 @@ const CEFR_TO_PCT: Record<CEFRLevel, number> = {
   C1: 90,
   C2: 100,
 };
+
+const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 const NEARWORK_SCORE_VALID_DAYS = 90;
 
@@ -72,11 +81,52 @@ function tsToDate(ts: unknown): Date | null {
 
 export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const { showToast } = useToast();
+  const { profile } = useAuth();
   const [notes, setNotes] = useState<
     Array<{ id: string; body: string; authorName?: string; createdAt?: unknown }>
   >([]);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+
+  // ── English assessment (Nearwork-recorded level + comments) ────────────────
+  const [englishScore, setEnglishScore] = useState<EnglishScore | undefined>(candidate.englishScore);
+  const [engModalOpen, setEngModalOpen] = useState(false);
+  const [engLevel, setEngLevel] = useState<CEFRLevel>(englishScore?.level ?? 'B2');
+  const [engFeedback, setEngFeedback] = useState(englishScore?.feedback ?? '');
+  const [engSaving, setEngSaving] = useState(false);
+
+  function openEnglishModal() {
+    setEngLevel(englishScore?.level ?? 'B2');
+    setEngFeedback(englishScore?.feedback ?? '');
+    setEngModalOpen(true);
+  }
+
+  async function saveEnglishAssessment() {
+    if (!engFeedback.trim()) {
+      showToast('Please enter feedback before saving', 'error');
+      return;
+    }
+    setEngSaving(true);
+    try {
+      const next: EnglishScore = {
+        level: engLevel,
+        feedback: engFeedback.trim(),
+        assessedBy: profile?.name || profile?.email || undefined,
+        assessedAt: new Date().toISOString(),
+      };
+      await updateDoc(doc(db, 'candidates', candidate.id), {
+        englishScore: next,
+        updatedAt: serverTimestamp(),
+      });
+      setEnglishScore(next);
+      setEngModalOpen(false);
+      showToast('English assessment saved', 'success');
+    } catch {
+      showToast('Failed to save English assessment', 'error');
+    } finally {
+      setEngSaving(false);
+    }
+  }
 
   // ── @-mentions: Nearwork staff only on the candidate page ──────────────────
   type MentionUser = { id: string; name: string; handle: string; initials: string; role: string };
@@ -248,10 +298,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       .catch(() => setPlacement(null));
   }, [candidate.id]);
 
-  // Best English level recorded across this candidate's pipelines.
+  // Best English level recorded — prefers the candidate's own assessment,
+  // falling back to the best level recorded across their pipelines.
   const bestEnglish = useMemo<CEFRLevel | null>(() => {
-    let best: CEFRLevel | null = null;
-    let bestPct = -1;
+    let best: CEFRLevel | null = englishScore?.level ?? null;
+    let bestPct = best ? CEFR_TO_PCT[best] : -1;
     for (const { entry } of pipelineEntries) {
       const lvl = entry.englishScore?.level;
       if (lvl && CEFR_TO_PCT[lvl] > bestPct) {
@@ -260,7 +311,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       }
     }
     return best;
-  }, [pipelineEntries]);
+  }, [pipelineEntries, englishScore]);
 
   // Nearwork Score + 90-day validity.
   const nearworkScore = assessment?.nearworkScore ?? null;
@@ -359,6 +410,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     : null;
 
   return (
+    <>
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
       {/* Left: details */}
       <div className="space-y-5">
@@ -477,6 +529,47 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </span>
               ))}
             </div>
+          )}
+        </div>
+
+        {/* English assessment — staff-entered level + comments, visible to the client */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
+              <Volume2 className="h-4 w-4 text-[var(--green)]" />
+              English assessment
+            </h3>
+            <button
+              type="button"
+              onClick={openEnglishModal}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {englishScore ? 'Edit' : 'Add assessment'}
+            </button>
+          </div>
+          {englishScore ? (
+            <div className="mt-3 flex items-start gap-3">
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-800 text-white"
+                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+              >
+                {englishScore.level}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs leading-relaxed text-[var(--mid)]">{englishScore.feedback}</p>
+                {(englishScore.assessedBy || englishScore.assessedAt) && (
+                  <p className="mt-1.5 text-[10px] text-[var(--light)]">
+                    {englishScore.assessedBy ? `Assessed by ${englishScore.assessedBy}` : 'Assessed'}
+                    {englishScore.assessedAt ? ` · ${fmtDate(englishScore.assessedAt)}` : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-[var(--light)]">
+              No English level recorded yet. Add a CEFR level and comments — this is shown to the client.
+            </p>
           )}
         </div>
 
@@ -905,6 +998,69 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         </div>
       </div>
     </div>
+
+    {/* English assessment edit modal */}
+    <Modal
+      open={engModalOpen}
+      onClose={() => setEngModalOpen(false)}
+      title={englishScore ? 'Edit English assessment' : 'Add English assessment'}
+      size="md"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">CEFR Level *</label>
+          <div className="flex gap-2 flex-wrap">
+            {CEFR_LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setEngLevel(level)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-700 transition-colors ${
+                  engLevel === level
+                    ? 'text-white'
+                    : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                }`}
+                style={engLevel === level ? { background: 'var(--green)' } : {}}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-[var(--light)]">A1–A2 basic · B1–B2 intermediate · C1–C2 proficient</p>
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Comments *</label>
+          <textarea
+            value={engFeedback}
+            onChange={(e) => setEngFeedback(e.target.value)}
+            rows={3}
+            placeholder="Describe the candidate's English proficiency: fluency, accent, comprehension, professional communication…"
+            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+          />
+          <p className="mt-1 text-[10px] text-[var(--light)]">Visible to Nearwork staff and to the client.</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setEngModalOpen(false)}
+            className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={saveEnglishAssessment}
+            disabled={engSaving || !engFeedback.trim()}
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
+            style={{ background: 'var(--green)' }}
+          >
+            {engSaving && <Spinner size="sm" />}
+            Save
+          </button>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }
 

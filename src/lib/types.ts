@@ -331,6 +331,7 @@ export interface Candidate {
   certifications?: CertificationEntry[];  // certificates & courses
   summary?: string;                       // professional summary / bio
   english?: string;           // English level written by jobs.nearwork.co
+  englishScore?: EnglishScore; // Nearwork-assessed English level + comments — visible to staff & client
   role?: string;               // target/current job title (written by talent.nearwork.co)
   targetRole?: string;         // alias used by talent.nearwork.co
   headline?: string;           // short headline (alias of targetRole)

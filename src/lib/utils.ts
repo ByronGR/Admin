@@ -1,6 +1,13 @@
 // ─── Utility helpers ──────────────────────────────────────────────────────────
 
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import type { Timestamp } from '@/lib/types';
+
+/** Merge Tailwind class names (used by shadcn/ui components) */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 /** Format a Firestore Timestamp or ISO string into a human-readable date */
 export function fmtDate(

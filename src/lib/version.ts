@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.14.0';
+export const APP_VERSION = '0.15.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.15.0',
+    date: '2026-06-12',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Password fields across login, sign-up, and join pages now have a show/hide (eye) toggle.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'Salary and rate displays now show a consistent "$ amount CODE" format (e.g. "$1,500 USD" or "$1.500.000 COP") with locale-correct thousands separators, across the kick-off brief, salary rates, candidate profiles, and placements.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.14.0',
     date: '2026-06-11',

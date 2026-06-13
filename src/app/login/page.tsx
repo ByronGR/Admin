@@ -10,6 +10,7 @@ import {
   isNearworkEmail,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
+import { PasswordInput } from '@/components/ui/password-input';
 
 function LoginForm() {
   const router = useRouter();
@@ -137,8 +138,7 @@ function LoginForm() {
                   <label className="mb-1.5 block text-xs font-500 text-[var(--mid)]">
                     Password
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"

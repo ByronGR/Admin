@@ -11,7 +11,7 @@ import {
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
-import { fmtNumber } from '@/lib/utils';
+import { fmtNumber, fmtCurrencyRange } from '@/lib/utils';
 import type { Placement } from '@/lib/types';
 import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
 
@@ -19,15 +19,6 @@ import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } f
 
 function calcNCR(rate: number): number {
   return Math.max(2500, rate - 250);
-}
-
-function formatCOP(n: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(n);
 }
 
 // ─── Currency API ─────────────────────────────────────────────────────────────
@@ -341,24 +332,21 @@ export default function SalaryRatesPage() {
                 <div>
                   <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">COP offer</p>
                   <p className="mt-0.5 text-sm font-800 text-[var(--green)]">
-                    {formatCOP(ncrSuggestion.copMin)}
-                    {ncrSuggestion.maxUSD > 0 && ` – ${formatCOP(ncrSuggestion.copMax)}`}
+                    {fmtCurrencyRange(ncrSuggestion.copMin, ncrSuggestion.maxUSD > 0 ? ncrSuggestion.copMax : null, 'COP')}
                   </p>
                   <p className="text-[9px] text-[var(--light)]">Monthly COP equivalent</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">USD cost to NW</p>
                   <p className="mt-0.5 text-sm font-800 text-[var(--black)]">
-                    ${ncrSuggestion.minUSD.toLocaleString()}
-                    {ncrSuggestion.maxUSD > 0 && ` – $${ncrSuggestion.maxUSD.toLocaleString()}`}
+                    {fmtCurrencyRange(ncrSuggestion.minUSD, ncrSuggestion.maxUSD > 0 ? ncrSuggestion.maxUSD : null, 'USD')}
                   </p>
                   <p className="text-[9px] text-[var(--light)]">Pass-through to candidate</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Suggested billing</p>
                   <p className="mt-0.5 text-sm font-800 text-[var(--green)]">
-                    ${ncrSuggestion.suggestedBillingMin.toLocaleString()}
-                    {ncrSuggestion.maxUSD > 0 && ` – $${ncrSuggestion.suggestedBillingMax.toLocaleString()}`}
+                    {fmtCurrencyRange(ncrSuggestion.suggestedBillingMin, ncrSuggestion.maxUSD > 0 ? ncrSuggestion.suggestedBillingMax : null, 'USD')}
                   </p>
                   <p className="text-[9px] text-[var(--light)]">+15% margin to partner</p>
                 </div>
@@ -558,7 +546,7 @@ export default function SalaryRatesPage() {
                     </div>
                     <div className="text-xs text-[var(--mid)]">{p.orgName ?? '—'}</div>
                     <div className="text-xs font-600 text-[var(--black)]">
-                      {formatCOP(p.salaryAmount ?? 0)}
+                      {fmtCurrencyRange(p.salaryAmount ?? 0, null, 'COP')}
                     </div>
                     <div className="text-xs font-600 text-[var(--black)]">
                       ${candidateCost.toFixed(2)}

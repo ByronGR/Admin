@@ -14,6 +14,7 @@ import type { User } from '@/lib/firebase';
 import type { Organization } from '@/lib/types';
 import { useStaff, type StaffOption } from '@/components/ui/staff-picker';
 import type { AirtableRole } from '@/app/api/airtable-roles/route';
+import { fmtCurrencyRange } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -862,10 +863,8 @@ function KickoffInner() {
                 <div className="mb-4 bg-[#E8F8F5] border border-[rgba(22,160,133,.25)] rounded-lg px-4 py-3">
                   <div className="text-[10px] font-bold text-[#16A085] uppercase tracking-wider mb-0.5">💡 Nearwork suggested range — {selectedRole.name}</div>
                   <div className="text-base font-bold text-[#111]">
-                    {selectedRole.suggestedMin ? `$${selectedRole.suggestedMin.toLocaleString()}` : '—'}
-                    {' – '}
-                    {selectedRole.suggestedMax ? `$${selectedRole.suggestedMax.toLocaleString()}` : '—'}
-                    {' / mo USD'}
+                    {fmtCurrencyRange(selectedRole.suggestedMin, selectedRole.suggestedMax, 'USD')}
+                    {' / mo'}
                   </div>
                   {selectedRole.notes && <div className="text-[11px] text-[#16A085] mt-1">{selectedRole.notes}</div>}
                 </div>

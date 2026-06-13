@@ -41,7 +41,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { useAuth } from '@/hooks/use-auth';
-import { initials, snakeToTitle } from '@/lib/utils';
+import { initials, snakeToTitle, fmtCurrency } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason } from '@/lib/types';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
 import {
@@ -1916,7 +1916,7 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
           {
             label: 'Expected salary',
             value: profile.expectedSalaryAmount
-              ? `${profile.expectedSalaryCurrency || 'USD'} ${profile.expectedSalaryAmount.toLocaleString()}/mo`
+              ? `${fmtCurrency(profile.expectedSalaryAmount, profile.expectedSalaryCurrency || 'USD')}/mo`
               : profile.expectedSalary
                 ? String(profile.expectedSalary)
                 : undefined,

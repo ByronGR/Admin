@@ -3969,9 +3969,9 @@ window.saveOpening = async function() {
   const cur = document.getElementById('inp-currency')?.value || 'USD';
   if (mn && mx) {
     data.salaryMin = parseInt(mn); data.salaryMax = parseInt(mx); data.currency = cur;
-    const sym = cur === 'COP' ? 'COP ' : '$';
+    const loc = cur === 'COP' ? 'es-CO' : 'en-US';
     const sv = document.getElementById('view-osb-salary');
-    if (sv) sv.textContent = cur + ' ' + sym + parseInt(mn).toLocaleString() + ' – ' + sym + parseInt(mx).toLocaleString();
+    if (sv) sv.textContent = '$' + parseInt(mn).toLocaleString(loc) + ' – $' + parseInt(mx).toLocaleString(loc) + ' ' + cur;
   }
   data.roleLibraryRole = _currentOpening.roleLibraryRole || document.getElementById('inp-title')?.value.trim() || '';
   data.roleLibraryDepartment = document.getElementById('inp-role-department')?.value || _currentOpening.roleLibraryDepartment || data.industry || '';
@@ -10323,7 +10323,9 @@ function cacNum(value) { const n = Number(value); return Number.isFinite(n) ? n 
 function cacMoney(value, currency) {
   const n = cacNum(value);
   if (!n) return '-';
-  return (currency || 'USD') === 'COP' ? 'COP ' + Math.round(n).toLocaleString('es-CO') : '$' + Math.round(n).toLocaleString('en-US');
+  return (currency || 'USD').toUpperCase() === 'COP'
+    ? '$' + Math.round(n).toLocaleString('es-CO') + ' COP'
+    : '$' + Math.round(n).toLocaleString('en-US') + ' USD';
 }
 function cacPct(value) { const n = cacNum(value); return Number.isFinite(n) ? Math.round(n) + '%' : '-'; }
 function cacInitials(name) { return String(name || 'NW').split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0,2) || 'NW'; }

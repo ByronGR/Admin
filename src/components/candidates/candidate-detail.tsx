@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -884,9 +884,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Expected salary</p>
                 <p className="mt-0.5 text-[var(--black)]">
                   {candidate.expectedSalaryAmount
-                    ? `${candidate.expectedSalaryCurrency || 'USD'} ${Number(candidate.expectedSalaryAmount).toLocaleString()}/mo`
+                    ? `${fmtCurrency(Number(candidate.expectedSalaryAmount), candidate.expectedSalaryCurrency || 'USD')}/mo`
                     : typeof candidate.expectedSalary === 'number'
-                      ? `$${candidate.expectedSalary.toLocaleString()}/mo`
+                      ? `${fmtCurrency(candidate.expectedSalary, 'USD')}/mo`
                       : String(candidate.expectedSalary)}
                 </p>
               </div>

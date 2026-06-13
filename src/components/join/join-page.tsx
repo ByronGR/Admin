@@ -16,6 +16,7 @@ import {
   createUserWithEmailAndPassword,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
+import { PasswordInput } from '@/components/ui/password-input';
 import type { StaffInvite } from '@/lib/types';
 import { STAFF_ROLE_LABELS } from '@/lib/types';
 
@@ -207,8 +208,7 @@ function JoinContent() {
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                     Password *
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.password}
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                     placeholder="Min. 8 characters"
@@ -219,8 +219,7 @@ function JoinContent() {
                   <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                     Confirm password *
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.confirm}
                     onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))}
                     placeholder="Repeat password"

@@ -57,19 +57,35 @@ export function fmtRelative(val: Timestamp | string | null | undefined): string 
   return fmtDate(val);
 }
 
-/** Format a number as currency */
+/** Format a number as currency, e.g. "$1,500 USD" or "$1.500.000 COP" */
 export function fmtCurrency(
   amount: number | null | undefined,
-  currency = 'USD',
-  locale = 'en-US'
+  currency = 'USD'
 ): string {
   if (amount == null) return '—';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
+  const code = currency.toUpperCase();
+  const locale = code === 'COP' ? 'es-CO' : 'en-US';
+  const formatted = new Intl.NumberFormat(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
+  return `$${formatted} ${code}`;
+}
+
+/** Format a salary range as currency, e.g. "$1,500 – $2,000 USD" or "$1.500.000 COP" */
+export function fmtCurrencyRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  currency = 'USD'
+): string {
+  if (min == null && max == null) return '—';
+  const code = currency.toUpperCase();
+  const locale = code === 'COP' ? 'es-CO' : 'en-US';
+  const fmt = (n: number) =>
+    new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+  if (max == null || max === min) return `$${fmt((min ?? max)!)} ${code}`;
+  if (min == null) return `$${fmt(max)} ${code}`;
+  return `$${fmt(min)} – $${fmt(max)} ${code}`;
 }
 
 /** Format a number with commas */

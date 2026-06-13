@@ -26,7 +26,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, initials, genSafeId } from '@/lib/utils';
+import { fmtDate, initials, genSafeId, fmtCurrency } from '@/lib/utils';
 import type {
   Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
   AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC, EngagementType, ClientAccount,
@@ -2045,7 +2045,7 @@ function OrgDetail({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-600 text-[var(--black)]">{p.candidateName ?? '—'}</p>
                       <p className="text-[10px] text-[var(--light)]">
-                        Started {p.startDate} · {p.salaryCurrency ?? 'USD'} {p.salaryAmount?.toLocaleString()}
+                        Started {p.startDate} · {fmtCurrency(p.salaryAmount, p.salaryCurrency ?? 'USD')}
                       </p>
                     </div>
                     <Badge label={p.status ?? 'active'} variant="status" className="text-[9px]" />

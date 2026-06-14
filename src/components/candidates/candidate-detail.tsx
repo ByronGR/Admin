@@ -864,11 +864,10 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
               {applicationEntries.map((app) => {
                 const { label, variant } = applicationStatus(app);
                 const roleTitle = app.openingTitle || app.jobTitle || app.title || app.openingCode || 'Unknown role';
-                return (
-                  <div
-                    key={app.id}
-                    className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5"
-                  >
+                const cardClass =
+                  'group block rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 transition-colors hover:border-[var(--green)]';
+                const content = (
+                  <>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-700 text-[var(--black)]">{roleTitle}</p>
@@ -876,7 +875,12 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                           <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">{app.openingCode}</p>
                         )}
                       </div>
-                      <Badge label={label} variant={variant} />
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Badge label={label} variant={variant} />
+                        {app.openingCode && (
+                          <ArrowRight className="h-3.5 w-3.5 text-[var(--light)] transition-colors group-hover:text-[var(--green)]" />
+                        )}
+                      </div>
                     </div>
 
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--light)]">
@@ -885,6 +889,19 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                         <span>· Rejected {fmtRelative(app.rejectedAt)}</span>
                       )}
                     </div>
+                  </>
+                );
+                return app.openingCode ? (
+                  <a
+                    key={app.id}
+                    href={`/pipeline?focus=${encodeURIComponent(app.openingCode)}`}
+                    className={cardClass}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div key={app.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5">
+                    {content}
                   </div>
                 );
               })}

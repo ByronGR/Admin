@@ -49,6 +49,7 @@ import {
   GraduationCap,
   Volume2,
   Pencil,
+  Inbox,
 } from 'lucide-react';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
@@ -64,6 +65,20 @@ const CEFR_TO_PCT: Record<CEFRLevel, number> = {
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 const NEARWORK_SCORE_VALID_DAYS = 90;
+
+interface ApplicationDoc {
+  id: string;
+  candidateId: string;
+  openingCode?: string;
+  openingTitle?: string;
+  jobTitle?: string;
+  title?: string;
+  status?: string;
+  inPipeline?: boolean;
+  pipelineStage?: string;
+  submittedAt?: Timestamp | string;
+  rejectedAt?: Timestamp | string;
+}
 
 function tsToDate(ts: unknown): Date | null {
   if (!ts) return null;
@@ -255,6 +270,34 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   function stageLabel(stage?: PipelineStage): string {
     if (!stage) return '—';
     return PIPELINE_STAGE_LABELS[stage] ?? stage;
+  }
+
+  // ── Every application this candidate has submitted, including ones still
+  // sitting in the pre-filter queue (Admin's Applicants inbox) or rejected
+  // there before ever reaching a pipeline. ───────────────────────────────────
+  const [applicationEntries, setApplicationEntries] = useState<ApplicationDoc[]>([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
+
+  useEffect(() => {
+    setApplicationsLoading(true);
+    getDocs(query(collection(db, 'applications'), where('candidateId', '==', candidate.id)))
+      .then((snap) => {
+        const apps = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ApplicationDoc);
+        apps.sort((a, b) => {
+          const ta = (a.submittedAt as { seconds?: number })?.seconds ?? 0;
+          const tb = (b.submittedAt as { seconds?: number })?.seconds ?? 0;
+          return tb - ta;
+        });
+        setApplicationEntries(apps);
+      })
+      .catch(() => setApplicationEntries([]))
+      .finally(() => setApplicationsLoading(false));
+  }, [candidate.id]);
+
+  function applicationStatus(app: ApplicationDoc): { label: string; variant: 'amber' | 'green' | 'red' } {
+    if (app.status === 'rejected') return { label: 'Not selected — pre-filter', variant: 'red' };
+    if (app.status === 'approved' || app.inPipeline) return { label: 'In pipeline', variant: 'green' };
+    return { label: 'Pending review', variant: 'amber' };
   }
 
   // ── Assessment & Nearwork Score ────────────────────────────────────────────
@@ -779,6 +822,54 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                       </p>
                     )}
                   </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Applications */}
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
+            <Inbox className="h-4 w-4 text-[var(--green)]" />
+            Applications
+          </h3>
+
+          {applicationsLoading ? (
+            <div className="flex h-16 items-center justify-center">
+              <Spinner size="sm" />
+            </div>
+          ) : applicationEntries.length === 0 ? (
+            <p className="py-4 text-center text-xs text-[var(--light)]">
+              No applications submitted yet.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {applicationEntries.map((app) => {
+                const { label, variant } = applicationStatus(app);
+                const roleTitle = app.openingTitle || app.jobTitle || app.title || app.openingCode || 'Unknown role';
+                return (
+                  <div
+                    key={app.id}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-700 text-[var(--black)]">{roleTitle}</p>
+                        {app.openingCode && (
+                          <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">{app.openingCode}</p>
+                        )}
+                      </div>
+                      <Badge label={label} variant={variant} />
+                    </div>
+
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--light)]">
+                      <span>Applied {fmtDate(app.submittedAt)} · {fmtRelative(app.submittedAt)}</span>
+                      {app.status === 'rejected' && app.rejectedAt && (
+                        <span>· Rejected {fmtRelative(app.rejectedAt)}</span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>

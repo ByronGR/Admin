@@ -280,7 +280,10 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
   useEffect(() => {
     setApplicationsLoading(true);
-    getDocs(query(collection(db, 'applications'), where('candidateId', '==', candidate.id)))
+    // The candidate's `applications` docs may be keyed by the candidate doc's
+    // id, or (for legacy accounts) by its `code` field — query both.
+    const candidateIds = Array.from(new Set([candidate.id, candidate.code].filter(Boolean))) as string[];
+    getDocs(query(collection(db, 'applications'), where('candidateId', 'in', candidateIds)))
       .then((snap) => {
         const apps = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ApplicationDoc);
         apps.sort((a, b) => {
@@ -292,7 +295,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       })
       .catch(() => setApplicationEntries([]))
       .finally(() => setApplicationsLoading(false));
-  }, [candidate.id]);
+  }, [candidate.id, candidate.code]);
 
   function applicationStatus(app: ApplicationDoc): { label: string; variant: 'amber' | 'green' | 'red' } {
     if (app.status === 'rejected') return { label: 'Not selected — pre-filter', variant: 'red' };

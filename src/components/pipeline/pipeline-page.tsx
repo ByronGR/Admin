@@ -41,8 +41,8 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { useAuth } from '@/hooks/use-auth';
-import { initials, snakeToTitle, fmtCurrency } from '@/lib/utils';
-import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason } from '@/lib/types';
+import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
+import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
 import {
   Search,
@@ -1617,7 +1617,7 @@ interface AppDoc {
   cvUrl?: string | null;
   skills?: string[];
   expectedSalary?: string;
-  submittedAt?: string;
+  submittedAt?: Timestamp | string;
   status?: string;
 }
 
@@ -1762,10 +1762,8 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
         {applications.map((app) => {
           const isApproving = approvingId === app.id;
           const isRejecting = rejectingId === app.id;
-          const appliedDate = app.submittedAt
-            ? new Date(app.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric'
-            })
-            : null;
+          const appliedDateStr = fmtDate(app.submittedAt, { month: 'short', day: 'numeric' });
+          const appliedDate = appliedDateStr === '—' ? null : appliedDateStr;
           return (
             <div
               key={app.id}

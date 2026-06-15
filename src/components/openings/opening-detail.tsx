@@ -18,8 +18,8 @@ import { fmtDate } from '@/lib/utils';
 import type { Opening, Organization, WorkMode } from '@/lib/types';
 import { WORK_MODE_LABELS } from '@/lib/types';
 import {
-  X, Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle,
-  ChevronRight, FileText, Globe, ExternalLink,
+  Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle,
+  ChevronRight, FileText, Globe, ExternalLink, Pause, Play,
 } from 'lucide-react';
 
 // ── Brief status badge (used by openings-page list too) ──────────────────────
@@ -204,18 +204,40 @@ export function OpeningDetail({
     }
   }
 
-  async function unpublish() {
+  // Pause: take a live listing down from jobs.nearwork.co without resetting
+  // the approval/sheet state, so it can be reactivated with one click later.
+  async function pauseOpening() {
     setApprovalSaving(true);
     try {
       await updateDoc(doc(db, 'openings', opening.id), {
-        published:      false,
-        approvalStatus: 'approved',
-        updatedAt:      serverTimestamp(),
+        published: false,
+        status:    'paused',
+        updatedAt: serverTimestamp(),
       });
-      showToast('Removed from jobs.nearwork.co', 'success');
+      showToast('Opening paused — removed from jobs.nearwork.co', 'success');
       await onRefresh();
     } catch {
-      showToast('Failed to unpublish', 'error');
+      showToast('Failed to pause opening', 'error');
+    } finally {
+      setApprovalSaving(false);
+    }
+  }
+
+  // Resume: put a paused opening back live. publishedAt is bumped to now so
+  // "active since" reflects the most recent reactivation date.
+  async function resumeOpening() {
+    setApprovalSaving(true);
+    try {
+      await updateDoc(doc(db, 'openings', opening.id), {
+        published:   true,
+        status:      'open',
+        publishedAt: serverTimestamp(),
+        updatedAt:   serverTimestamp(),
+      });
+      showToast('Opening active again on jobs.nearwork.co', 'success');
+      await onRefresh();
+    } catch {
+      showToast('Failed to activate opening', 'error');
     } finally {
       setApprovalSaving(false);
     }
@@ -287,6 +309,8 @@ export function OpeningDetail({
   const openingDone    = approvalStatus === 'published';
   const openingActive  = briefDone && !openingDone;
   const jobsDone       = opening.published === true;
+  // Published before but currently taken down — eligible for one-click resume.
+  const isPaused       = approvalStatus === 'published' && !jobsDone;
 
   const APPROVAL_STEPS = ['draft', 'pending_review', 'approved', 'published'] as const;
   const stepIdx = APPROVAL_STEPS.indexOf(approvalStatus as typeof APPROVAL_STEPS[number]);
@@ -338,13 +362,17 @@ export function OpeningDetail({
         {/* Step 3: Jobs */}
         <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-700 ${
           jobsDone ? 'bg-emerald-50 text-emerald-700' :
+          isPaused ? 'bg-amber-50 text-amber-800' :
           openingDone ? 'bg-[var(--green)] text-white' :
           'bg-[var(--bg)] text-[var(--light)]'
         }`}>
           {jobsDone ? <CheckCircle className="h-3 w-3" /> :
+           isPaused ? <Pause className="h-3 w-3" /> :
            <Globe className="h-3 w-3" />}
           Jobs
-          {jobsDone ? <span className="font-400">· Live</span> : <span className="font-400 opacity-60">· Not published</span>}
+          {jobsDone ? <span className="font-400">· Active since {fmtDate(opening.publishedAt)}</span> :
+           isPaused ? <span className="font-400">· Paused</span> :
+           <span className="font-400 opacity-60">· Not published</span>}
         </div>
 
         {/* Action buttons inline */}
@@ -382,22 +410,36 @@ export function OpeningDetail({
           )}
           {approvalStatus === 'published' && (
             <div className="flex items-center gap-2">
-              <a
-                href={`https://jobs.nearwork.co/apply.html?code=${opening.code ?? opening.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />View on Jobs
-              </a>
-              <button
-                onClick={unpublish}
-                disabled={approvalSaving}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-red-300 hover:text-red-600 disabled:opacity-60"
-              >
-                {approvalSaving ? <Spinner size="sm" /> : <X className="h-3.5 w-3.5" />}
-                Unpublish
-              </button>
+              {jobsDone && (
+                <a
+                  href={`https://jobs.nearwork.co/apply.html?code=${opening.code ?? opening.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />View on Jobs
+                </a>
+              )}
+              {jobsDone ? (
+                <button
+                  onClick={pauseOpening}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-amber-300 hover:text-amber-700 disabled:opacity-60"
+                >
+                  {approvalSaving ? <Spinner size="sm" /> : <Pause className="h-3.5 w-3.5" />}
+                  Pause
+                </button>
+              ) : (
+                <button
+                  onClick={resumeOpening}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 text-white disabled:opacity-60"
+                  style={{ background: 'var(--green)' }}
+                >
+                  {approvalSaving ? <Spinner size="sm" /> : <Play className="h-3.5 w-3.5" />}
+                  Activate
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -68,11 +68,11 @@ export function Modal({
       {/* Panel */}
       <div
         ref={panelRef}
-        className={`relative z-10 w-full ${sizeClass} rounded-2xl bg-white shadow-2xl ${className}`}
+        className={`relative z-10 flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-2xl ${sizeClass} ${className}`}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
             <h2 className="text-base font-600 text-[var(--black)]">{title}</h2>
             <button
               onClick={onClose}
@@ -84,7 +84,7 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className={title ? 'px-6 py-5' : 'p-6'}>{children}</div>
+        <div className={`overflow-y-auto ${title ? 'px-6 py-5' : 'p-6'}`}>{children}</div>
       </div>
     </div>
   );

@@ -345,12 +345,21 @@ export default function CandidatesPage() {
                       onClick={() => router.push(`/candidates/${c.id}`)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
-                          style={{ background: isEmpty(c) ? 'var(--border)' : 'linear-gradient(135deg, var(--green), var(--gd))' }}
-                        >
-                          {initials(c.name)}
-                        </div>
+                        {c.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={c.photoUrl}
+                            alt={c.name}
+                            className="h-8 w-8 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
+                            style={{ background: isEmpty(c) ? 'var(--border)' : 'linear-gradient(135deg, var(--green), var(--gd))' }}
+                          >
+                            {initials(c.name)}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <p className="truncate text-xs font-600 text-[var(--black)]">{c.name || <span className="italic text-[var(--light)]">No name</span>}</p>

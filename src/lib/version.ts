@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.15.0';
+export const APP_VERSION = '0.15.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.15.1',
+    date: '2026-06-15',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate directory now shows the profile photo candidates upload from talent.nearwork.co (falls back to initials when none is set).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.15.0',
     date: '2026-06-12',

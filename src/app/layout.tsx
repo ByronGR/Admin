@@ -11,6 +11,7 @@ const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 export const metadata: Metadata = {
   title: 'Nearwork Admin',
   description: 'Nearwork internal admin dashboard',
+  manifest: '/site.webmanifest',
 };
 
 export default function RootLayout({

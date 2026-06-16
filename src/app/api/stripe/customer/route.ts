@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { adminAuth } from '@/lib/firebase-admin';
 
 // ─── GET /api/stripe/customer?customerId=cus_xxx ───────────────────────────────
 // Fetches live billing data for a Stripe customer linked to a Nearwork
@@ -17,6 +18,17 @@ const INTERVAL_TO_MONTHLY: Record<string, number> = {
 };
 
 export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') ?? '';
+  const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!idToken) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    await adminAuth().verifyIdToken(idToken);
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
     return NextResponse.json({ ok: false, skipped: true, reason: 'not configured' });

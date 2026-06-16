@@ -934,7 +934,12 @@ function OrgDetail({
     setBillingLoading(true);
     setBillingError('');
     setBillingData(null);
-    fetch(`/api/stripe/customer?customerId=${encodeURIComponent(org.stripeCustomerId)}`)
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(''))
+      .then((idToken) =>
+        fetch(`/api/stripe/customer?customerId=${encodeURIComponent(org.stripeCustomerId)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        })
+      )
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;

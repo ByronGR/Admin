@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   getFirestore,
   collection,
@@ -49,6 +50,12 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+if (typeof window !== 'undefined') {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider('6LdijCltAAAAA07O_nBCe-h2keUYjCnjrVRCksqi'),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
 const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);

@@ -25,13 +25,24 @@ export function useAuth(): AuthState {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      if (u && isNearworkEmail(u.email ?? '')) {
-        const p = await ensureStaffUserProfile(u);
-        setProfile(p as UserProfile | null);
-      } else {
+      try {
+        if (u && isNearworkEmail(u.email ?? '')) {
+          const p = await Promise.race([
+            ensureStaffUserProfile(u),
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error('profile load timeout')), 8000)
+            ),
+          ]);
+          setProfile(p as UserProfile | null);
+        } else {
+          setProfile(null);
+        }
+      } catch (e) {
+        console.warn('useAuth profile load error:', e);
         setProfile(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsub;
   }, []);

@@ -57,6 +57,15 @@ export async function POST(req: Request) {
   const origin = req.headers.get('origin');
   const cors = corsHeaders(origin);
 
+  // Server-to-server callers must pass X-Internal-Secret when INTERNAL_EMAIL_SECRET is configured.
+  const emailSecret = process.env.INTERNAL_EMAIL_SECRET ?? '';
+  if (emailSecret) {
+    const provided = req.headers.get('x-internal-secret') ?? '';
+    if (provided !== emailSecret) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: cors });
+    }
+  }
+
   let body: { to?: string; templateId?: string; data?: Record<string, string> };
   try {
     body = await req.json();
@@ -107,7 +116,7 @@ export async function POST(req: Request) {
       const err = await res.json().catch(() => ({}));
       console.error('[send-email] Resend error:', err);
       return NextResponse.json(
-        { ok: false, error: 'Resend rejected the request', detail: err },
+        { ok: false, error: 'Failed to deliver email' },
         { status: 502, headers: cors },
       );
     }

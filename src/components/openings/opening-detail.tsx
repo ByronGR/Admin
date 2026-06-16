@@ -109,8 +109,10 @@ export function OpeningDetail({
     priority:       opening.priority       ?? 'medium',
     salaryMin:      String(opening.salaryMin ?? ''),
     salaryMax:      String(opening.salaryMax ?? ''),
-    hideSalary:     opening.hideSalary ?? false,
-    location:       opening.location       ?? '',
+    hideSalary:     opening.hideSalary    ?? false,
+    hideLocation:   opening.hideLocation  ?? false,
+    hideBenefits:   opening.hideBenefits  ?? false,
+    location:       opening.location      ?? '',
   });
 
   // ── Opening sheet state ──
@@ -260,6 +262,8 @@ export function OpeningDetail({
         salaryMin:      editForm.salaryMin ? Number(editForm.salaryMin) : null,
         salaryMax:      editForm.salaryMax ? Number(editForm.salaryMax) : null,
         hideSalary:     editForm.hideSalary,
+        hideLocation:   editForm.hideLocation,
+        hideBenefits:   editForm.hideBenefits,
         ...(goneFromJobs && opening.published ? { published: false } : {}),
         updatedAt: serverTimestamp(),
       });
@@ -535,7 +539,7 @@ export function OpeningDetail({
           <div className="grid gap-4 sm:grid-cols-3 text-xs">
             {[
               { label: 'ID',              value: opening.code ?? opening.id },
-              { label: 'Location',        value: opening.location },
+              { label: 'Location',        value: opening.location ? (opening.hideLocation ? `🔒 ${opening.location} (hidden from Jobs)` : opening.location) : undefined },
               { label: 'Type',            value: opening.type?.replace('_', ' ') },
               { label: 'Priority',        value: opening.priority },
               { label: 'Salary',          value: opening.salaryMin && opening.salaryMax ? `${opening.hideSalary ? '🔒 ' : ''}$${opening.salaryMin}–$${opening.salaryMax}/mo${opening.hideSalary ? ' (hidden from Jobs)' : ''}` : '—' },
@@ -587,6 +591,30 @@ export function OpeningDetail({
               />
               <label htmlFor="hideSalary" className="text-xs text-[var(--mid)]">
                 Hide salary on jobs.nearwork.co (listing will show &quot;Salary on request&quot;)
+              </label>
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <input
+                id="hideLocation"
+                type="checkbox"
+                checked={editForm.hideLocation}
+                onChange={(e) => setEditForm((f) => ({ ...f, hideLocation: e.target.checked }))}
+                className="h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+              />
+              <label htmlFor="hideLocation" className="text-xs text-[var(--mid)]">
+                Hide location on jobs.nearwork.co
+              </label>
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <input
+                id="hideBenefits"
+                type="checkbox"
+                checked={editForm.hideBenefits}
+                onChange={(e) => setEditForm((f) => ({ ...f, hideBenefits: e.target.checked }))}
+                className="h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+              />
+              <label htmlFor="hideBenefits" className="text-xs text-[var(--mid)]">
+                Hide benefits &amp; perks section on jobs.nearwork.co
               </label>
             </div>
             <div>

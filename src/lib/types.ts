@@ -210,6 +210,8 @@ export interface Opening {
   salaryMax?: number;
   salaryCurrency?: string;
   hideSalary?: boolean;
+  hideLocation?: boolean;
+  hideBenefits?: boolean;
   description?: string;
   requirements?: string[];
   responsibilities?: string[];

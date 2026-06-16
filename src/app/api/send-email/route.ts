@@ -2,16 +2,19 @@ import { NextResponse } from 'next/server';
 import * as jobApplied from './templates/job_applied';
 import * as accountCreated from './templates/account_created';
 import * as similarRoleAlert from './templates/similar_role_alert';
+import * as candidatePasswordReset from './templates/candidate_password_reset';
 
 // ─── POST /api/send-email ────────────────────────────────────────────────────
 // Generic branded email sender used by all Nearwork services.
 // Body: { to, templateId, data }
 //
 // Supported templateIds  (add a new file under templates/ to extend):
-//   'job_applied'      — candidate applied for a role
-//                        data: { firstName, roleTitle }
-//   'account_created'  — candidate created their Talent portal account
-//                        data: { firstName }
+//   'job_applied'              — candidate applied for a role
+//                                data: { firstName, roleTitle }
+//   'account_created'          — candidate created their Talent portal account
+//                                data: { firstName }
+//   'candidate_password_reset' — candidate requested a password reset
+//                                data: { firstName, resetLink }
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,9 +23,10 @@ export const dynamic = 'force-dynamic';
 // Each entry must export: build(data): { subject, html }
 
 const TEMPLATES: Record<string, { build(data: Record<string, string>): { subject: string; html: string } }> = {
-  job_applied:        jobApplied,
-  account_created:    accountCreated,
-  similar_role_alert: similarRoleAlert,
+  job_applied:                jobApplied,
+  account_created:            accountCreated,
+  similar_role_alert:         similarRoleAlert,
+  candidate_password_reset:   candidatePasswordReset,
 };
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────

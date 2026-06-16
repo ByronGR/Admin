@@ -936,7 +936,7 @@ function OrgDetail({
     setBillingData(null);
     (auth.currentUser?.getIdToken() ?? Promise.resolve(''))
       .then((idToken) =>
-        fetch(`/api/stripe/customer?customerId=${encodeURIComponent(org.stripeCustomerId)}`, {
+        fetch(`/api/stripe/customer?customerId=${encodeURIComponent(org.stripeCustomerId ?? '')}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         })
       )

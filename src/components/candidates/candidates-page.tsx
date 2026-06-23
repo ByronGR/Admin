@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { initials, sortByTimestamp, generateCandidateId } from '@/lib/utils';
+import { syncCandidateToHubSpot } from '@/lib/hubspot';
 import type { Candidate } from '@/lib/types';
 import { Search, Plus, Download, Trash2 } from 'lucide-react';
 
@@ -171,6 +172,7 @@ export default function CandidatesPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      syncCandidateToHubSpot({ email: form.email, name: form.name, phone: form.phone, location: form.location, code, currentRole: form.currentRole, status: 'new' });
       showToast(`Candidate added · ID ${code}`, 'success');
       setNewModal(false);
       setForm({ name: '', email: '', phone: '', location: '', currentRole: '', currentCompany: '', linkedIn: '', skills: '' });

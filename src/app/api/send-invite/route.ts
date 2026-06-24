@@ -1,32 +1,70 @@
 import { NextResponse } from 'next/server';
 import { buildInviteEmail } from '@/components/organizations/invite-email';
-
-// ─── POST /api/send-invite ──────────────────────────────────────────────────
-// Sends the client invite email server-side via Resend.
-// Uses RESEND_API_KEY (server-only — never exposed to the browser).
-// Body: { email, firstName, orgName, setupLink }
+import { adminDb } from '@/lib/firebase-admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const ALLOWED_ORIGINS = [
+  'https://app.nearwork.co',
+  'https://admin.nearwork.co',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Internal-Secret',
+  };
+}
+
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) });
+}
+
 export async function POST(req: Request) {
-  let body: { email?: string; firstName?: string; orgName?: string; setupLink?: string };
+  const origin = req.headers.get('origin');
+  const cors = corsHeaders(origin);
+
+  let body: { email?: string; firstName?: string; orgName?: string; setupLink?: string; orgId?: string; token?: string; inviteeName?: string; businessRole?: string };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: cors });
   }
 
-  const { email, firstName, orgName, setupLink } = body;
+  const { email, firstName, orgName, setupLink, orgId, token: inviteToken, inviteeName, businessRole } = body;
   if (!email || !orgName || !setupLink) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: cors });
+  }
+
+  // Store invite in Firestore if token and orgId provided
+  if (inviteToken && orgId) {
+    try {
+      const db = adminDb();
+      await db.collection('org_invites').doc(inviteToken).set({
+        token: inviteToken,
+        email: email.trim().toLowerCase(),
+        orgId,
+        orgName,
+        inviteeName: inviteeName || '',
+        businessRole: businessRole || '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        setupLink,
+      });
+    } catch (e) {
+      console.error('[send-invite] Firestore write failed:', e);
+    }
   }
 
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     return NextResponse.json(
       { error: 'RESEND_API_KEY is not configured on the server' },
-      { status: 500 },
+      { status: 500, headers: cors },
     );
   }
 
@@ -54,13 +92,13 @@ export async function POST(req: Request) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('[send-invite] Resend error:', err);
-      return NextResponse.json({ error: 'Resend rejected the request', detail: err }, { status: 502 });
+      return NextResponse.json({ error: 'Resend rejected the request', detail: err }, { status: 502, headers: cors });
     }
 
     const data = await res.json().catch(() => ({}));
-    return NextResponse.json({ success: true, id: data?.id ?? null });
+    return NextResponse.json({ success: true, id: data?.id ?? null }, { headers: cors });
   } catch (e) {
     console.error('[send-invite] fetch failed:', e);
-    return NextResponse.json({ error: 'Failed to reach Resend' }, { status: 502 });
+    return NextResponse.json({ error: 'Failed to reach Resend' }, { status: 502, headers: cors });
   }
 }

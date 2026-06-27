@@ -62,7 +62,6 @@ import {
   Inbox,
 } from 'lucide-react';
 import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
-import { syncCandidateToHubSpot } from '@/lib/hubspot';
 
 // ─── Pipeline stages (8-stage) ────────────────────────────────────────────────
 
@@ -356,10 +355,6 @@ export default function PipelinePage() {
       activePipelineStage: toStage,
       updatedAt: serverTimestamp(),
     }).catch(() => null);
-    const movedCandidate = newCandidates.find((c: PipelineCandidate) => c.candidateCode === candidateCode);
-    if (movedCandidate?.email) {
-      syncCandidateToHubSpot({ email: movedCandidate.email, name: movedCandidate.name, code: candidateCode, activePipelineStage: toStage });
-    }
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }
 
@@ -1688,7 +1683,6 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
           updatedAt: serverTimestamp(),
         }).catch(() => null),
       ]);
-      syncCandidateToHubSpot({ email: app.candidateEmail, name: app.candidateName, code: candId, activePipelineStage: 'applied' });
       showToast(`${app.candidateName || 'Applicant'} approved — added to Applied stage`, 'success');
     } catch (e) {
       showToast('Approve failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');

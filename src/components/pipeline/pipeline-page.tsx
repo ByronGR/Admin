@@ -62,6 +62,7 @@ import {
   ExternalLink,
   FileText,
   Inbox,
+  Users,
 } from 'lucide-react';
 import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
 
@@ -157,6 +158,9 @@ export default function PipelinePage() {
   // candidateId → Nearwork Score, loaded from the assessments collection so the
   // board cards can surface each candidate's score at a glance (spec 4d).
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
+  // Pending-applicant count per pipeline (openingCode → count), so each list row
+  // can show total candidates INCLUDING applicants not yet pulled into a stage.
+  const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activePipelineCode, setActivePipelineCode] = useState<string | null>(null);
@@ -251,6 +255,22 @@ export default function PipelinePage() {
         console.error('Pipeline: failed to load assessment scores', e);
       }
     })();
+  }, []);
+
+  // Count pending applicants (applications not yet approved/rejected) per opening
+  // so each pipeline row can show "candidates incl. applicants". Live so the
+  // number drops as applicants get approved into the pipeline.
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+      const counts: Record<string, number> = {};
+      snap.docs.forEach((d) => {
+        const a = d.data() as { openingCode?: string; status?: string; inPipeline?: boolean };
+        const pending = !a.inPipeline && (!a.status || a.status === 'applied' || a.status === 'pending');
+        if (pending && a.openingCode) counts[a.openingCode] = (counts[a.openingCode] ?? 0) + 1;
+      });
+      setApplicantCounts(counts);
+    }, () => { /* non-critical */ });
+    return unsub;
   }, []);
 
   // Deep-link: /pipeline?focus=<code> opens that pipeline's workspace directly
@@ -671,6 +691,7 @@ export default function PipelinePage() {
                 key={p.code}
                 pipeline={p}
                 scoreMap={scoreMap}
+                applicantCount={applicantCounts[p.code] ?? 0}
                 expanded={expandedRows.has(p.code)}
                 onToggle={() => toggleRow(p.code)}
                 onOpen={() => openPipeline(p.code)}
@@ -978,6 +999,7 @@ export default function PipelinePage() {
 function PipelineRow({
   pipeline,
   scoreMap,
+  applicantCount = 0,
   expanded,
   onToggle,
   onOpen,
@@ -993,6 +1015,7 @@ function PipelineRow({
 }: {
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
+  applicantCount?: number;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -1023,6 +1046,7 @@ function PipelineRow({
   const spread = PIPELINE_STAGES.map((st) => ({ st, n: cands.filter((c) => normalizeStage(c.stage) === st.key).length }));
   const atOffer = spread.find((x) => x.st.key === 'hired')?.n ?? 0;
   const sourced = spread.find((x) => x.st.key === 'applied')?.n ?? 0;
+  const totalWithApplicants = cands.length + applicantCount;
 
   const statusColor =
     pipeline.status === 'active'
@@ -1091,6 +1115,16 @@ function PipelineRow({
 
         {/* Status */}
         <div style={{ flex: 0.9 }}><Badge label={pipeline.status} variant="status" /></div>
+
+        {/* Total candidates incl. applicants — between status and delete */}
+        <div
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: NW.teal50, border: `1px solid ${NW.teal500}33`, whiteSpace: 'nowrap' }}
+          title={`${cands.length} in pipeline + ${applicantCount} applicant${applicantCount === 1 ? '' : 's'} = ${totalWithApplicants} total`}
+        >
+          <Users className="h-3.5 w-3.5" style={{ color: NW.teal600 }} />
+          <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: NW.teal700 }}>{totalWithApplicants}</span>
+          {applicantCount > 0 && <span style={{ fontSize: 11, color: NW.teal600 }}>· {applicantCount} new</span>}
+        </div>
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>

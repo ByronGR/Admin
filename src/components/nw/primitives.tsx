@@ -44,7 +44,9 @@ export const NW = {
   blue500: '#3B82F6',
 } as const;
 
-export const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
+// Numbers/IDs/money render in Poppins per Byron's preference. (The handoff spec
+// used JetBrains Mono for these; kept the constant name so call sites are stable.)
+export const MONO = "'Poppins', ui-sans-serif, system-ui, -apple-system, sans-serif";
 
 // ── Icon (Lucide by kebab name, like the prototype) ───────────────────────────
 export function Icon({

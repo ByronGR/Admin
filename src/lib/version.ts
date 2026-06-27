@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.15.1';
+export const APP_VERSION = '0.15.2';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.15.2',
+    date: '2026-06-26',
+    sections: [
+      {
+        title: 'Removed',
+        items: [
+          'Candidates are no longer pushed to HubSpot. HubSpot is now used solely for clients. Removed the candidate sync from the New Candidate form and from pipeline stage moves/approvals, along with the candidate sync API route.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.15.1',
     date: '2026-06-15',

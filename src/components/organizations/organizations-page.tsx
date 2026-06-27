@@ -990,6 +990,8 @@ function OrgDetail({
 
   // Detail tab navigation
   const [tab, setTab] = useState<'overview' | 'hiring' | 'team' | 'people' | 'billing'>('overview');
+  // Inline status dropdown (redesign header)
+  const [statusOpen, setStatusOpen] = useState(false);
 
   // Billing (Stripe) state
   const [billingData, setBillingData] = useState<StripeBillingData | null>(null);
@@ -1663,8 +1665,11 @@ function OrgDetail({
 
   return (
     <div className="space-y-5">
-      {/* Hero card */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+      {/* Hero card — branded header */}
+      <div
+        className="rounded-2xl border p-6"
+        style={{ background: 'linear-gradient(118deg, var(--green-soft), #ffffff 58%)', borderColor: 'rgba(22,160,133,0.20)' }}
+      >
         <div className="flex flex-wrap items-start gap-5">
           {/* Logo with upload button */}
           <div className="relative shrink-0">
@@ -1700,14 +1705,56 @@ function OrgDetail({
             {!editing ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-700 text-[var(--black)]">{org.name}</h2>
-                  <Badge label={org.status ?? 'active'} variant={orgStatusVariant(org.status ?? 'active') as 'green' | 'amber' | 'red'} />
+                  <h2 style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.03em', color: NW.black, margin: 0 }}>{org.name}</h2>
+                  {/* Inline status dropdown */}
+                  <span style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setStatusOpen((o) => !o)}
+                      style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <NWStatusBadge status={orgStatusKey(org.status)} label={org.status ? org.status[0].toUpperCase() + org.status.slice(1) : 'Active'} />
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={NW.gray400} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    {statusOpen && (
+                      <>
+                        <div onClick={() => setStatusOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.14)', padding: 5, minWidth: 168 }}>
+                          {(['active', 'prospect', 'inactive', 'suspended'] as const).map((s) => (
+                            <button
+                              key={s}
+                              onClick={async () => {
+                                setStatusOpen(false);
+                                if (s === (org.status ?? 'active')) return;
+                                try {
+                                  await updateDoc(doc(db, 'organizations', org.id), { status: s, updatedAt: serverTimestamp() });
+                                  onUpdated({ ...org, status: s });
+                                  showToast('Status updated', 'success');
+                                  await onRefresh();
+                                } catch {
+                                  showToast('Failed to update status', 'error');
+                                }
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', border: 'none', background: (org.status ?? 'active') === s ? NW.gray50 : 'transparent', cursor: 'pointer', borderRadius: 7, padding: '7px 9px', fontSize: 12.5, fontWeight: 600, color: NW.gray700, textAlign: 'left' }}
+                            >
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: { active: NW.green600, prospect: NW.blue500, inactive: NW.gray400, suspended: '#A16207' }[s] }} />
+                              {s[0].toUpperCase() + s.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </span>
                   {org.internal && (
                     <span className="rounded-full bg-[var(--bg)] px-2.5 py-0.5 text-[10px] font-700 text-[var(--mid)]">Internal</span>
                   )}
                   {pkg && (
                     <span className="rounded-full px-2.5 py-0.5 text-[10px] font-700" style={{ background: pkg.bg, color: pkg.color }}>
                       {pkg.label}
+                    </span>
+                  )}
+                  {org.isStrategicPartner && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: NW.violet500, background: NW.violet50, border: `1px solid ${NW.violet500}33`, borderRadius: 999, padding: '3px 9px' }}>
+                      <Network className="h-3 w-3" /> Strategic Partner
                     </span>
                   )}
                 </div>
@@ -1852,74 +1899,69 @@ function OrgDetail({
         </div>
       </div>
 
-      {/* Account Intelligence — internal only (partner never sees this) */}
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
-        {/* Account Health — big & proud */}
-        <div className="rounded-2xl border bg-white p-5" style={{ borderColor: health.bg }}>
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-              <Activity className="h-3.5 w-3.5" />Account Health
-            </div>
-            <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[9px] font-600 text-[var(--light)]">Internal</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <HealthGrade grade={org.healthGrade} size="lg" />
-            <div className="min-w-0">
-              <p className="text-xl font-800 tracking-tight" style={{ color: health.color }}>{health.label}</p>
-              <p className="mt-0.5 text-[11px] text-[var(--light)]">
-                {org.healthUpdatedAt ? `Updated ${fmtDate(org.healthUpdatedAt)}` : 'Not yet set'}
-              </p>
+      {/* Summary band — the things that matter (internal) */}
+      <NWCard pad={18}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+          {/* Account health */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 7 }}>Account health</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: health.color }}>{health.label}</span>
+              <HealthDots org={org} />
               <button
                 onClick={() => { setHealthGradePick(org.healthGrade ?? 'Z'); setHealthNote(''); setHealthModal(true); }}
-                className="mt-2 rounded-lg px-3 py-1.5 text-[11px] font-600 text-white"
-                style={{ background: 'var(--green)' }}
+                style={{ fontSize: 11, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
               >
-                Update health
+                Update
               </button>
             </div>
           </div>
-        </div>
-
-        {/* Tier (spend) */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-              <DollarSign className="h-3.5 w-3.5" />Tier
+          <span style={{ width: 1, alignSelf: 'stretch', background: NW.gray100 }} />
+          {/* Tier */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 7 }}>Tier</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <TierChip spend={org.totalSpend} size={30} />
+              <span style={{ fontSize: 12, color: NW.gray500 }}>{fmtSpend(org.totalSpend)} · Stripe-billed</span>
+              <button
+                onClick={() => { setSpendInput(String(org.totalSpend ?? 0)); setSpendModal(true); }}
+                style={{ fontSize: 11, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Edit
+              </button>
             </div>
-            <span className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[9px] font-600 text-[var(--light)]">Internal</span>
           </div>
-          <p className="text-3xl font-800 tracking-tight text-[var(--black)]">Tier {tier.tier}</p>
-          <p className="mt-0.5 text-xs text-[var(--mid)]">{fmtSpend(org.totalSpend)} lifetime · {tier.label}</p>
-          <button
-            onClick={() => { setSpendInput(String(org.totalSpend ?? 0)); setSpendModal(true); }}
-            className="mt-2 text-[11px] font-600 text-[var(--green)] hover:underline"
-          >
-            Edit spend
-          </button>
-        </div>
-
-        {/* Action needed */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <div className="mb-3 flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-            <AlertTriangle className="h-3.5 w-3.5" />Action needed
+          <span style={{ width: 1, alignSelf: 'stretch', background: NW.gray100 }} />
+          {/* Action needed */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 7 }}>Action needed</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: org.actionNeeded ? '#A16207' : NW.gray400 }}>{org.actionNeeded ? '● Flagged' : '○ Clear'}</span>
+              <button
+                onClick={toggleActionNeeded}
+                disabled={savingAction}
+                style={{ fontSize: 11, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', opacity: savingAction ? 0.5 : 1 }}
+              >
+                {org.actionNeeded ? 'Clear' : 'Flag'}
+              </button>
+            </div>
           </div>
-          {org.actionNeeded ? (
-            <>
-              <p className="text-sm font-700 text-amber-700">● Flagged</p>
-              <p className="mt-1 line-clamp-2 text-[11px] text-[var(--mid)]">{org.actionNote || 'No detail provided'}</p>
-            </>
-          ) : (
-            <p className="text-sm font-600 text-[var(--light)]">○ Clear</p>
-          )}
-          <button
-            onClick={toggleActionNeeded}
-            disabled={savingAction}
-            className="mt-2 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-50"
-          >
-            {org.actionNeeded ? 'Clear flag' : 'Flag action'}
-          </button>
+          {/* Right-aligned stats */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 22 }}>
+            {[
+              { l: 'Open roles', v: dataLoading ? '…' : activeOpenings },
+              { l: 'Placements', v: dataLoading ? '…' : activePlacements },
+              { l: 'Pipelines', v: dataLoading ? '…' : pipelines.length },
+              { l: 'Portal users', v: orgUsers.length },
+            ].map((s) => (
+              <div key={s.l} style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 500, color: NW.black, lineHeight: 1 }}>{s.v}</div>
+                <div style={{ fontSize: 10.5, color: NW.gray500, marginTop: 3 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </NWCard>
 
       {/* Health trend history */}
       {(org.healthHistory?.length ?? 0) > 0 && (
@@ -1948,36 +1990,31 @@ function OrgDetail({
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          { icon: <Briefcase className="h-4 w-4" />, label: 'Open positions', value: dataLoading ? '…' : activeOpenings, sub: `${openings.length} total openings` },
-          { icon: <Users className="h-4 w-4" />, label: 'Active placements', value: dataLoading ? '…' : activePlacements, sub: `${placements.length} total hires` },
-          { icon: <TrendingUp className="h-4 w-4" />, label: 'Pipelines', value: dataLoading ? '…' : pipelines.length, sub: `${pipelines.filter(p => p.status === 'active').length} active` },
-          { icon: <Users className="h-4 w-4" />, label: 'Portal users', value: orgUsers.length, sub: `${orgUsers.filter(u => clientAccounts[u.email.toLowerCase()]).length} logged in` },
-        ].map(({ icon, label, value, sub }) => (
-          <div key={label} className="rounded-2xl border border-[var(--border)] bg-white p-4">
-            <div className="mb-2 flex items-center gap-1.5 text-xs text-[var(--light)]">
-              {icon}{label}
-            </div>
-            <p className="text-2xl font-800 tracking-tight text-[var(--black)]">{value}</p>
-            <p className="mt-0.5 text-[10px] text-[var(--light)]">{sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Tab nav */}
-      <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
-        {([['overview', 'Overview'], ['hiring', 'Hiring'], ['team', 'Team'], ['people', 'People'], ['billing', 'Billing']] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`relative shrink-0 px-4 py-2.5 text-xs font-600 transition-colors ${tab === key ? 'text-[var(--green)]' : 'text-[var(--light)] hover:text-[var(--mid)]'}`}
-          >
-            {label}
-            {tab === key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[var(--green)]" />}
-          </button>
-        ))}
+      {/* Tab nav — underline */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${NW.gray100}`, flexWrap: 'wrap' }}>
+        {([['overview', 'Overview'], ['hiring', 'Active roles'], ['team', 'Managed team'], ['people', 'Access'], ['billing', 'Billing']] as const).map(([key, label]) => {
+          const on = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                fontSize: 13.5,
+                fontWeight: on ? 600 : 500,
+                cursor: 'pointer',
+                border: 'none',
+                background: 'transparent',
+                color: on ? NW.black : NW.gray500,
+                padding: '10px 2px',
+                position: 'relative',
+                marginRight: 26,
+              }}
+            >
+              {label}
+              {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, background: NW.teal500, borderRadius: 2 }} />}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Overview tab ── */}

@@ -161,6 +161,9 @@ export default function PipelinePage() {
   // Pending-applicant count per pipeline (openingCode → count), so each list row
   // can show total candidates INCLUDING applicants not yet pulled into a stage.
   const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
+  // org id/shortId → name, so rows can show the client org even when the
+  // pipeline doc only stored orgId (not a denormalized orgName).
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activePipelineCode, setActivePipelineCode] = useState<string | null>(null);
@@ -271,6 +274,23 @@ export default function PipelinePage() {
       setApplicantCounts(counts);
     }, () => { /* non-critical */ });
     return unsub;
+  }, []);
+
+  // Resolve org names so rows can show the client org from the pipeline's orgId.
+  useEffect(() => {
+    getDocs(collection(db, 'organizations'))
+      .then((snap) => {
+        const map: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const data = d.data() as { name?: string; shortId?: string };
+          if (data.name) {
+            map[d.id] = data.name;
+            if (data.shortId) map[data.shortId] = data.name;
+          }
+        });
+        setOrgNames(map);
+      })
+      .catch(() => { /* non-critical */ });
   }, []);
 
   // Deep-link: /pipeline?focus=<code> opens that pipeline's workspace directly
@@ -692,6 +712,7 @@ export default function PipelinePage() {
                 pipeline={p}
                 scoreMap={scoreMap}
                 applicantCount={applicantCounts[p.code] ?? 0}
+                orgLabel={p.orgName || orgNames[p.orgId] || ''}
                 expanded={expandedRows.has(p.code)}
                 onToggle={() => toggleRow(p.code)}
                 onOpen={() => openPipeline(p.code)}
@@ -1000,6 +1021,7 @@ function PipelineRow({
   pipeline,
   scoreMap,
   applicantCount = 0,
+  orgLabel = '',
   expanded,
   onToggle,
   onOpen,
@@ -1016,6 +1038,7 @@ function PipelineRow({
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
   applicantCount?: number;
+  orgLabel?: string;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -1086,7 +1109,7 @@ function PipelineRow({
             <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px', flexShrink: 0 }}>{pipeline.code}</span>
           </div>
           <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {pipeline.orgName || '—'}{pipeline.recruiter ? ` · ${pipeline.recruiter}` : ''}
+            {[orgLabel, pipeline.recruiter].filter(Boolean).join(' · ') || 'No organization linked'}
           </div>
         </div>
 
@@ -1108,7 +1131,7 @@ function PipelineRow({
           </div>
           <div style={{ fontSize: 10.5, color: NW.gray400, marginTop: 5 }}>{atOffer} hired · {sourced} applied</div>
           {spreadOpen && (
-            <div style={{ position: 'absolute', bottom: 'calc(100% + 10px)', left: 0, zIndex: 80, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 200, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 10px)', left: 0, zIndex: 80, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 200, pointerEvents: 'none' }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 9 }}>Stage breakdown</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {spread.map(({ st, n }) => (

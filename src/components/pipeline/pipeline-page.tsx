@@ -1057,7 +1057,7 @@ function PipelineRow({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border transition-all ${
+      className={`rounded-2xl border transition-all ${
         pipeline.status === 'cancelled'
           ? 'border-red-100 bg-red-50/30'
           : 'border-[var(--border)] bg-white'
@@ -1067,21 +1067,31 @@ function PipelineRow({
         onClick={onOpen}
         onMouseEnter={() => setRowHover(true)}
         onMouseLeave={() => setRowHover(false)}
-        style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '15px 20px', cursor: 'pointer', background: rowHover ? NW.gray50 : 'transparent', transition: 'background 120ms' }}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 2.4fr) 96px minmax(0, 1.7fr) 96px 150px 88px',
+          alignItems: 'center',
+          gap: 16,
+          padding: '14px 20px',
+          cursor: 'pointer',
+          background: rowHover ? NW.gray50 : 'transparent',
+          transition: 'background 120ms',
+          borderRadius: expanded ? '16px 16px 0 0' : 16,
+        }}
       >
         {/* Pipeline title + code + org */}
-        <div style={{ flex: 2, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pipeline.title}</span>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px' }}>{pipeline.code}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pipeline.title || 'Untitled pipeline'}</span>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px', flexShrink: 0 }}>{pipeline.code}</span>
           </div>
-          <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {pipeline.orgName || '—'}{pipeline.recruiter ? ` · ${pipeline.recruiter}` : ''}
           </div>
         </div>
 
-        {/* Cands */}
-        <div style={{ flex: 0.7 }}>
+        {/* Cands (in-pipeline only) */}
+        <div style={{ whiteSpace: 'nowrap' }}>
           <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 500, color: NW.black }}>{cands.length}</span>
           <span style={{ fontSize: 11, color: NW.gray400, marginLeft: 4 }}>cands</span>
           {pendingApplicants > 0 && <div style={{ fontSize: 11, color: '#A16207', fontWeight: 600, marginTop: 2 }}>{pendingApplicants} to review</div>}
@@ -1089,7 +1099,7 @@ function PipelineRow({
 
         {/* Stage spread bar + breakdown popover */}
         <div
-          style={{ flex: 1.6, position: 'relative' }}
+          style={{ position: 'relative', minWidth: 0 }}
           onMouseEnter={() => setSpreadOpen(true)}
           onMouseLeave={() => setSpreadOpen(false)}
         >
@@ -1098,7 +1108,7 @@ function PipelineRow({
           </div>
           <div style={{ fontSize: 10.5, color: NW.gray400, marginTop: 5 }}>{atOffer} hired · {sourced} applied</div>
           {spreadOpen && (
-            <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 60, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 190, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', bottom: 'calc(100% + 10px)', left: 0, zIndex: 80, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 200, pointerEvents: 'none' }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 9 }}>Stage breakdown</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {spread.map(({ st, n }) => (
@@ -1114,11 +1124,11 @@ function PipelineRow({
         </div>
 
         {/* Status */}
-        <div style={{ flex: 0.9 }}><Badge label={pipeline.status} variant="status" /></div>
+        <div><Badge label={pipeline.status} variant="status" /></div>
 
         {/* Total candidates incl. applicants — between status and delete */}
         <div
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: NW.teal50, border: `1px solid ${NW.teal500}33`, whiteSpace: 'nowrap' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: NW.teal50, border: `1px solid ${NW.teal500}33`, whiteSpace: 'nowrap', justifySelf: 'start' }}
           title={`${cands.length} in pipeline + ${applicantCount} applicant${applicantCount === 1 ? '' : 's'} = ${totalWithApplicants} total`}
         >
           <Users className="h-3.5 w-3.5" style={{ color: NW.teal600 }} />
@@ -1127,7 +1137,7 @@ function PipelineRow({
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end' }} onClick={(e) => e.stopPropagation()}>
           {confirmDelete ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-red-600 font-500">Delete?</span>

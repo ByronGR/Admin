@@ -35,6 +35,8 @@ import {
   arrayUnion,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
+import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader } from '@/components/nw/shell-ui';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
@@ -89,6 +91,18 @@ function normalizeStage(stage: string): StageKey {
   if (PIPELINE_STAGES.some((st) => st.key === s)) return s as StageKey;
   return 'applied';
 }
+
+// Stage colours for the redesign stage-spread bar / dots.
+const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
+  'applied': NW.gray400,
+  'background-check': NW.blue500,
+  'interview': '#6366F1',
+  'assessment': NW.violet500,
+  'partner-review': NW.yellow500,
+  'partner-interview': NW.teal500,
+  'hired': NW.green600,
+  'not-selected': NW.gray300,
+};
 
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
@@ -554,17 +568,12 @@ export default function PipelinePage() {
     <MainLayout>
       <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              Pipeline
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              {filtered.length} pipeline{filtered.length !== 1 ? 's' : ''}
-              {activePipeline ? ` · Viewing ${activePipeline.code}` : ''}
-            </p>
-          </div>
-          {activePipeline && (
+        {activePipeline ? (
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
+              <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+            </div>
             <button
               onClick={() => closePipeline()}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
@@ -572,32 +581,53 @@ export default function PipelinePage() {
               <X className="h-3.5 w-3.5" />
               Back to list
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <PageHeader
+            overline="Pipeline"
+            title="Pipelines"
+            subtitle="Each opening runs its own pipeline — open one to manage candidates by stage."
+          />
+        )}
 
-        {/* Toolbar */}
+        {/* Toolbar — Active / All toggle + count */}
         {!activePipeline && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search pipeline, org, recruiter..."
-                className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
-              />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([['active', 'Active'], ['all', 'All']] as const).map(([k, label]) => {
+                const on = statusFilter === k || (k === 'active' && statusFilter === 'active') || (k === 'all' && statusFilter === 'all');
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setStatusFilter(k)}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: on ? NW.white : NW.gray600,
+                      background: on ? NW.black : NW.white,
+                      border: `1px solid ${on ? NW.black : NW.gray200}`,
+                      borderRadius: 9,
+                      padding: '7px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <div style={{ position: 'relative', minWidth: 200, marginLeft: 6 }}>
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search pipeline, org, recruiter…"
+                  className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
+                />
+              </div>
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="on-hold">On hold</option>
-              <option value="finished">Finished</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            <span style={{ fontSize: 12.5, color: NW.gray500 }}>
+              {filtered.length} pipeline{filtered.length !== 1 ? 's' : ''} · {filtered.reduce((s, p) => s + (p.candidates?.length ?? 0), 0)} candidates total
+            </span>
           </div>
         )}
 
@@ -978,6 +1008,8 @@ function PipelineRow({
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [spreadOpen, setSpreadOpen] = useState(false);
+  const [rowHover, setRowHover] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -986,7 +1018,11 @@ function PipelineRow({
     setConfirmDelete(false);
   }
 
-  const pendingApplicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview).length;
+  const cands = pipeline.candidates ?? [];
+  const pendingApplicants = cands.filter((c) => c.pendingReview).length;
+  const spread = PIPELINE_STAGES.map((st) => ({ st, n: cands.filter((c) => normalizeStage(c.stage) === st.key).length }));
+  const atOffer = spread.find((x) => x.st.key === 'hired')?.n ?? 0;
+  const sourced = spread.find((x) => x.st.key === 'applied')?.n ?? 0;
 
   const statusColor =
     pipeline.status === 'active'
@@ -1004,67 +1040,74 @@ function PipelineRow({
       }`}
     >
       <div
-        className="flex cursor-pointer items-center gap-3 px-5 py-4"
-        onClick={onToggle}
+        onClick={onOpen}
+        onMouseEnter={() => setRowHover(true)}
+        onMouseLeave={() => setRowHover(false)}
+        style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '15px 20px', cursor: 'pointer', background: rowHover ? NW.gray50 : 'transparent', transition: 'background 120ms' }}
       >
-        <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-600 text-[var(--black)]">
-            {pipeline.title}
-          </p>
-          <p className="text-xs text-[var(--light)]">
-            {pipeline.code}
-            {pipeline.orgName ? ` · ${pipeline.orgName}` : ''}
-          </p>
+        {/* Pipeline title + code + org */}
+        <div style={{ flex: 2, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pipeline.title}</span>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px' }}>{pipeline.code}</span>
+          </div>
+          <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+            {pipeline.orgName || '—'}{pipeline.recruiter ? ` · ${pipeline.recruiter}` : ''}
+          </div>
         </div>
-        <div className="hidden items-center gap-4 sm:flex">
-          {pendingApplicants > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-[var(--green-soft)] px-2.5 py-0.5 text-[11px] font-700 text-[var(--green)]">
-              <Inbox className="h-3 w-3" />
-              {pendingApplicants} new
-            </span>
-          )}
-          {pipeline.recruiter && (
-            <span className="text-xs text-[var(--mid)]">{pipeline.recruiter}</span>
-          )}
-          <Badge label={pipeline.status} variant="status" />
+
+        {/* Cands */}
+        <div style={{ flex: 0.7 }}>
+          <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 500, color: NW.black }}>{cands.length}</span>
+          <span style={{ fontSize: 11, color: NW.gray400, marginLeft: 4 }}>cands</span>
+          {pendingApplicants > 0 && <div style={{ fontSize: 11, color: '#A16207', fontWeight: 600, marginTop: 2 }}>{pendingApplicants} to review</div>}
         </div>
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+
+        {/* Stage spread bar + breakdown popover */}
+        <div
+          style={{ flex: 1.6, position: 'relative' }}
+          onMouseEnter={() => setSpreadOpen(true)}
+          onMouseLeave={() => setSpreadOpen(false)}
+        >
+          <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: NW.gray100 }}>
+            {spread.map(({ st, n }) => (n ? <div key={st.key} style={{ flex: n, background: STAGE_SPREAD_COLOR[st.key] }} /> : null))}
+          </div>
+          <div style={{ fontSize: 10.5, color: NW.gray400, marginTop: 5 }}>{atOffer} hired · {sourced} applied</div>
+          {spreadOpen && (
+            <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 60, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 190, pointerEvents: 'none' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 9 }}>Stage breakdown</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {spread.map(({ st, n }) => (
+                  <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_SPREAD_COLOR[st.key], flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: n ? NW.gray700 : NW.gray400, flex: 1 }}>{st.label}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: n ? NW.black : NW.gray300 }}>{n}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Status */}
+        <div style={{ flex: 0.9 }}><Badge label={pipeline.status} variant="status" /></div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
           {confirmDelete ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600 font-500">Delete pipeline?</span>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60"
-              >
-                {deleting ? 'Deleting…' : 'Yes'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs text-[var(--mid)] hover:underline"
-              >
-                Cancel
-              </button>
+              <span className="text-xs text-red-600 font-500">Delete?</span>
+              <button onClick={handleDelete} disabled={deleting} className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60">{deleting ? 'Deleting…' : 'Yes'}</button>
+              <button onClick={() => setConfirmDelete(false)} className="text-xs text-[var(--mid)] hover:underline">Cancel</button>
             </div>
           ) : (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
-            >
+            <button onClick={() => setConfirmDelete(true)} title="Delete pipeline" className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
-          <button
-            onClick={onOpen}
-            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"
-          >
-            Open workspace
+          <button onClick={onToggle} title={expanded ? 'Collapse board' : 'Expand board'} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[var(--light)] hover:border-[var(--green)] hover:text-[var(--green)]">
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-[var(--light)]" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-[var(--light)]" />
-          )}
         </div>
       </div>
 

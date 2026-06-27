@@ -40,6 +40,8 @@ import {
   Phone, Star, GitBranch, UserCog, Crown, Plus as PlusIcon,
   Network, Layers, Ban, Power, KeyRound, CheckCircle2,
 } from 'lucide-react';
+import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/components/nw/shell-ui';
 
 // Engagement-type colours (shared with the Hired module)
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
@@ -315,16 +317,309 @@ function OrgAvatar({ org, size = 'md' }: { org: Organization; size?: 'sm' | 'md'
   );
 }
 
+// ─── Redesign list (Sprint 3a) ────────────────────────────────────────────────
+// Reuses the real Tier (getTier) + Account Health (getHealth + healthHistory)
+// models; per-org counts (open roles / pipeline / placements) are computed from
+// the real openings/pipelines/placements collections.
+
+interface OrgCounts { openRoles: number; pipeline: number; placements: number }
+type CountsMap = Record<string, OrgCounts>;
+
+const TIER_COLOR: Record<OrgTier, string> = {
+  A: NW.violet500, B: NW.teal500, C: NW.blue500, D: NW.gray500, E: NW.gray500, F: NW.rose500, Z: NW.gray400,
+};
+
+const HEALTH_DOT: Record<string, string> = {
+  good: NW.green500, low: NW.yellow500, risk: NW.rose500, pending: NW.white,
+};
+
+function gradeToTone(g?: AccountHealthGrade): 'good' | 'low' | 'risk' | 'pending' {
+  if (!g || g === 'Z') return 'pending';
+  if (g === 'A' || g === 'B') return 'good';
+  if (g === 'C' || g === 'D') return 'low';
+  return 'risk'; // F
+}
+
+// Last-3 health dots (oldest → newest) from the real healthHistory log.
+function healthDots(org: Organization): ('good' | 'low' | 'risk' | 'pending')[] {
+  const grades: (AccountHealthGrade | undefined)[] = (org.healthHistory ?? []).slice(0, 3).map((h) => h.grade).reverse();
+  if (grades.length === 0 && org.healthGrade) grades.push(org.healthGrade);
+  while (grades.length < 3) grades.unshift(undefined);
+  return grades.map((g) => gradeToTone(g));
+}
+
+function HealthDots({ org }: { org: Organization }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 4 }} title="Account health — last 3 changes">
+      {healthDots(org).map((t, i) => (
+        <span
+          key={i}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: HEALTH_DOT[t],
+            border: t === 'pending' ? `1.5px solid ${NW.gray200}` : 'none',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function TierChip({ spend, size = 28 }: { spend?: number; size?: number }) {
+  const t = getTier(spend);
+  const c = TIER_COLOR[t.tier] || NW.gray400;
+  return (
+    <span
+      title={`Tier ${t.tier} · ${t.label} lifetime spend (internal)`}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 7,
+        background: c + '1f',
+        color: c,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 700,
+        fontSize: size * 0.48,
+        cursor: 'help',
+      }}
+    >
+      {t.tier}
+    </span>
+  );
+}
+
+function healthLabelColor(grade?: AccountHealthGrade): { label: string; color: string } {
+  const h = getHealth(grade);
+  return { label: h.label, color: h.color };
+}
+
+function orgStatusKey(status?: string): string {
+  if (status === 'active') return 'active';
+  if (status === 'prospect') return 'onboarding';
+  if (status === 'inactive') return 'ended';
+  if (status === 'suspended') return 'paused';
+  return 'active';
+}
+
+function OrgCardNW({ org, counts, onOpen }: { org: Organization; counts?: OrgCounts; onOpen: () => void }) {
+  const [hov, setHov] = useState(false);
+  const hc = healthLabelColor(org.healthGrade);
+  const stat = (label: string, value: number | string) => (
+    <div style={{ flex: 1 }}>
+      <div style={{ fontFamily: MONO, fontSize: 21, fontWeight: 500, color: NW.black, letterSpacing: '-0.02em' }}>{value}</div>
+      <div style={{ fontSize: 11, color: NW.gray500, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={onOpen}
+      style={{
+        background: NW.white,
+        border: `1px solid ${hov ? NW.gray200 : NW.gray100}`,
+        borderRadius: 16,
+        padding: 20,
+        boxShadow: hov ? '0 8px 22px rgba(0,0,0,0.07)' : '0 1px 2px rgba(0,0,0,0.03)',
+        cursor: 'pointer',
+        transition: 'all 140ms',
+        transform: hov ? 'translateY(-2px)' : 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, minWidth: 0 }}>
+          <OrgAvatar org={org} size="md" />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: NW.black, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{org.name}</div>
+            <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+              {[org.industry, [org.city, org.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+        </div>
+        <NWStatusBadge status={orgStatusKey(org.status)} label={org.status ? org.status[0].toUpperCase() + org.status.slice(1) : 'Active'} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 18, padding: '14px 0', borderTop: `1px solid ${NW.gray100}` }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 6 }}>Health</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: hc.color }}>{hc.label}</span>
+            <HealthDots org={org} />
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 6 }}>Tier</div>
+          <TierChip spend={org.totalSpend} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '14px 0 0', borderTop: `1px solid ${NW.gray100}` }}>
+        {stat('Open roles', counts?.openRoles ?? 0)}
+        {stat('Pipeline', counts?.pipeline ?? 0)}
+        {stat('Placements', counts?.placements ?? 0)}
+      </div>
+    </div>
+  );
+}
+
+function OrgListRowNW({ org, counts, onOpen }: { org: Organization; counts?: OrgCounts; onOpen: () => void }) {
+  const [hov, setHov] = useState(false);
+  const hc = healthLabelColor(org.healthGrade);
+  return (
+    <div
+      onClick={onOpen}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '2.2fr 1.5fr 0.7fr 0.8fr 0.9fr 1fr',
+        gap: 16,
+        alignItems: 'center',
+        padding: '14px 20px',
+        borderTop: `1px solid ${NW.gray100}`,
+        background: hov ? NW.gray50 : NW.white,
+        cursor: 'pointer',
+        transition: 'background 120ms',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <OrgAvatar org={org} size="sm" />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{org.name}</div>
+          <div style={{ fontSize: 11.5, color: NW.gray500 }}>{org.industry || '—'}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: hc.color }}>{hc.label}</span>
+        <HealthDots org={org} />
+      </div>
+      <div><TierChip spend={org.totalSpend} size={26} /></div>
+      <div style={{ fontFamily: MONO, fontSize: 13.5, color: (counts?.openRoles ?? 0) > 0 ? NW.gray800 : NW.gray300 }}>{counts?.openRoles ? counts.openRoles : '—'}</div>
+      <div style={{ fontFamily: MONO, fontSize: 13.5, color: NW.gray700 }}>{counts?.pipeline ?? 0}</div>
+      <div style={{ textAlign: 'right' }}>
+        <NWStatusBadge status={orgStatusKey(org.status)} label={org.status ? org.status[0].toUpperCase() + org.status.slice(1) : 'Active'} />
+      </div>
+    </div>
+  );
+}
+
+function OrgListView({
+  orgs,
+  counts,
+  loading,
+  view,
+  setView,
+  onOpen,
+  onNew,
+}: {
+  orgs: Organization[];
+  counts: CountsMap;
+  loading: boolean;
+  view: 'cards' | 'list';
+  setView: (v: 'cards' | 'list') => void;
+  onOpen: (o: Organization) => void;
+  onNew: () => void;
+}) {
+  const totalOpenRoles = orgs.reduce((s, o) => s + (counts[o.id]?.openRoles ?? 0), 0);
+  const strip: [string, number | string][] = [
+    ['Total partners', orgs.length],
+    ['Active', orgs.filter((o) => o.status === 'active').length],
+    ['Prospects', orgs.filter((o) => o.status === 'prospect').length],
+    ['Open roles', totalOpenRoles],
+  ];
+  return (
+    <div>
+      <PageHeader
+        overline="Partners"
+        title="Organizations"
+        subtitle="The partner companies you recruit for. Track openings, pipeline health, and account ownership."
+        actions={<NWButton variant="primary" size="md" icon="plus" onClick={onNew}>New organization</NWButton>}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 22, padding: '4px 2px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 28 }}>
+          {strip.map(([l, v]) => (
+            <div key={l}>
+              <div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 500, color: NW.black }}>{v}</div>
+              <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9 }}>
+          {([['cards', 'layout-grid'], ['list', 'list']] as const).map(([id, ic]) => {
+            const on = view === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  padding: '6px 11px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  background: on ? NW.white : 'transparent',
+                  color: on ? NW.black : NW.gray500,
+                  boxShadow: on ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {ic === 'layout-grid' ? <Layers className="h-3.5 w-3.5" /> : <Activity className="h-3.5 w-3.5" />}
+                {id}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', height: 160, alignItems: 'center', justifyContent: 'center' }}><Spinner /></div>
+      ) : orgs.length === 0 ? (
+        <NWCard><div style={{ padding: '40px 0', textAlign: 'center', fontSize: 14, color: NW.gray400 }}>No organizations yet.</div></NWCard>
+      ) : view === 'cards' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {orgs.map((o) => <OrgCardNW key={o.id} org={o} counts={counts[o.id]} onOpen={() => onOpen(o)} />)}
+        </div>
+      ) : (
+        <NWCard pad={0}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.5fr 0.7fr 0.8fr 0.9fr 1fr', gap: 16, padding: '14px 20px' }}>
+            {['Company', 'Health', 'Tier', 'Open', 'Pipeline', 'Status'].map((h, i) => (
+              <div key={h} style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, textAlign: i === 5 ? 'right' : 'left' }}>{h}</div>
+            ))}
+          </div>
+          {orgs.map((o) => <OrgListRowNW key={o.id} org={o} counts={counts[o.id]} onOpen={() => onOpen(o)} />)}
+        </NWCard>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function OrganizationsPage() {
   const { showToast } = useToast();
 
   const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [counts, setCounts] = useState<CountsMap>({});
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [view, setViewState] = useState<'cards' | 'list'>('cards');
   const [selected, setSelected] = useState<Organization | null>(null);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('nw_admin_orgview');
+      if (v === 'cards' || v === 'list') setViewState(v);
+    } catch {}
+  }, []);
+  const setView = (v: 'cards' | 'list') => {
+    setViewState(v);
+    try { localStorage.setItem('nw_admin_orgview', v); } catch {}
+  };
 
   // New org modal
   const [newModal, setNewModal] = useState(false);
@@ -355,11 +650,48 @@ export default function OrganizationsPage() {
   async function load() {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, 'organizations'));
+      const [orgSnap, openingsRes, pipelinesRes, placementsRes] = await Promise.allSettled([
+        getDocs(collection(db, 'organizations')),
+        getDocs(collection(db, 'openings')),
+        getDocs(collection(db, 'pipelines')),
+        getDocs(collection(db, 'placements')),
+      ]);
+      if (orgSnap.status !== 'fulfilled') throw orgSnap.reason;
       // Spread data first, then override `id` with the Firestore doc ID so a
       // data field named `id` (e.g. a short-code like "TKQKCC") never shadows
       // the real document ID that Firestore operations (updateDoc, queries) need.
-      setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
+      const loadedOrgs = orgSnap.value.docs.map((d) => ({ ...d.data(), id: d.id } as Organization));
+      loadedOrgs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setOrgs(loadedOrgs);
+
+      // Real per-org counts for the list cards/rows.
+      const map: CountsMap = {};
+      const keyFor = (o: Organization) => [o.id, o.shortId].filter(Boolean) as string[];
+      loadedOrgs.forEach((o) => { map[o.id] = { openRoles: 0, pipeline: 0, placements: 0 }; });
+      const byOrg = (orgId?: string) => loadedOrgs.find((o) => keyFor(o).includes(orgId ?? ''));
+      if (openingsRes.status === 'fulfilled') {
+        openingsRes.value.docs.forEach((d) => {
+          const data = d.data() as Opening;
+          if (data.status !== 'open') return;
+          const o = byOrg(data.orgId);
+          if (o) map[o.id].openRoles += 1;
+        });
+      }
+      if (pipelinesRes.status === 'fulfilled') {
+        pipelinesRes.value.docs.forEach((d) => {
+          const data = d.data() as Pipeline;
+          const o = byOrg(data.orgId);
+          if (o) map[o.id].pipeline += data.candidates?.length ?? 0;
+        });
+      }
+      if (placementsRes.status === 'fulfilled') {
+        placementsRes.value.docs.forEach((d) => {
+          const data = d.data() as Placement;
+          const o = byOrg(data.orgId);
+          if (o) map[o.id].placements += 1;
+        });
+      }
+      setCounts(map);
     } catch {
       showToast('Failed to load organizations', 'error');
     } finally {
@@ -377,13 +709,6 @@ export default function OrganizationsPage() {
       window.history.pushState(null, '', '/organizations');
     }
   }
-
-  const filtered = orgs.filter((o) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || [o.name, o.website, o.industry, o.city, o.country].join(' ').toLowerCase().includes(q);
-    const matchStatus = !statusFilter || o.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
 
   // ── Create org ─────────────────────────────────────────────────────────────
 
@@ -440,54 +765,36 @@ export default function OrganizationsPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              {selected ? selected.name : 'Organizations'}
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              {selected
-                ? `ID: ${selected.shortId ?? selected.id.slice(0, 8).toUpperCase()}`
-                : `${orgs.length} client organization${orgs.length !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {selected ? (
-              <>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(window.location.href);
-                    showToast('Link copied!', 'success');
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-                >
-                  <Link2 className="h-3.5 w-3.5" />
-                  Copy link
-                </button>
-                <button
-                  onClick={() => selectOrg(null)}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  All orgs
-                </button>
-              </>
-            ) : (
+      {selected ? (
+        <div className="space-y-5">
+          {/* Detail header */}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">{selected.name}</h1>
+              <p className="mt-0.5 text-xs text-[var(--light)]">
+                ID: {selected.shortId ?? selected.id.slice(0, 8).toUpperCase()}
+              </p>
+            </div>
+            <div className="flex gap-2">
               <button
-                onClick={() => setNewModal(true)}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
-                style={{ background: 'var(--green)' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  showToast('Link copied!', 'success');
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
               >
-                <Plus className="h-3.5 w-3.5" />
-                New organization
+                <Link2 className="h-3.5 w-3.5" />
+                Copy link
               </button>
-            )}
+              <button
+                onClick={() => selectOrg(null)}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+              >
+                <X className="h-3.5 w-3.5" />
+                All orgs
+              </button>
+            </div>
           </div>
-        </div>
-
-        {selected ? (
           <OrgDetail
             key={selected.id}
             org={selected}
@@ -497,106 +804,18 @@ export default function OrganizationsPage() {
             onRefresh={async () => { await load(); }}
             onUpdated={(updated) => setSelected(updated)}
           />
-        ) : (
-          <>
-            {/* Toolbar */}
-            <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-[220px] flex-1">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search organizations…"
-                  className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-[var(--green)]"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-              >
-                <option value="">All statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="prospect">Prospect</option>
-              </select>
-            </div>
-
-            {/* Table */}
-            {loading ? (
-              <div className="flex h-40 items-center justify-center"><Spinner /></div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-                <div className="grid grid-cols-[auto_2fr_1fr_auto_auto_auto] items-center gap-3 border-b border-[var(--border)] bg-[var(--bg)] px-5 py-3 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-                  <div className="w-12"></div>
-                  <div>Organization</div>
-                  <div>Package</div>
-                  <div>Tier</div>
-                  <div className="text-center">Health</div>
-                  <div></div>
-                </div>
-                {filtered.length === 0 ? (
-                  <div className="py-16 text-center text-sm text-[var(--light)]">No organizations found.</div>
-                ) : (
-                  filtered.map((o) => {
-                    const pkg = getPkg(o.package);
-                    return (
-                      <div
-                        key={o.id}
-                        onClick={() => selectOrg(o)}
-                        className="grid cursor-pointer grid-cols-[auto_2fr_1fr_auto_auto_auto] items-center gap-3 border-b border-[var(--border)] px-5 py-3.5 last:border-0 transition-colors hover:bg-[var(--bg)]"
-                      >
-                        <div className="w-12">
-                          <OrgAvatar org={o} size="sm" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-600 text-[var(--black)]">{o.name}</p>
-                            <Badge label={o.status ?? 'active'} variant={orgStatusVariant(o.status ?? 'active') as 'green' | 'amber' | 'red'} />
-                            {o.actionNeeded && (
-                              <span
-                                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-700 text-amber-700"
-                                title={o.actionNote || 'Action needed'}
-                              >
-                                <AlertTriangle className="h-2.5 w-2.5" />
-                                Action needed
-                              </span>
-                            )}
-                          </div>
-                          <p className="truncate text-[11px] text-[var(--light)]">
-                            {[o.city, o.country].filter(Boolean).join(', ') || o.website || o.industry || '—'}
-                          </p>
-                        </div>
-                        <div>
-                          {pkg ? (
-                            <span
-                              className="rounded-full px-2.5 py-1 text-[10px] font-700"
-                              style={{ background: pkg.bg, color: pkg.color }}
-                            >
-                              {pkg.label}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-[var(--light)]">—</span>
-                          )}
-                        </div>
-                        <div>
-                          <TierBadge spend={o.totalSpend} />
-                        </div>
-                        <div className="flex justify-center">
-                          <HealthGrade grade={o.healthGrade} size="sm" />
-                        </div>
-                        <div>
-                          <ChevronRight className="h-4 w-4 text-[var(--light)]" />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+        </div>
+      ) : (
+        <OrgListView
+          orgs={orgs}
+          counts={counts}
+          loading={loading}
+          view={view}
+          setView={setView}
+          onOpen={selectOrg}
+          onNew={() => setNewModal(true)}
+        />
+      )}
 
       {/* New org modal */}
       <Modal open={newModal} onClose={() => setNewModal(false)} title="New organization" size="lg">

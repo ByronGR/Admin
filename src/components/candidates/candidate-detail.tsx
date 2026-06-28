@@ -103,6 +103,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
+  // Profile tabs (redesign): organize the left column into tabbed sections.
+  const [detailTab, setDetailTab] = useState<'overview' | 'background' | 'assessment' | 'pipeline'>('overview');
+
   // ── English assessment (Nearwork-recorded level + comments) ────────────────
   const [englishScore, setEnglishScore] = useState<EnglishScore | undefined>(candidate.englishScore);
   const [engModalOpen, setEngModalOpen] = useState(false);
@@ -594,6 +597,23 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
         </div>
 
+        {/* Profile tabs */}
+        <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+          {([['overview', 'Overview'], ['background', 'Background'], ['assessment', 'Assessment'], ['pipeline', 'Applications']] as const).map(([k, label]) => {
+            const on = detailTab === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setDetailTab(k)}
+                style={{ fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? 'var(--black)' : 'var(--light)', background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? 'var(--green)' : 'transparent'}`, padding: '10px 13px', marginBottom: -1, cursor: 'pointer' }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {detailTab === 'overview' && (<>
         {/* English assessment — staff-entered level + comments, visible to the client */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <div className="flex items-center justify-between gap-2">
@@ -666,6 +686,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           </a>
         )}
 
+        </>)}
+
+        {detailTab === 'assessment' && (<>
         {/* Nearwork Score & assessment */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
@@ -772,6 +795,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           </div>
         )}
 
+        </>)}
+
+        {detailTab === 'pipeline' && (<>
         {/* Pipelines & openings */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
@@ -912,6 +938,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
         </div>
 
+        </>)}
+
+        {detailTab === 'background' && (<>
         {/* Work history (Jobs applicants) */}
         {Array.isArray(candidate.workHistory) && candidate.workHistory.some(w => w.company || w.title) && (
           <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
@@ -1052,6 +1081,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             )}
           </div>
         </div>
+        </>)}
       </div>
 
       {/* Right: notes */}

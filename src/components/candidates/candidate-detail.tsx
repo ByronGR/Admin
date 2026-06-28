@@ -473,8 +473,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
       {/* Left: details */}
       <div className="space-y-5">
-        {/* Bio card */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+        {/* Bio card — branded header */}
+        <div
+          className="rounded-2xl border p-6"
+          style={{ background: 'linear-gradient(118deg, var(--green-soft), #ffffff 58%)', borderColor: 'rgba(22,160,133,0.20)' }}
+        >
           <div className="flex items-start gap-4">
             {candidate.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -493,7 +496,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             )}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-700 text-[var(--black)]">{candidate.name}</h2>
+                <h2 style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--black)', margin: 0 }}>{candidate.name}</h2>
                 <button
                   type="button"
                   onClick={() => {

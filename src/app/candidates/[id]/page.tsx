@@ -7,7 +7,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { CandidateDetail } from '@/components/candidates/candidate-detail';
 import type { Candidate } from '@/lib/types';
-import { ArrowLeft } from 'lucide-react';
+import { BackBar } from '@/components/nw/shell-ui';
 
 export default function CandidateDetailPage() {
   const params = useParams();
@@ -39,23 +39,7 @@ export default function CandidateDetailPage() {
   return (
     <MainLayout>
       <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <a
-            href="/candidates"
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All candidates
-          </a>
-          {candidate && (
-            <>
-              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-                {candidate.name}
-              </h1>
-              <p className="text-xs text-[var(--light)]">Candidate profile</p>
-            </>
-          )}
-        </div>
+        <BackBar label="All candidates" href="/candidates" />
 
         {loading ? (
           <div className="flex h-40 items-center justify-center">

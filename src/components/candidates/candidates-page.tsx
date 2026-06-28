@@ -19,7 +19,9 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { initials, sortByTimestamp, generateCandidateId } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
-import { Search, Plus, Download, Trash2 } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
+import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/components/nw/shell-ui';
 
 // ─── Smart match config ───────────────────────────────────────────────────────
 
@@ -204,34 +206,17 @@ export default function CandidatesPage() {
   return (
     <MainLayout>
       <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              Candidates
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              Full ATS — {candidates.length} candidates
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export ATS
-            </button>
-            <button
-              onClick={() => setNewModal(true)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
-              style={{ background: 'var(--green)' }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add candidate
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          overline="Pipeline"
+          title="Candidates"
+          subtitle={`Everyone in the talent network — ${candidates.length} in the ATS, searchable across every client and opening.`}
+          actions={
+            <>
+              <NWButton variant="secondary" size="md" icon="download" onClick={exportCSV}>Export ATS</NWButton>
+              <NWButton variant="primary" size="md" icon="plus" onClick={() => setNewModal(true)}>Add candidate</NWButton>
+            </>
+          }
+        />
 
         {/* Smart match */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">

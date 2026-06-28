@@ -230,6 +230,11 @@ button:disabled {
   background: var(--nw-gray-50);
 }
 
+/* Redesign: grid-based list row hover */
+.nw-grid-row:hover {
+  background: var(--nw-gray-50);
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

@@ -98,6 +98,9 @@ export default function CandidatesPage() {
   const [cityF, setCityF] = useState('all');
   const [sortF, setSortF] = useState('recent');
   const [pipelineTitles, setPipelineTitles] = useState<Record<string, string>>({});
+  // Latest application per candidate (id/code → {title, when, status}) so the
+  // "Last activity" column also reflects applicants who applied and are waiting.
+  const [appByCandidate, setAppByCandidate] = useState<Record<string, { title: string; whenTs: unknown; status?: string }>>({});
 
   // New candidate modal
   const [newModal, setNewModal] = useState(false);
@@ -131,7 +134,8 @@ export default function CandidatesPage() {
     return !c.name && !c.email && !c.currentRole && !(c.skills?.length);
   }
 
-  // Resolve opening/pipeline titles for the "Last activity" column.
+  // Resolve opening/pipeline titles + latest application per candidate for the
+  // "Last activity" column.
   useEffect(() => {
     getDocs(collection(db, 'pipelines'))
       .then((snap) => {
@@ -141,6 +145,29 @@ export default function CandidatesPage() {
           if (x.code) m[x.code] = x.title || x.code;
         });
         setPipelineTitles(m);
+      })
+      .catch(() => {});
+
+    getDocs(collection(db, 'applications'))
+      .then((snap) => {
+        const tsMs = (v: unknown): number => {
+          if (!v) return 0;
+          if (typeof v === 'string') return Date.parse(v) || 0;
+          if (typeof v === 'object' && v !== null && 'seconds' in v) return (v as { seconds: number }).seconds * 1000;
+          return 0;
+        };
+        const m: Record<string, { title: string; whenTs: unknown; status?: string }> = {};
+        snap.docs.forEach((d) => {
+          const a = d.data() as { candidateId?: string; candidateCode?: string; openingTitle?: string; jobTitle?: string; openingCode?: string; submittedAt?: unknown; status?: string };
+          const title = a.openingTitle || a.jobTitle || a.openingCode || 'a role';
+          const entry = { title, whenTs: a.submittedAt, status: a.status };
+          for (const key of [a.candidateId, a.candidateCode]) {
+            if (!key) continue;
+            const prev = m[key];
+            if (!prev || tsMs(a.submittedAt) >= tsMs(prev.whenTs)) m[key] = entry;
+          }
+        });
+        setAppByCandidate(m);
       })
       .catch(() => {});
   }, []);
@@ -168,7 +195,14 @@ export default function CandidatesPage() {
   }
 
   // ── Derived helpers for the list ───────────────────────────────────────────
-  const candRole = (c: Candidate) => c.role || c.currentRole || c.targetRole || c.headline || '';
+  // `role` often holds the account-type marker "candidate" (set at signup), not a
+  // job title — prefer the real title fields and skip that placeholder value.
+  const candRole = (c: Candidate) => {
+    const titles = [c.currentRole, c.targetRole, c.headline, c.role]
+      .map((x) => (x ?? '').trim())
+      .filter((x) => x && x.toLowerCase() !== 'candidate');
+    return titles[0] || '';
+  };
   const candCity = (c: Candidate) => c.city || c.location || '';
   function roleGroup(role: string): string {
     const r = role.toLowerCase();
@@ -191,11 +225,22 @@ export default function CandidatesPage() {
     return null;
   }
   function lastActivity(c: Candidate): { title: string; when: string; stage?: string } | null {
+    // 1) In a pipeline → show the opening + current stage.
     if (c.activePipelineCode) {
       return {
         title: pipelineTitles[c.activePipelineCode] || candRole(c) || c.activePipelineCode,
         when: c.updatedAt ? fmtRelative(c.updatedAt) : c.createdAt ? fmtRelative(c.createdAt) : '',
         stage: c.activePipelineStage ? c.activePipelineStage.replace(/-/g, ' ') : undefined,
+      };
+    }
+    // 2) Applied but not yet pulled into a pipeline → show the role + waiting.
+    const app = appByCandidate[c.id] || (c.code ? appByCandidate[c.code] : undefined);
+    if (app) {
+      const rejected = String(app.status ?? '').toLowerCase() === 'rejected';
+      return {
+        title: app.title,
+        when: app.whenTs ? fmtRelative(app.whenTs as Parameters<typeof fmtRelative>[0]) : '',
+        stage: rejected ? 'not selected' : 'waiting on review',
       };
     }
     return null;

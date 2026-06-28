@@ -91,6 +91,31 @@ function tsToDate(ts: unknown): Date | null {
   return null;
 }
 
+// Parse a free-text work-history date ("2024", "Jan 2024", "Present"…) into a
+// sortable number (year*12 + month). "Present/current" → very large so a current
+// role floats to the top; unparseable → null.
+const WORK_PRESENT = Number.MAX_SAFE_INTEGER;
+function workWhenKey(s?: string): number | null {
+  if (!s) return null;
+  const t = s.trim().toLowerCase();
+  if (!t || t === '-' || t === '—') return null;
+  if (/present|current|now|ongoing|actual|today/.test(t)) return WORK_PRESENT;
+  const ym = t.match(/(19|20)\d{2}/);
+  if (!ym) return null;
+  const year = parseInt(ym[0], 10);
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  let month = 0;
+  for (let i = 0; i < 12; i++) if (t.includes(months[i])) { month = i + 1; break; }
+  return year * 12 + month;
+}
+// Recency of a role: prefer its end date; a missing end with a known start is
+// treated as ongoing (current); fully unknown sorts last.
+function workRecency(w: { from?: string; to?: string }): number {
+  const end = workWhenKey(w.to);
+  if (end != null) return end;
+  return workWhenKey(w.from) != null ? WORK_PRESENT : -1;
+}
+
 // ─── Candidate detail (shared by the /candidates/[id] route) ───────────────────
 
 export function CandidateDetail({ candidate }: { candidate: Candidate }) {
@@ -467,7 +492,19 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const yearsExp = candidate.experience;
   const statusActive = !['rejected', 'withdrawn', 'inactive'].includes(String(candidate.status ?? '').toLowerCase());
   const cvUrl = candidate.resumeUrl || candidate.cvUrl || null;
-  const work = (candidate.workHistory ?? []).filter((w) => w.company || w.title);
+  // Always newest → oldest: most-recent/current role first, descending by end
+  // date (then start date as a tiebreaker), regardless of stored order.
+  const work = (candidate.workHistory ?? [])
+    .filter((w) => w.company || w.title)
+    .slice()
+    .sort((a, b) => {
+      const ra = workRecency(a);
+      const rb = workRecency(b);
+      if (rb !== ra) return rb - ra;
+      const fa = workWhenKey(a.from) ?? -1;
+      const fb = workWhenKey(b.from) ?? -1;
+      return fb - fa;
+    });
   const monthlySalary = candidate.expectedSalaryAmount != null
     ? `${fmtCurrency(Number(candidate.expectedSalaryAmount), candidate.expectedSalaryCurrency || 'USD')}/mo`
     : typeof candidate.expectedSalary === 'number'

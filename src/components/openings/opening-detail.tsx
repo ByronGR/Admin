@@ -6,6 +6,10 @@ import {
   db,
   doc,
   getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -14,13 +18,16 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
-import { fmtDate } from '@/lib/utils';
-import type { Opening, Organization, WorkMode } from '@/lib/types';
-import { WORK_MODE_LABELS } from '@/lib/types';
+import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
+import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
+import { WORK_MODE_LABELS, PIPELINE_STAGE_LABELS } from '@/lib/types';
 import {
   Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle,
   ChevronRight, FileText, Globe, ExternalLink, Pause, Play,
+  Users, UserCheck, Calendar, Banknote, Radar,
 } from 'lucide-react';
+import { NW, MONO, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
+import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
 
 // ── Brief status badge (used by openings-page list too) ──────────────────────
 export function ApprovalBadge({ status }: { status?: string }) {
@@ -91,6 +98,37 @@ export function OpeningDetail({
       .finally(() => { if (alive) setBriefLoading(false); });
     return () => { alive = false; };
   }, [briefCode]);
+
+  // ── Redesign tabs (Pipeline & sourcing | Opening & brief) ──
+  const [tab, setTab] = useState<'pipeline' | 'opening'>('pipeline');
+
+  // Pipeline for this opening (shared code) — candidates by stage.
+  const [pipeCandidates, setPipeCandidates] = useState<PipelineCandidate[]>([]);
+  useEffect(() => {
+    getDoc(doc(db, 'pipelines', briefCode))
+      .then((snap) => setPipeCandidates(snap.exists() ? (((snap.data() as Pipeline).candidates) ?? []) : []))
+      .catch(() => setPipeCandidates([]));
+  }, [briefCode]);
+
+  // Pending applicants (applied via Jobs, not yet pulled into the pipeline).
+  const [applicantCount, setApplicantCount] = useState(0);
+  useEffect(() => {
+    getDocs(query(collection(db, 'applications'), where('openingCode', '==', briefCode)))
+      .then((snap) => setApplicantCount(snap.docs.filter((d) => {
+        const a = d.data() as { status?: string; inPipeline?: boolean };
+        return !a.inPipeline && (!a.status || a.status === 'applied' || a.status === 'pending');
+      }).length))
+      .catch(() => setApplicantCount(0));
+  }, [briefCode]);
+
+  // Talent pool — candidates not already in this pipeline, matched on the
+  // opening's skills when set. Loaded once.
+  const [poolCandidates, setPoolCandidates] = useState<Candidate[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, 'candidates'))
+      .then((snap) => setPoolCandidates(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate))))
+      .catch(() => setPoolCandidates([]));
+  }, []);
 
   // ── Opening core edit state ──
   const [editing, setEditing] = useState(false);
@@ -319,8 +357,181 @@ export function OpeningDetail({
   const APPROVAL_STEPS = ['draft', 'pending_review', 'approved', 'published'] as const;
   const stepIdx = APPROVAL_STEPS.indexOf(approvalStatus as typeof APPROVAL_STEPS[number]);
 
+  // ── Redesign header / stat-strip / sourcing derivations ──
+  const STAGE_COLOR: Record<string, string> = {
+    applied: NW.gray400, 'background-check': NW.blue500, interview: '#6366F1', assessment: NW.violet500,
+    'partner-review': NW.yellow500, 'partner-interview': NW.teal500, hired: NW.green600, 'not-selected': NW.gray300,
+  };
+  const orgName = org?.name ?? opening.orgName ?? '';
+  const orgColor = (() => {
+    const seed = opening.orgId || orgName || opening.id;
+    const palette = [NW.teal500, NW.rose500, NW.violet500, NW.blue500, NW.teal600, '#EAB308', '#EC5290'];
+    let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  })();
+  const daysOpen = (() => {
+    const start = (opening.publishedAt ?? opening.createdAt) as { seconds?: number } | string | undefined;
+    let ms = 0;
+    if (start && typeof start === 'object' && 'seconds' in start && start.seconds) ms = start.seconds * 1000;
+    else if (typeof start === 'string') ms = Date.parse(start) || 0;
+    return ms ? Math.max(0, Math.floor((Date.now() - ms) / 86400000)) : null;
+  })();
+  const band = opening.hideSalary ? 'Hidden'
+    : opening.salaryMin && opening.salaryMax ? `${fmtCurrency(opening.salaryMin, opening.salaryCurrency || 'USD')}–${fmtCurrency(opening.salaryMax, opening.salaryCurrency || 'USD')}`
+    : opening.salaryMin ? `${fmtCurrency(opening.salaryMin, opening.salaryCurrency || 'USD')}+` : '—';
+  const inPipelineCount = pipeCandidates.filter((c) => c.stage !== 'not-selected').length;
+  const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
+  const openingSkills = (opening.skills ?? []).map((s) => s.toLowerCase());
+  const talentPool = poolCandidates
+    .filter((c) => !pipeIds.has(c.id))
+    .map((c) => ({ c, overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length }))
+    .sort((a, b) => b.overlap - a.overlap)
+    .slice(0, 8);
+
+  const statItems = [
+    { icon: <Users className="h-3.5 w-3.5" />, label: 'In pipeline', value: inPipelineCount, sub: 'candidates' },
+    { icon: <UserCheck className="h-3.5 w-3.5" />, label: 'To pre-qualify', value: applicantCount, sub: 'new applicants' },
+    { icon: <Calendar className="h-3.5 w-3.5" />, label: 'Days open', value: daysOpen != null ? `${daysOpen}d` : '—', sub: 'since posted' },
+    { icon: <Banknote className="h-3.5 w-3.5" />, label: 'Budget', value: band, sub: opening.location ?? 'Remote' },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
+          <span style={{ width: 56, height: 56, borderRadius: 13, background: orgColor, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 22, flexShrink: 0 }}>{initials(orgName) || 'NW'}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: NW.black }}>{opening.title || 'Untitled role'}</h1>
+              <Badge label={opening.status} variant="status" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap', fontSize: 13.5, color: NW.gray600 }}>
+              {orgName && <span style={{ fontWeight: 600, color: NW.black }}>{orgName}</span>}
+              {opening.location && <><span style={{ color: NW.gray300 }}>·</span><span>{opening.location}</span></>}
+              {opening.seniority && <><span style={{ color: NW.gray300 }}>·</span><span>{opening.seniority}</span></>}
+              <span style={{ color: NW.gray300 }}>·</span><span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray500 }}>{briefCode}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <NWButton variant="secondary" size="md" icon="arrow-left" onClick={onClose}>All openings</NWButton>
+          <NWButton variant="primary" size="md" iconRight="arrow-right" onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}>Open pipeline</NWButton>
+        </div>
+      </div>
+
+      {/* Stat strip */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap', border: `1px solid ${NW.gray100}`, borderRadius: 16, background: NW.white, padding: '16px 22px', marginBottom: 18 }}>
+        {statItems.map((s) => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <span style={{ width: 34, height: 34, borderRadius: 9, background: NW.teal50, color: NW.teal600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{s.icon}</span>
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 500, color: NW.black, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: NW.gray500, marginTop: 3 }}>{s.label} · <span style={{ color: NW.gray400 }}>{s.sub}</span></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
+        {([['pipeline', 'Pipeline & sourcing'], ['opening', 'Opening & brief']] as const).map(([k, label]) => {
+          const on = tab === k;
+          return (
+            <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>{label}</button>
+          );
+        })}
+      </div>
+
+      {tab === 'pipeline' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Pipeline by stage */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {applicantCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 14, border: `1px solid ${NW.teal500}33`, background: NW.teal50, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <UserCheck className="h-5 w-5" style={{ color: NW.teal600 }} />
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{applicantCount} applicant{applicantCount === 1 ? '' : 's'} to pre-qualify</div>
+                    <div style={{ fontSize: 12, color: NW.gray600 }}>Approve or reject new applicants in the pipeline board.</div>
+                  </div>
+                </div>
+                <NWButton variant="primary" size="sm" iconRight="arrow-right" onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}>Review</NWButton>
+              </div>
+            )}
+            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Pipeline for this role</div>
+                <NWButton variant="ghost" size="sm" iconRight="arrow-right" onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}>Open board</NWButton>
+              </div>
+              {inPipelineCount === 0 ? (
+                <div style={{ fontSize: 13, color: NW.gray400, padding: '12px 0' }}>No one in the pipeline yet — approve applicants to add them.</div>
+              ) : (
+                PIPELINE_STAGES.filter((st) => st.key !== 'not-selected').map((st) => {
+                  const list = pipeCandidates.filter((c) => c.stage === st.key);
+                  if (!list.length) return null;
+                  return (
+                    <div key={st.key} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_COLOR[st.key] }} />
+                        <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray500 }}>{PIPELINE_STAGE_LABELS[st.key]}</span>
+                        <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray400 }}>{list.length}</span>
+                      </div>
+                      {list.map((c) => (
+                        <div key={c.candidateId} onClick={() => router.push(`/candidates/${c.candidateId}`)} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 10px', borderRadius: 10, cursor: 'pointer' }}>
+                          <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                          {typeof c.score === 'number' && <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray500 }}>{c.score}</span>}
+                          <ChevronRight className="h-3.5 w-3.5" style={{ color: NW.gray300 }} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Talent pool */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: NW.gray600 }}><Radar className="h-4 w-4" /></span>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Talent pool</div>
+                  <div style={{ fontSize: 12, color: NW.gray500 }}>Candidates not in this pipeline{openingSkills.length ? ' · best skill matches first' : ''}</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                {talentPool.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>No available candidates to surface.</div>
+                ) : (
+                  talentPool.map(({ c, overlap }, i) => (
+                    <div key={c.id} onClick={() => router.push(`/candidates/${c.id}`)} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}`, cursor: 'pointer', borderRadius: 8 }}>
+                      <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.email}</div>
+                        <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—')}</div>
+                      </div>
+                      {overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 12 }}>Details</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Hiring manager</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.hiringManager || '—'}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Account manager</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.accountManager || '—'}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Recruiter</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.recruiter || '—'}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Budget</span><span style={{ fontFamily: MONO, fontSize: 13, color: NW.black }}>{band}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'opening' && (
+      <div className="space-y-4">
 
       {/* ── Unified status bar ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-5 py-3">
@@ -840,6 +1051,8 @@ export function OpeningDetail({
           )}
         </div>
       </div>
+    </div>
+      )}
     </div>
   );
 }

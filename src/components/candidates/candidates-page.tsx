@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   db,
   collection,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   doc,
@@ -14,25 +15,74 @@ import {
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
-import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
-import { Search, Trash2 } from 'lucide-react';
-import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
-import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/components/nw/shell-ui';
+import { Trash2 } from 'lucide-react';
+import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader, Card as NWCard, SegTabs } from '@/components/nw/shell-ui';
+import { type IconName } from 'lucide-react/dynamic';
 
-// ─── Smart match config ───────────────────────────────────────────────────────
+const AVA_PALETTE = ['#16A085', '#E74C7C', '#AF7AC5', '#3B82F6', '#12866E', '#EAB308', '#EC5290'];
+function colorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVA_PALETTE[h % AVA_PALETTE.length];
+}
 
-const ROLES = [
-  'Customer Success Manager',
-  'SDR / Sales Development Rep',
-  'Technical Support Specialist',
-  'Marketing Ops Specialist',
-  'Developer',
-  'Operations Manager',
-];
+// ─── Menu filter (dropdown) ───────────────────────────────────────────────────
+
+function MenuFilter({
+  icon,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const cur = options.find((o) => o.value === value);
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: NW.gray700, background: NW.white, border: `1px solid ${open ? NW.teal500 : NW.gray200}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}
+      >
+        <Icon name={icon} size={14} color={NW.gray500} />
+        <span style={{ color: NW.gray500 }}>{label}:</span>
+        <span style={{ fontWeight: 600, color: NW.black }}>{cur ? cur.label : 'All'}</span>
+        <Icon name="chevron-down" size={14} color={NW.gray400} />
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 61, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 14px 36px rgba(0,0,0,0.16)', padding: 5, minWidth: 190, maxHeight: 300, overflowY: 'auto' }}>
+            {options.map((o) => {
+              const on = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  onClick={() => { onChange(o.value); setOpen(false); }}
+                  className="nw-search-result"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', border: 'none', background: on ? NW.teal50 : NW.white, cursor: 'pointer', borderRadius: 8, padding: '8px 10px', fontSize: 13, color: NW.black, textAlign: 'left' }}
+                >
+                  <span style={{ flex: 1 }}>{o.label}</span>
+                  {on && <Icon name="check" size={14} color={NW.teal600} />}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -42,8 +92,12 @@ export default function CandidatesPage() {
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  // Prototype list controls: All/Active/Inactive tabs + Role / Location / Sort filters
+  const [listTab, setListTab] = useState<'all' | 'active' | 'inactive'>('all');
+  const [roleG, setRoleG] = useState('all');
+  const [cityF, setCityF] = useState('all');
+  const [sortF, setSortF] = useState('recent');
+  const [pipelineTitles, setPipelineTitles] = useState<Record<string, string>>({});
 
   // New candidate modal
   const [newModal, setNewModal] = useState(false);
@@ -77,10 +131,19 @@ export default function CandidatesPage() {
     return !c.name && !c.email && !c.currentRole && !(c.skills?.length);
   }
 
-  // Smart match
-  const [matchRole, setMatchRole] = useState('');
-  const [matchExp, setMatchExp] = useState('');
-  const [matchSalary, setMatchSalary] = useState('');
+  // Resolve opening/pipeline titles for the "Last activity" column.
+  useEffect(() => {
+    getDocs(collection(db, 'pipelines'))
+      .then((snap) => {
+        const m: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const x = d.data() as { code?: string; title?: string };
+          if (x.code) m[x.code] = x.title || x.code;
+        });
+        setPipelineTitles(m);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -104,42 +167,60 @@ export default function CandidatesPage() {
     // no-op — list is kept live by the onSnapshot listener above
   }
 
-  // Filter
-  const filtered = candidates.filter((c) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      [c.name, c.email, c.role, c.currentRole, c.targetRole, c.headline, c.location, ...(c.skills ?? [])]
-        .join(' ')
-        .toLowerCase()
-        .includes(q);
-    const matchStatus = !statusFilter || c.status === statusFilter;
-    return matchSearch && matchStatus;
+  // ── Derived helpers for the list ───────────────────────────────────────────
+  const candRole = (c: Candidate) => c.role || c.currentRole || c.targetRole || c.headline || '';
+  const candCity = (c: Candidate) => c.city || c.location || '';
+  function roleGroup(role: string): string {
+    const r = role.toLowerCase();
+    if (/engineer|developer|devops|sre|backend|frontend|full.?stack|software/.test(r)) return 'Engineering';
+    if (/design|ux|ui/.test(r)) return 'Design';
+    if (/product manager|product owner|\bpm\b/.test(r)) return 'Product';
+    if (/data|analyst|analytics|scientist|bi\b/.test(r)) return 'Data';
+    if (/qa|quality|test/.test(r)) return 'QA';
+    if (/customer success|support|\bcsm?\b|account manager/.test(r)) return 'Customer Success';
+    return 'Other';
+  }
+  function isActiveCandidate(c: Candidate): boolean {
+    const s = String(c.status ?? '').toLowerCase();
+    return !['rejected', 'withdrawn', 'inactive'].includes(s);
+  }
+  function monthlySalary(c: Candidate): string | null {
+    if (c.expectedSalaryAmount != null) return `${fmtCurrency(Number(c.expectedSalaryAmount), c.expectedSalaryCurrency || 'USD')}/mo`;
+    if (typeof c.expectedSalary === 'number') return `${fmtCurrency(c.expectedSalary, 'USD')}/mo`;
+    if (typeof c.expectedSalary === 'string' && c.expectedSalary.trim()) return c.expectedSalary;
+    return null;
+  }
+  function lastActivity(c: Candidate): { title: string; when: string; stage?: string } | null {
+    if (c.activePipelineCode) {
+      return {
+        title: pipelineTitles[c.activePipelineCode] || candRole(c) || c.activePipelineCode,
+        when: c.updatedAt ? fmtRelative(c.updatedAt) : c.createdAt ? fmtRelative(c.createdAt) : '',
+        stage: c.activePipelineStage ? c.activePipelineStage.replace(/-/g, ' ') : undefined,
+      };
+    }
+    return null;
+  }
+
+  const ROLE_GROUPS = ['Engineering', 'Design', 'Product', 'Data', 'QA', 'Customer Success', 'Other'];
+  const cityOptions = [...new Set(candidates.map(candCity).filter(Boolean))].sort();
+
+  // ── Tabs + filters + sort ──────────────────────────────────────────────────
+  const tabCounts = {
+    all: candidates.length,
+    active: candidates.filter(isActiveCandidate).length,
+    inactive: candidates.filter((c) => !isActiveCandidate(c)).length,
+  };
+  let rows = candidates;
+  if (listTab === 'active') rows = rows.filter(isActiveCandidate);
+  else if (listTab === 'inactive') rows = rows.filter((c) => !isActiveCandidate(c));
+  if (roleG !== 'all') rows = rows.filter((c) => roleGroup(candRole(c)) === roleG);
+  if (cityF !== 'all') rows = rows.filter((c) => candCity(c) === cityF);
+  rows = [...rows].sort((a, b) => {
+    if (sortF === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (sortF === 'salary') return (Number(b.expectedSalaryAmount ?? b.expectedSalary ?? 0)) - (Number(a.expectedSalaryAmount ?? a.expectedSalary ?? 0));
+    return 0; // 'recent' — list is already sorted by createdAt desc
   });
-
-  // Smart match scoring
-  function smartMatch(role: string, exp: string, salary: string): Candidate[] {
-    if (!role) return filtered;
-    const expNum = exp ? Number(exp.split('-')[0]) : -1;
-    return [...filtered]
-      .map((c) => {
-        let score = 0;
-        if (c.currentRole?.toLowerCase().includes(role.toLowerCase())) score += 40;
-        if (expNum >= 0 && (c.experience ?? 0) >= expNum) score += 30;
-        if (salary && Number(c.expectedSalary ?? 0) <= Number(salary)) score += 30;
-        return { ...c, _score: score };
-      })
-      .filter((c) => c._score > 0)
-      .sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
-  }
-
-  const [matchResults, setMatchResults] = useState<Candidate[] | null>(null);
-
-  function runMatch() {
-    setMatchResults(smartMatch(matchRole, matchExp, matchSalary));
-  }
-
-  const display = matchResults ?? filtered;
+  const display = rows;
 
   async function saveNewCandidate() {
     if (!form.name || !form.email) {
@@ -218,200 +299,106 @@ export default function CandidatesPage() {
           }
         />
 
-        {/* Smart match */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-              <div className="flex flex-wrap items-end gap-3">
-                <div>
-                  <p className="mb-1 text-sm font-700 text-[var(--black)]">Smart candidate match</p>
-                  <p className="text-xs text-[var(--light)]">
-                    Select a role and criteria — we&apos;ll rank the best available candidates.
-                  </p>
-                </div>
-                <div className="ml-auto flex flex-wrap items-end gap-2">
-                  <select
-                    value={matchRole}
-                    onChange={(e) => setMatchRole(e.target.value)}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-                  >
-                    <option value="">Select role...</option>
-                    {ROLES.map((r) => (
-                      <option key={r}>{r}</option>
+        {/* Tabs + filters */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <SegTabs
+            tabs={[
+              { id: 'all', label: 'All', count: tabCounts.all },
+              { id: 'active', label: 'Active', count: tabCounts.active },
+              { id: 'inactive', label: 'Inactive', count: tabCounts.inactive },
+            ]}
+            active={listTab}
+            onChange={setListTab}
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <MenuFilter icon="briefcase" label="Role" value={roleG} options={[{ value: 'all', label: 'All roles' }, ...ROLE_GROUPS.map((g) => ({ value: g, label: g }))]} onChange={setRoleG} />
+            <MenuFilter icon="map-pin" label="Location" value={cityF} options={[{ value: 'all', label: 'All locations' }, ...cityOptions.map((c) => ({ value: c, label: c }))]} onChange={setCityF} />
+            <MenuFilter icon="arrow-down-up" label="Sort" value={sortF} options={[{ value: 'recent', label: 'Most recent' }, { value: 'name', label: 'Name (A–Z)' }, { value: 'salary', label: 'Salary (high→low)' }]} onChange={setSortF} />
+          </div>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div className="flex h-40 items-center justify-center"><Spinner /></div>
+        ) : (
+          <NWCard pad={0}>
+            <div style={{ padding: '14px 6px 4px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+                <thead>
+                  <tr>
+                    {[['Candidate', 'left', 22], ['Role', 'left', 16], ['Status', 'left', 16], ['Salary expectation', 'left', 16], ['Last activity', 'left', 16], ['', 'right', 22]].map(([label, align, padX], i) => (
+                      <th key={i} style={{ textAlign: align as 'left' | 'right', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, padding: `0 16px 12px`, paddingLeft: i === 0 ? padX as number : 16, paddingRight: i === 5 ? padX as number : 16, whiteSpace: 'nowrap' }}>{label}</th>
                     ))}
-                  </select>
-                  <select
-                    value={matchExp}
-                    onChange={(e) => setMatchExp(e.target.value)}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-                  >
-                    <option value="">Experience level...</option>
-                    <option value="0-2">Junior (0-2 yrs)</option>
-                    <option value="2-5">Mid (2-5 yrs)</option>
-                    <option value="5">Senior (5+ yrs)</option>
-                  </select>
-                  <select
-                    value={matchSalary}
-                    onChange={(e) => setMatchSalary(e.target.value)}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-                  >
-                    <option value="">Salary range...</option>
-                    <option value="1500">$1,000–$1,500/mo</option>
-                    <option value="2000">$1,500–$2,000/mo</option>
-                    <option value="2500">$2,000–$2,500/mo</option>
-                    <option value="9999">$2,500+/mo</option>
-                  </select>
-                  <button
-                    onClick={runMatch}
-                    className="rounded-lg px-4 py-2 text-xs font-700 text-white"
-                    style={{ background: 'var(--green)' }}
-                  >
-                    Find best matches →
-                  </button>
-                  {matchResults && (
-                    <button
-                      onClick={() => setMatchResults(null)}
-                      className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--light)] hover:text-[var(--mid)]"
-                    >
-                      Clear
-                    </button>
+                  </tr>
+                </thead>
+                <tbody>
+                  {display.length === 0 ? (
+                    <tr><td colSpan={6} style={{ padding: '48px 0', textAlign: 'center', fontSize: 14, color: NW.gray400 }}>No candidates found.</td></tr>
+                  ) : (
+                    display.map((c) => {
+                      const act = lastActivity(c);
+                      const active = isActiveCandidate(c);
+                      const sal = monthlySalary(c);
+                      return (
+                        <tr key={c.id} onClick={() => router.push(`/candidates/${c.id}`)} className="nw-row" style={{ cursor: 'pointer' }}>
+                          <td style={{ padding: '14px 16px', paddingLeft: 22, borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                              {c.photoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={c.photoUrl} alt={c.name} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} />
+                              ) : (
+                                <NWAvatar initials={initials(c.name) || '—'} size={38} bg={colorFor(c.id)} />
+                              )}
+                              <span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{c.name || 'No name'}</span>
+                                  {isEmpty(c) && <span style={{ fontSize: 9, fontWeight: 700, color: NW.rose600, background: NW.rose50, borderRadius: 999, padding: '1px 6px' }}>Empty</span>}
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+                                  <Icon name="map-pin" size={12} color={NW.gray400} />{candCity(c) ? [candCity(c), c.country].filter(Boolean).join(' · ') : (c.email || '—')}
+                                </span>
+                              </span>
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px', borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
+                            <span style={{ fontSize: 13, color: NW.gray700 }}>{candRole(c) || '—'}</span>
+                          </td>
+                          <td style={{ padding: '14px 16px', borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: active ? NW.green600 : NW.gray500 }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: active ? NW.green500 : NW.gray300 }} />
+                              {active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px', borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
+                            <span style={{ fontFamily: MONO, fontSize: 13, color: sal ? NW.gray700 : NW.gray300 }}>{sal || '—'}</span>
+                          </td>
+                          <td style={{ padding: '14px 16px', borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
+                            {act ? (
+                              <span style={{ fontSize: 12.5, color: NW.gray600 }}>
+                                <span style={{ color: NW.gray400 }}>Applied to </span>{act.title}
+                                <span style={{ display: 'block', fontSize: 11, color: NW.gray400, marginTop: 1 }}>{act.when}{act.stage ? ` · ${act.stage}` : ''}</span>
+                              </span>
+                            ) : <span style={{ fontSize: 12.5, color: NW.gray300 }}>—</span>}
+                          </td>
+                          <td style={{ padding: '14px 16px', paddingRight: 22, borderTop: `1px solid ${NW.gray100}`, textAlign: 'right', verticalAlign: 'middle' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }} title="Delete candidate" style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${NW.gray200}`, background: NW.white, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Trash2 className="h-3.5 w-3.5" style={{ color: NW.rose500 }} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); router.push(`/candidates/${c.id}`); }} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${NW.gray200}`, background: NW.white, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Icon name="chevron-right" size={15} color={NW.gray500} />
+                              </button>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
-                </div>
-              </div>
+                </tbody>
+              </table>
             </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap gap-2">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, email, skill..."
-                  className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-              >
-                <option value="">All statuses</option>
-                <option value="new">New</option>
-                <option value="screening">Screening</option>
-                <option value="interviewing">Interviewing</option>
-                <option value="offer">Offer</option>
-                <option value="hired">Hired</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </div>
-
-            {/* Table */}
-            {loading ? (
-              <div className="flex h-40 items-center justify-center">
-                <Spinner />
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-                <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-                  <div>Candidate</div>
-                  <div>Role</div>
-                  <div>Skills</div>
-                  <div>Status</div>
-                  <div></div>
-                </div>
-                {display.length === 0 ? (
-                  <div className="py-16 text-center text-sm text-[var(--light)]">
-                    No candidates found.
-                  </div>
-                ) : (
-                  display.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer ${isEmpty(c) ? 'opacity-60' : ''}`}
-                      onClick={() => router.push(`/candidates/${c.id}`)}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {c.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={c.photoUrl}
-                            alt={c.name}
-                            className="h-8 w-8 shrink-0 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-700 text-white"
-                            style={{ background: isEmpty(c) ? 'var(--border)' : 'linear-gradient(135deg, var(--green), var(--gd))' }}
-                          >
-                            {initials(c.name)}
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="truncate text-xs font-600 text-[var(--black)]">{c.name || <span className="italic text-[var(--light)]">No name</span>}</p>
-                            <span className="shrink-0 rounded font-mono text-[9px] font-600 text-[var(--light)]">{c.code ?? c.id}</span>
-                            {isEmpty(c) && (
-                              <span className="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-700 text-red-500">Empty</span>
-                            )}
-                          </div>
-                          <p className="truncate text-[10px] text-[var(--light)]">{c.email || '—'}</p>
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs text-[var(--mid)]">
-                          {c.role || c.targetRole || c.currentRole || c.headline || '—'}
-                        </p>
-                        {c.activePipelineCode ? (
-                          <p className="truncate text-[10px] text-[var(--green)] font-500">
-                            {c.activePipelineCode}
-                            {c.activePipelineStage ? ` · ${c.activePipelineStage.replace(/-/g, ' ')}` : ''}
-                          </p>
-                        ) : c.currentCompany ? (
-                          <p className="truncate text-[10px] text-[var(--light)]">{c.currentCompany}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {(c.skills ?? []).slice(0, 3).map((s, i) => (
-                          <span
-                            key={i}
-                            className="rounded-full bg-[var(--bg)] px-2 py-0.5 text-[10px] font-500 text-[var(--mid)]"
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                      <div>
-                        {c.status ? (
-                          <Badge label={c.status} variant="status" />
-                        ) : (
-                          <span className="text-xs text-[var(--light)]">—</span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/candidates/${c.id}`);
-                          }}
-                          className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(c);
-                          }}
-                          className="rounded-lg border border-[var(--border)] p-1 text-[var(--light)] hover:border-red-300 hover:bg-red-50 hover:text-red-500"
-                          title="Delete candidate"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+          </NWCard>
+        )}
       </div>
 
       {/* Delete confirmation modal */}

@@ -7,7 +7,6 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { OpeningDetail } from '@/components/openings/opening-detail';
 import { useAuth } from '@/hooks/use-auth';
-import { ChevronLeft } from 'lucide-react';
 import type { Opening, Organization } from '@/lib/types';
 
 export default function OpeningDetailPage() {
@@ -39,27 +38,6 @@ export default function OpeningDetailPage() {
   return (
     <MainLayout>
       <div className="space-y-5">
-        {/* Back + header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <button
-              onClick={() => router.push('/openings')}
-              className="mb-2 flex items-center gap-1 text-xs text-[var(--light)] hover:text-[var(--green)]"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              All openings
-            </button>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              {loading ? 'Loading…' : (opening?.title ?? 'Opening not found')}
-            </h1>
-            {opening && (
-              <p className="mt-0.5 text-xs text-[var(--light)]">
-                {opening.orgName ?? '—'} · <span className="font-mono">{opening.code ?? opening.id}</span>
-              </p>
-            )}
-          </div>
-        </div>
-
         {loading && (
           <div className="flex h-40 items-center justify-center">
             <Spinner />

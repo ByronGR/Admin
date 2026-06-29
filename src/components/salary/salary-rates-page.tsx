@@ -13,7 +13,9 @@ import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
 import { fmtNumber, fmtCurrencyRange } from '@/lib/utils';
 import type { Placement } from '@/lib/types';
-import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
+import { AlertTriangle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
+import { PageHeader } from '@/components/nw/shell-ui';
+import { Button } from '@/components/nw/primitives';
 
 // ─── NCR formula ──────────────────────────────────────────────────────────────
 
@@ -188,25 +190,12 @@ export default function SalaryRatesPage() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              FX Calculator & Salary Rates
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              NCR conversion, COP salary benchmarks, and smart billing suggestions.
-            </p>
-          </div>
-          <button
-            onClick={loadFX}
-            disabled={fxLoading}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${fxLoading ? 'animate-spin' : ''}`} />
-            Refresh FX rate
-          </button>
-        </div>
+        <PageHeader
+          overline="Insights"
+          title="FX & rates"
+          subtitle="NCR conversion, COP salary benchmarks, and smart billing suggestions."
+          actions={<Button variant="secondary" size="md" icon="refresh-cw" onClick={loadFX} disabled={fxLoading}>Refresh FX rate</Button>}
+        />
 
         {/* FX Rate bar */}
         <div className="rounded-2xl border border-[var(--border)] bg-white p-5">

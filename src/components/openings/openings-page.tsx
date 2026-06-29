@@ -12,33 +12,73 @@ import {
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
-import { sortByTimestamp, generateCode } from '@/lib/utils';
-import type { Opening } from '@/lib/types';
-import { ApprovalBadge } from './opening-detail';
-import { Search, Plus, ChevronRight } from 'lucide-react';
+import { sortByTimestamp, generateCode, fmtCurrency } from '@/lib/utils';
+import type { Opening, Pipeline } from '@/lib/types';
+import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader, Card as NWCard, StatusBadge } from '@/components/nw/shell-ui';
+
+type OpeningTab = 'active' | 'pending' | 'paused' | 'completed';
+
+// Map a real opening (status + brief/approval state) to the prototype's tabs.
+function openingTab(o: Opening): OpeningTab {
+  const s = o.status;
+  if (s === 'paused') return 'paused';
+  if (s === 'filled' || s === 'cancelled') return 'completed';
+  if (s === 'draft') return 'pending';
+  if (o.briefStatus === 'submitted' || o.briefStatus === 'changes_requested') return 'pending';
+  return 'active';
+}
+
+function statusKey(o: Opening): string {
+  const t = openingTab(o);
+  return t === 'active' ? 'active' : t === 'pending' ? 'pending' : t === 'paused' ? 'paused' : 'completed';
+}
 
 export default function OpeningsPage() {
   const { showToast } = useToast();
   const router = useRouter();
 
   const [openings, setOpenings] = useState<Opening[]>([]);
+  const [counts, setCounts] = useState<Record<string, { pipeline: number; review: number }>>({});
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [tab, setTab] = useState<OpeningTab>('active');
 
   useEffect(() => {
-    getDocs(collection(db, 'openings'))
-      .then((snap) => {
-        setOpenings(sortByTimestamp(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
+    Promise.allSettled([
+      getDocs(collection(db, 'openings')),
+      getDocs(collection(db, 'pipelines')),
+      getDocs(collection(db, 'organizations')),
+    ])
+      .then(([oRes, pRes, orgRes]) => {
+        if (oRes.status === 'fulfilled') {
+          setOpenings(sortByTimestamp(oRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
+        } else {
+          showToast('Failed to load openings', 'error');
+        }
+        if (orgRes.status === 'fulfilled') {
+          const m: Record<string, string> = {};
+          orgRes.value.docs.forEach((d) => {
+            const data = d.data() as { name?: string; shortId?: string };
+            if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; }
+          });
+          setOrgNames(m);
+        }
+        if (pRes.status === 'fulfilled') {
+          const m: Record<string, { pipeline: number; review: number }> = {};
+          pRes.value.docs.forEach((d) => {
+            const p = d.data() as Pipeline;
+            if (!p.code) return;
+            const cands = p.candidates ?? [];
+            m[p.code] = { pipeline: cands.length, review: cands.filter((c) => c.pendingReview).length };
+          });
+          setCounts(m);
+        }
         setLoading(false);
       })
-      .catch(() => {
-        showToast('Failed to load openings', 'error');
-        setLoading(false);
-      });
+      .catch(() => setLoading(false));
   }, []);
 
   // One-click creation: generate a code, write the opening + pipeline, then go
@@ -70,118 +110,126 @@ export default function OpeningsPage() {
     }
   }
 
-  const filtered = openings.filter((o) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || [o.title, o.orgName, o.recruiter, o.department].join(' ').toLowerCase().includes(q);
-    const matchStatus = !statusFilter || o.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const tabCounts: Record<OpeningTab, number> = {
+    active: openings.filter((o) => openingTab(o) === 'active').length,
+    pending: openings.filter((o) => openingTab(o) === 'pending').length,
+    paused: openings.filter((o) => openingTab(o) === 'paused').length,
+    completed: openings.filter((o) => openingTab(o) === 'completed').length,
+  };
+  const rows = openings.filter((o) => openingTab(o) === tab);
+
+  const TABS: { id: OpeningTab; label: string }[] = [
+    { id: 'active', label: 'Active' },
+    { id: 'pending', label: 'Pending approval' },
+    { id: 'paused', label: 'Paused' },
+    { id: 'completed', label: 'Completed' },
+  ];
+
+  function band(o: Opening): string {
+    if (o.hideSalary) return 'Hidden';
+    const cur = o.salaryCurrency || 'USD';
+    const min = o.salaryMin && o.salaryMin > 0 ? o.salaryMin : null;
+    const max = o.salaryMax && o.salaryMax > 0 ? o.salaryMax : null;
+    if (min && max) return `${fmtCurrency(min, cur)}–${fmtCurrency(max, cur)}`;
+    if (min) return `${fmtCurrency(min, cur)}+`;
+    if (max) return `Up to ${fmtCurrency(max, cur)}`;
+    return '—';
+  }
 
   return (
     <MainLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Openings</h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              {openings.length} opening{openings.length !== 1 ? 's' : ''} across all organizations
-            </p>
-          </div>
-          <button
-            onClick={handleNewOpening}
-            disabled={creating}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white disabled:opacity-60"
-            style={{ background: 'var(--green)' }}
-          >
-            {creating ? <Spinner size="sm" /> : <Plus className="h-3.5 w-3.5" />}
+      <PageHeader
+        overline="Pipeline"
+        title="Openings"
+        subtitle="Requisitions you've scoped for partners — from approval through to filled."
+        actions={
+          <NWButton variant="primary" size="md" icon={creating ? undefined : 'plus'} onClick={handleNewOpening} disabled={creating}>
             {creating ? 'Creating…' : 'New opening'}
-          </button>
-        </div>
+          </NWButton>
+        }
+      />
 
-        {/* Toolbar */}
-        <div className="flex flex-wrap gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search openings..."
-              className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-          >
-            <option value="">All statuses</option>
-            <option value="open">Open</option>
-            <option value="paused">Paused</option>
-            <option value="filled">Filled</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="draft">Draft</option>
-          </select>
-        </div>
-
-        {/* Table */}
-        {loading ? (
-          <div className="flex h-40 items-center justify-center">
-            <Spinner />
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-              <div>Opening</div>
-              <div>ID</div>
-              <div>Organization</div>
-              <div>Recruiter</div>
-              <div>Status</div>
-              <div />
-            </div>
-            {filtered.length === 0 ? (
-              <div className="py-16 text-center text-sm text-[var(--light)]">
-                No openings found.
-              </div>
-            ) : (
-              filtered.map((o) => (
-                <div
-                  key={o.id}
-                  className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer"
-                  onClick={() => router.push(`/openings/${o.code ?? o.id}`)}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-600 text-[var(--black)]">{o.title || '—'}</p>
-                    <p className="text-[10px] text-[var(--light)]">
-                      {o.department ?? '—'} · {o.location ?? 'Remote'}
-                    </p>
-                  </div>
-                  <div className="text-[10px] font-600 text-[var(--mid)] font-mono">{o.code ?? '—'}</div>
-                  <div className="text-xs text-[var(--mid)]">{o.orgName ?? '—'}</div>
-                  <div className="text-xs text-[var(--mid)]">{o.recruiter ?? '—'}</div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge label={o.status} variant="status" />
-                    {o.briefStatus === 'submitted' && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-700 text-blue-700">⏳ Brief pending</span>
-                    )}
-                    {o.briefStatus === 'changes_requested' && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-700 text-amber-700">⚠ Changes requested</span>
-                    )}
-                    {o.briefStatus === 'approved' && o.approvalStatus !== 'published' && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-700 text-emerald-700">✓ Brief approved</span>
-                    )}
-                    {o.published && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-700 text-green-700">🌐 Live</span>
-                    )}
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-[var(--light)]" />
-                </div>
-              ))
-            )}
-          </div>
-        )}
+      {/* Status tabs */}
+      <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: NW.gray50, borderRadius: 10, border: `1px solid ${NW.gray100}`, marginBottom: 16 }}>
+        {TABS.map((t) => {
+          const on = t.id === tab;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{ fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', border: 'none', color: on ? NW.black : NW.gray500, background: on ? NW.white : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,0.06)' : 'none', borderRadius: 7, padding: '6px 13px', display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            >
+              {t.label}
+              <span style={{ fontFamily: MONO, fontSize: 11, color: on ? NW.teal700 : NW.gray400 }}>{tabCounts[t.id]}</span>
+            </button>
+          );
+        })}
       </div>
 
+      {loading ? (
+        <div style={{ display: 'flex', height: 160, alignItems: 'center', justifyContent: 'center' }}><Spinner /></div>
+      ) : (
+        <NWCard pad={0}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.4fr 0.9fr 1fr 1fr 0.7fr', gap: 16, padding: '16px 20px' }}>
+            {['Opening', 'Location · band', 'Pipeline', 'Review', 'Owner', ''].map((h, i) => (
+              <div key={h || i} style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: NW.gray400, textAlign: i === 5 ? 'right' : 'left' }}>{h}</div>
+            ))}
+          </div>
+          {rows.length === 0 ? (
+            <div style={{ padding: '28px 20px', fontSize: 13, color: NW.gray400, borderTop: `1px solid ${NW.gray100}` }}>
+              No {tab === 'pending' ? 'requisitions awaiting approval' : `${tab} openings`} right now.
+            </div>
+          ) : (
+            rows.map((o) => {
+              const c = counts[o.code ?? ''] ?? { pipeline: 0, review: 0 };
+              return (
+                <div
+                  key={o.id}
+                  onClick={() => router.push(`/openings/${o.code ?? o.id}`)}
+                  className="nw-grid-row"
+                  style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.4fr 0.9fr 1fr 1fr 0.7fr', gap: 16, alignItems: 'center', padding: '16px 20px', borderTop: `1px solid ${NW.gray100}`, cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 13, minWidth: 0 }}>
+                    <span style={{ width: 38, height: 38, borderRadius: 9, background: NW.teal500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={NW.teal600} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title || 'Untitled role'}</span>
+                        <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px', flexShrink: 0 }}>{o.code ?? '—'}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>
+                        {(o.orgName || orgNames[o.orgId] || 'No organization')}{o.department ? ` · ${o.department}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: NW.gray600 }}>
+                    <div>{o.location ?? 'Remote'}</div>
+                    <div style={{ color: NW.gray400, marginTop: 2, fontFamily: MONO, fontSize: 11.5 }}>{band(o)}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={NW.gray400} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                    <span style={{ fontFamily: MONO, fontSize: 13.5, color: NW.gray700 }}>{c.pipeline}</span>
+                  </div>
+                  <div>
+                    {c.review > 0 ? (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#A16207', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 999, padding: '3px 9px' }}>{c.review} to review</span>
+                    ) : (
+                      <span style={{ fontSize: 12.5, color: NW.gray400 }}>Clear</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span style={{ fontSize: 12.5, color: NW.gray600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.recruiter ?? '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <StatusBadge status={statusKey(o)} label={tab === 'pending' ? 'Pending' : tab === 'completed' ? (o.status === 'filled' ? 'Filled' : 'Completed') : (o.status ? o.status[0].toUpperCase() + o.status.slice(1) : 'Active')} />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </NWCard>
+      )}
     </MainLayout>
   );
 }

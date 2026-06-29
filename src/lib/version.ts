@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '0.15.2';
+export const APP_VERSION = '1.0.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.0.0',
+    date: '2026-06-29',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Complete Admin redesign — a new design system (NW palette, Poppins, shared primitives) and a full-height shell with a new sidebar, centered global search, and rounded content inset.',
+          'Rebuilt every section to the new design: Dashboard, Organizations (list + detail), Pipeline (list + kanban board), Candidates (list + detail), Openings (list + 3-tab detail: Pipeline & sourcing / Kick-off notes / Jobs listing) and the stepped kick-off brief wizard.',
+          'Rebuilt Hired into a staffing + HR/EOR hub: placements list plus a 7-tab hire profile (Overview, Compensation, Time off, Reviews, EOR & benefits, Documents, Payments).',
+          'New Managed teams module — group a client’s hires into pods with a lead and health, backed by a managedTeams collection.',
+          'New SPP (Strategic Partner Program) page listing strategic-partner organizations with program totals (end-clients, hires, open roles, spend).',
+          'Rebuilt Team, Profile, Settings and FX & rates to the new design.',
+          'Hold-to-delete safety control: every destructive delete now requires a press-and-hold to confirm.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.15.2',
     date: '2026-06-26',

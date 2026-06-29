@@ -35,11 +35,14 @@ import {
   arrayUnion,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
+import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
+import { PageHeader } from '@/components/nw/shell-ui';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
@@ -60,6 +63,8 @@ import {
   ExternalLink,
   FileText,
   Inbox,
+  Users,
+  Move,
 } from 'lucide-react';
 import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
 
@@ -89,6 +94,18 @@ function normalizeStage(stage: string): StageKey {
   if (PIPELINE_STAGES.some((st) => st.key === s)) return s as StageKey;
   return 'applied';
 }
+
+// Stage colours for the redesign stage-spread bar / dots.
+const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
+  'applied': NW.gray400,
+  'background-check': NW.blue500,
+  'interview': '#6366F1',
+  'assessment': NW.violet500,
+  'partner-review': NW.yellow500,
+  'partner-interview': NW.teal500,
+  'hired': NW.green600,
+  'not-selected': NW.gray300,
+};
 
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
@@ -143,6 +160,12 @@ export default function PipelinePage() {
   // candidateId → Nearwork Score, loaded from the assessments collection so the
   // board cards can surface each candidate's score at a glance (spec 4d).
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
+  // Pending-applicant count per pipeline (openingCode → count), so each list row
+  // can show total candidates INCLUDING applicants not yet pulled into a stage.
+  const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
+  // org id/shortId → name, so rows can show the client org even when the
+  // pipeline doc only stored orgId (not a denormalized orgName).
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activePipelineCode, setActivePipelineCode] = useState<string | null>(null);
@@ -237,6 +260,39 @@ export default function PipelinePage() {
         console.error('Pipeline: failed to load assessment scores', e);
       }
     })();
+  }, []);
+
+  // Count pending applicants (applications not yet approved/rejected) per opening
+  // so each pipeline row can show "candidates incl. applicants". Live so the
+  // number drops as applicants get approved into the pipeline.
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+      const counts: Record<string, number> = {};
+      snap.docs.forEach((d) => {
+        const a = d.data() as { openingCode?: string; status?: string; inPipeline?: boolean };
+        const pending = !a.inPipeline && (!a.status || a.status === 'applied' || a.status === 'pending');
+        if (pending && a.openingCode) counts[a.openingCode] = (counts[a.openingCode] ?? 0) + 1;
+      });
+      setApplicantCounts(counts);
+    }, () => { /* non-critical */ });
+    return unsub;
+  }, []);
+
+  // Resolve org names so rows can show the client org from the pipeline's orgId.
+  useEffect(() => {
+    getDocs(collection(db, 'organizations'))
+      .then((snap) => {
+        const map: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const data = d.data() as { name?: string; shortId?: string };
+          if (data.name) {
+            map[d.id] = data.name;
+            if (data.shortId) map[data.shortId] = data.name;
+          }
+        });
+        setOrgNames(map);
+      })
+      .catch(() => { /* non-critical */ });
   }, []);
 
   // Deep-link: /pipeline?focus=<code> opens that pipeline's workspace directly
@@ -554,17 +610,12 @@ export default function PipelinePage() {
     <MainLayout>
       <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-              Pipeline
-            </h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              {filtered.length} pipeline{filtered.length !== 1 ? 's' : ''}
-              {activePipeline ? ` · Viewing ${activePipeline.code}` : ''}
-            </p>
-          </div>
-          {activePipeline && (
+        {activePipeline ? (
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
+              <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+            </div>
             <button
               onClick={() => closePipeline()}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
@@ -572,32 +623,53 @@ export default function PipelinePage() {
               <X className="h-3.5 w-3.5" />
               Back to list
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <PageHeader
+            overline="Pipeline"
+            title="Pipelines"
+            subtitle="Each opening runs its own pipeline — open one to manage candidates by stage."
+          />
+        )}
 
-        {/* Toolbar */}
+        {/* Toolbar — Active / All toggle + count */}
         {!activePipeline && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search pipeline, org, recruiter..."
-                className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
-              />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([['active', 'Active'], ['all', 'All']] as const).map(([k, label]) => {
+                const on = statusFilter === k || (k === 'active' && statusFilter === 'active') || (k === 'all' && statusFilter === 'all');
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setStatusFilter(k)}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: on ? NW.white : NW.gray600,
+                      background: on ? NW.black : NW.white,
+                      border: `1px solid ${on ? NW.black : NW.gray200}`,
+                      borderRadius: 9,
+                      padding: '7px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <div style={{ position: 'relative', minWidth: 200, marginLeft: 6 }}>
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search pipeline, org, recruiter…"
+                  className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--green)]"
+                />
+              </div>
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="on-hold">On hold</option>
-              <option value="finished">Finished</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            <span style={{ fontSize: 12.5, color: NW.gray500 }}>
+              {filtered.length} pipeline{filtered.length !== 1 ? 's' : ''} · {filtered.reduce((s, p) => s + (p.candidates?.length ?? 0), 0)} candidates total
+            </span>
           </div>
         )}
 
@@ -641,6 +713,8 @@ export default function PipelinePage() {
                 key={p.code}
                 pipeline={p}
                 scoreMap={scoreMap}
+                applicantCount={applicantCounts[p.code] ?? 0}
+                orgLabel={p.orgName || orgNames[p.orgId] || ''}
                 expanded={expandedRows.has(p.code)}
                 onToggle={() => toggleRow(p.code)}
                 onOpen={() => openPipeline(p.code)}
@@ -948,6 +1022,8 @@ export default function PipelinePage() {
 function PipelineRow({
   pipeline,
   scoreMap,
+  applicantCount = 0,
+  orgLabel = '',
   expanded,
   onToggle,
   onOpen,
@@ -963,6 +1039,8 @@ function PipelineRow({
 }: {
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
+  applicantCount?: number;
+  orgLabel?: string;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -976,17 +1054,22 @@ function PipelineRow({
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [spreadOpen, setSpreadOpen] = useState(false);
+  const [rowHover, setRowHover] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
     await onDelete(pipeline.id);
     setDeleting(false);
-    setConfirmDelete(false);
   }
 
-  const pendingApplicants = (pipeline.candidates ?? []).filter((c) => c.pendingReview).length;
+  const cands = pipeline.candidates ?? [];
+  const pendingApplicants = cands.filter((c) => c.pendingReview).length;
+  const spread = PIPELINE_STAGES.map((st) => ({ st, n: cands.filter((c) => normalizeStage(c.stage) === st.key).length }));
+  const atOffer = spread.find((x) => x.st.key === 'hired')?.n ?? 0;
+  const sourced = spread.find((x) => x.st.key === 'applied')?.n ?? 0;
+  const totalWithApplicants = cands.length + applicantCount;
 
   const statusColor =
     pipeline.status === 'active'
@@ -997,74 +1080,91 @@ function PipelineRow({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border transition-all ${
+      className={`rounded-2xl border transition-all ${
         pipeline.status === 'cancelled'
           ? 'border-red-100 bg-red-50/30'
           : 'border-[var(--border)] bg-white'
       }`}
     >
       <div
-        className="flex cursor-pointer items-center gap-3 px-5 py-4"
-        onClick={onToggle}
+        onClick={onOpen}
+        onMouseEnter={() => setRowHover(true)}
+        onMouseLeave={() => setRowHover(false)}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 2.4fr) 96px minmax(0, 1.7fr) 96px 150px 88px',
+          alignItems: 'center',
+          gap: 16,
+          padding: '14px 20px',
+          cursor: 'pointer',
+          background: rowHover ? NW.gray50 : 'transparent',
+          transition: 'background 120ms',
+          borderRadius: expanded ? '16px 16px 0 0' : 16,
+        }}
       >
-        <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-600 text-[var(--black)]">
-            {pipeline.title}
-          </p>
-          <p className="text-xs text-[var(--light)]">
-            {pipeline.code}
-            {pipeline.orgName ? ` · ${pipeline.orgName}` : ''}
-          </p>
+        {/* Pipeline title + code + org */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pipeline.title || 'Untitled pipeline'}</span>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px', flexShrink: 0 }}>{pipeline.code}</span>
+          </div>
+          <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {[orgLabel, pipeline.recruiter].filter(Boolean).join(' · ') || 'No organization linked'}
+          </div>
         </div>
-        <div className="hidden items-center gap-4 sm:flex">
-          {pendingApplicants > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-[var(--green-soft)] px-2.5 py-0.5 text-[11px] font-700 text-[var(--green)]">
-              <Inbox className="h-3 w-3" />
-              {pendingApplicants} new
-            </span>
-          )}
-          {pipeline.recruiter && (
-            <span className="text-xs text-[var(--mid)]">{pipeline.recruiter}</span>
-          )}
-          <Badge label={pipeline.status} variant="status" />
+
+        {/* Cands (in-pipeline only) */}
+        <div style={{ whiteSpace: 'nowrap' }}>
+          <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 500, color: NW.black }}>{cands.length}</span>
+          <span style={{ fontSize: 11, color: NW.gray400, marginLeft: 4 }}>cands</span>
+          {pendingApplicants > 0 && <div style={{ fontSize: 11, color: '#A16207', fontWeight: 600, marginTop: 2 }}>{pendingApplicants} to review</div>}
         </div>
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {confirmDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600 font-500">Delete pipeline?</span>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60"
-              >
-                {deleting ? 'Deleting…' : 'Yes'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs text-[var(--mid)] hover:underline"
-              >
-                Cancel
-              </button>
+
+        {/* Stage spread bar + breakdown popover */}
+        <div
+          style={{ position: 'relative', minWidth: 0 }}
+          onMouseEnter={() => setSpreadOpen(true)}
+          onMouseLeave={() => setSpreadOpen(false)}
+        >
+          <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: NW.gray100 }}>
+            {spread.map(({ st, n }) => (n ? <div key={st.key} style={{ flex: n, background: STAGE_SPREAD_COLOR[st.key] }} /> : null))}
+          </div>
+          <div style={{ fontSize: 10.5, color: NW.gray400, marginTop: 5 }}>{atOffer} hired · {sourced} applied</div>
+          {spreadOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 10px)', left: 0, zIndex: 80, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 12px 32px rgba(0,0,0,0.16)', padding: '11px 13px', minWidth: 200, pointerEvents: 'none' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 9 }}>Stage breakdown</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {spread.map(({ st, n }) => (
+                  <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_SPREAD_COLOR[st.key], flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: n ? NW.gray700 : NW.gray400, flex: 1 }}>{st.label}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: n ? NW.black : NW.gray300 }}>{n}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
           )}
-          <button
-            onClick={onOpen}
-            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] hover:border-[var(--green)]"
-          >
-            Open workspace
+        </div>
+
+        {/* Status */}
+        <div><Badge label={pipeline.status} variant="status" /></div>
+
+        {/* Total candidates incl. applicants — between status and delete */}
+        <div
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: NW.teal50, border: `1px solid ${NW.teal500}33`, whiteSpace: 'nowrap', justifySelf: 'start' }}
+          title={`${cands.length} in pipeline + ${applicantCount} applicant${applicantCount === 1 ? '' : 's'} = ${totalWithApplicants} total`}
+        >
+          <Users className="h-3.5 w-3.5" style={{ color: NW.teal600 }} />
+          <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: NW.teal700 }}>{totalWithApplicants}</span>
+          {applicantCount > 0 && <span style={{ fontSize: 11, color: NW.teal600 }}>· {applicantCount} new</span>}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end' }} onClick={(e) => e.stopPropagation()}>
+          <HoldToDelete onConfirm={handleDelete} busy={deleting} size="sm" label="Hold to delete" hideIcon={false} title="Delete pipeline" />
+          <button onClick={onToggle} title={expanded ? 'Collapse board' : 'Expand board'} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[var(--light)] hover:border-[var(--green)] hover:text-[var(--green)]">
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-[var(--light)]" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-[var(--light)]" />
-          )}
         </div>
       </div>
 
@@ -1134,9 +1234,12 @@ function PipelineWorkspace({
 
   // The deal (spec 4g): how many candidates have been hired/placed in this
   // pipeline, alongside the partner (organization) name.
-  const hiredCount = (pipeline.candidates ?? []).filter(
-    (c) => normalizeStage(c.stage) === 'hired'
-  ).length;
+  const wsCands = pipeline.candidates ?? [];
+  const hiredCount = wsCands.filter((c) => normalizeStage(c.stage) === 'hired').length;
+  const avgScore = wsCands.length
+    ? Math.round(wsCands.reduce((s, c) => s + (scoreMap[c.candidateId] ?? c.score ?? 0), 0) / wsCands.length)
+    : 0;
+  const tileInitials = (pipeline.orgName || pipeline.title || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const [editRecruiter, setEditRecruiter] = useState(pipeline.recruiter ?? '');
   const [editManager, setEditManager] = useState(pipeline.accountManager ?? '');
   const [editStatus, setEditStatus] = useState(pipeline.status);
@@ -1158,78 +1261,52 @@ function PipelineWorkspace({
 
   return (
     <div className="space-y-4">
-      {/* Info strip */}
+      {/* Branded header + stat strip */}
       <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-        <div className="flex flex-wrap items-center gap-4 text-xs">
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Opening
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.code}</p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+            <span style={{ width: 46, height: 46, borderRadius: 12, background: NW.teal500, color: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>{tileInitials}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.03em', color: NW.black, margin: 0 }}>{pipeline.title || 'Untitled pipeline'}</h2>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: NW.gray500, background: NW.gray50, borderRadius: 6, padding: '2px 8px' }}>{pipeline.code}</span>
+                <Badge label={pipeline.status} variant="status" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 5, fontSize: 12.5, color: NW.gray600, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, color: NW.black }}>{pipeline.orgName || 'No organization'}</span>
+                <span style={{ color: NW.gray300 }}>·</span>
+                <span>Recruiter: {pipeline.recruiter || '—'}</span>
+                <span style={{ color: NW.gray300 }}>·</span>
+                <span>AM: {pipeline.accountManager || '—'}</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Partner
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.orgName ?? '—'}</p>
-          </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Recruiter
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.recruiter || '—'}</p>
-          </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Account Manager
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.accountManager || '—'}</p>
-          </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Candidates
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">{pipeline.candidates?.length ?? 0}</p>
-          </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Placements
-            </p>
-            <p className="mt-0.5 font-600 text-[var(--black)]">
-              {hiredCount > 0 ? `${hiredCount} hired` : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="font-600 uppercase tracking-wider text-[var(--light)]" style={{ fontSize: 10 }}>
-              Status
-            </p>
-            <p className="mt-0.5">
-              <Badge label={pipeline.status} variant="status" />
-            </p>
-          </div>
-          <div className="ml-auto flex gap-2">
-            <button
-              onClick={() => setShowEdit((v) => !v)}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-              Edit pipeline
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => setShowEdit((v) => !v)} className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]">
+              <Edit3 className="h-3.5 w-3.5" /> Edit pipeline
             </button>
-            <button
-              onClick={() => router.push(`/openings/${pipeline.code}`)}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              View opening
+            <button onClick={() => router.push(`/openings/${pipeline.code}`)} className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]">
+              <LayoutGrid className="h-3.5 w-3.5" /> View opening
             </button>
-            <button
-              onClick={() => window.open(`/kickoff?code=${pipeline.code}`, '_blank')}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <ClipboardList className="h-3.5 w-3.5" />
-              Kick-off Brief
+            <button onClick={() => window.open(`/kickoff?code=${pipeline.code}`, '_blank')} className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]">
+              <ClipboardList className="h-3.5 w-3.5" /> Kick-off Brief
             </button>
           </div>
+        </div>
+
+        {/* Stat strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 30, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${NW.gray100}`, flexWrap: 'wrap' }}>
+          {[
+            { l: 'In pipeline', v: wsCands.length, sub: 'candidates' },
+            { l: 'Avg. score', v: avgScore || '—', sub: 'pipeline quality' },
+            { l: 'Applicants', v: applicantCount, sub: 'to review' },
+            { l: 'Placements', v: hiredCount, sub: 'hired' },
+          ].map((s) => (
+            <div key={s.l}>
+              <div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 500, color: NW.black, lineHeight: 1 }}>{s.v}</div>
+              <div style={{ fontSize: 11, color: NW.gray500, marginTop: 4 }}>{s.l} · <span style={{ color: NW.gray400 }}>{s.sub}</span></div>
+            </div>
+          ))}
         </div>
 
         {showEdit && (
@@ -1386,6 +1463,12 @@ function KanbanBoard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
+      {!compact && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12, color: NW.gray500 }}>
+          <Move className="h-3.5 w-3.5" style={{ color: NW.gray400 }} />
+          Drag candidates between stages — changes sync to the client&apos;s portal.
+        </div>
+      )}
       <div className="flex gap-3 overflow-x-auto pb-3" style={{ minHeight: compact ? 180 : 320 }}>
         {PIPELINE_STAGES.map((stage) => {
           const stageCandidates = candidates.filter(
@@ -1411,8 +1494,11 @@ function KanbanBoard({
       </div>
       <DragOverlay>
         {dragging ? (
-          <div className="rounded-xl border border-[var(--green)] bg-white p-3 shadow-xl opacity-90">
-            <p className="text-xs font-600 text-[var(--black)]">{dragging.name}</p>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: NW.white, border: `1px solid ${NW.teal500}`, borderRadius: 12, padding: '10px 12px', boxShadow: '0 12px 28px rgba(0,0,0,0.16)' }}>
+            <span style={{ width: 28, height: 28, borderRadius: '50%', background: NW.teal500, color: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>
+              {(dragging.name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: NW.black }}>{formatCardName(dragging.name)}</span>
           </div>
         ) : null}
       </DragOverlay>
@@ -1447,34 +1533,37 @@ function KanbanColumn({
     id,
     data: { type: 'column', stage: stage.key },
   });
+  const color = STAGE_SPREAD_COLOR[stage.key];
 
   return (
-    <div
-      ref={setNodeRef}
-      className={`flex shrink-0 flex-col rounded-xl border transition-colors ${
-        isOver
-          ? 'border-[var(--green)] bg-[var(--green-soft)]'
-          : 'border-[var(--border)] bg-[var(--bg)]'
-      }`}
-      style={{ width: compact ? 160 : 200, minHeight: compact ? 160 : 300 }}
-    >
-      <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <span className="text-[11px] font-700 text-[var(--black)]">{stage.label}</span>
-        <span className="rounded-full bg-white px-1.5 text-[10px] font-700 text-[var(--mid)]">
-          {candidates.length}
+    <div ref={setNodeRef} style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, width: compact ? 184 : 224, minHeight: compact ? 160 : 300 }}>
+      {/* Column header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px 11px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: color }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: NW.black }}>{stage.label}</span>
+          {'clientAction' in stage && stage.clientAction && (
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.teal600 }} title="Client action stage">· client</span>
+          )}
         </span>
+        <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray500, background: NW.gray50, borderRadius: 999, padding: '1px 8px' }}>{candidates.length}</span>
       </div>
-      {'clientAction' in stage && stage.clientAction && (
-        <p className="px-3 pb-1 text-[9px] font-600 uppercase tracking-wider text-[var(--green)]">
-          Client action
-        </p>
-      )}
 
-      <SortableContext
-        items={candidates.map((c) => `cand-${c.candidateId}`)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="flex flex-1 flex-col gap-2 px-2 pb-2">
+      <SortableContext items={candidates.map((c) => `cand-${c.candidateId}`)} strategy={verticalListSortingStrategy}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 9,
+            background: isOver ? color + '12' : NW.offWhite,
+            border: `1.5px ${isOver ? 'dashed' : 'solid'} ${isOver ? color + '66' : NW.gray100}`,
+            borderRadius: 14,
+            padding: 10,
+            flex: 1,
+            minHeight: compact ? 140 : 220,
+            transition: 'background 120ms, border-color 120ms',
+          }}
+        >
           {candidates.map((c) => (
             <CandidateCard
               key={c.candidateId}
@@ -1486,9 +1575,12 @@ function KanbanColumn({
               compact={compact}
             />
           ))}
+          {candidates.length === 0 && (
+            <div style={{ fontSize: 11.5, color: NW.gray400, textAlign: 'center', padding: '20px 0' }}>{isOver ? 'Drop here' : 'Empty'}</div>
+          )}
           <button
             onClick={() => onAddCandidate(pipelineCode, stage.key)}
-            className="mt-auto rounded-lg border border-dashed border-[var(--border)] py-2 text-center text-[10px] font-600 text-[var(--light)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
+            style={{ marginTop: 'auto', borderRadius: 9, border: `1px dashed ${NW.gray200}`, padding: '7px 0', textAlign: 'center', fontSize: 11, fontWeight: 600, color: NW.gray400, background: 'transparent', cursor: 'pointer' }}
           >
             + Add
           </button>
@@ -1527,73 +1619,52 @@ function CandidateCard({
 
   const score = nearworkScore ?? candidate.score ?? 0;
   const engLevel = candidate.englishScore?.level;
+  const cardInitials = (candidate.name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  const scoreColor = score >= 80 ? NW.teal600 : score >= 60 ? '#A16207' : NW.gray500;
+  const scoreBg = score >= 80 ? NW.teal50 : score >= 60 ? NW.yellow50 : NW.gray50;
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.03)', cursor: 'pointer' }}
       {...attributes}
       {...listeners}
       onClick={() => router.push(`/candidates/${candidate.candidateId}`)}
-      className="cursor-pointer rounded-lg border border-[var(--border)] bg-white p-2.5 shadow-sm hover:border-[var(--green)] hover:shadow-md transition-all"
+      className="hover:border-[var(--green)] hover:shadow-md transition-all"
       title="Open candidate profile"
     >
-      {/* Top: Nearwork Score */}
-      <div className="flex items-center justify-between gap-2">
-        {score > 0 ? (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-800 ${
-              score >= 80
-                ? 'bg-green-100 text-green-700'
-                : score >= 60
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-600'
-            }`}
-            title={`Nearwork Score: ${score}`}
-          >
-            NW {score}
-          </span>
-        ) : (
-          <span className="rounded-full bg-[var(--bg)] px-1.5 py-0.5 text-[9px] font-700 text-[var(--light)]" title="No assessment yet">
-            No score
-          </span>
-        )}
-        {engLevel && (
-          <span
-            className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-700 text-blue-700"
-            title={`English: ${engLevel}`}
-          >
-            {engLevel}
-          </span>
-        )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <span style={{ width: 32, height: 32, borderRadius: '50%', background: NW.teal500, color: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{cardInitials}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCardName(candidate.name)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            {score > 0 ? (
+              <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color: scoreColor, background: scoreBg, border: `1px solid ${scoreColor}22`, borderRadius: 5, padding: '1px 6px' }} title={`Nearwork Score: ${score}`}>NW {score}</span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 600, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px' }} title="No assessment yet">No score</span>
+            )}
+            {engLevel && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#1D4ED8', background: NW.blue50, borderRadius: 5, padding: '1px 6px' }} title={`English: ${engLevel}`}>{engLevel}</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Name: first name + last initial */}
-      <p className="mt-1.5 truncate text-xs font-600 leading-tight text-[var(--black)]">
-        {formatCardName(candidate.name)}
-      </p>
-
       {!compact && (
-        <div className="mt-2 flex items-center gap-1">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 11, paddingTop: 10, borderTop: `1px solid ${NW.gray100}` }}>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenBrief(candidate, pipelineCode);
-            }}
-            className="flex flex-1 items-center justify-center gap-1 rounded py-1 text-[9px] font-600 text-[var(--mid)] hover:bg-[var(--bg)] hover:text-[var(--green)]"
+            onClick={(e) => { e.stopPropagation(); onOpenBrief(candidate, pipelineCode); }}
+            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 7, padding: '5px 0', fontSize: 10.5, fontWeight: 600, color: NW.gray600, background: 'transparent', border: 'none', cursor: 'pointer' }}
+            className="hover:bg-[var(--bg)] hover:text-[var(--green)]"
           >
-            <ClipboardList className="h-2.5 w-2.5" />
-            Brief
+            <ClipboardList className="h-2.5 w-2.5" /> Brief
           </button>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(candidate.candidateId, pipelineCode);
-            }}
-            className="flex flex-1 items-center justify-center gap-1 rounded py-1 text-[9px] font-600 text-red-400 hover:bg-red-50 hover:text-red-600"
+            onClick={(e) => { e.stopPropagation(); onRemove(candidate.candidateId, pipelineCode); }}
+            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 7, padding: '5px 0', fontSize: 10.5, fontWeight: 600, color: '#EF7676', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            className="hover:bg-red-50 hover:text-red-600"
           >
-            <Trash2 className="h-2.5 w-2.5" />
-            Remove
+            <Trash2 className="h-2.5 w-2.5" /> Remove
           </button>
         </div>
       )}

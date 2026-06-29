@@ -23,7 +23,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, initials } from '@/lib/utils';
 import type { UserProfile, StaffInvite, StaffRole } from '@/lib/types';
 import { STAFF_ROLE_LABELS } from '@/lib/types';
-import { Search, Plus, Mail, UserX, UserCheck, Copy, Check } from 'lucide-react';
+import { Search, Mail, UserX, UserCheck, Copy, Check } from 'lucide-react';
+import { NW, MONO, Avatar, Button, Chip } from '@/components/nw/primitives';
+import { PageHeader, Card } from '@/components/nw/shell-ui';
 
 // ─── Role badge colors ────────────────────────────────────────────────────────
 
@@ -238,24 +240,26 @@ export default function UsersPage() {
   return (
     <MainLayout>
       <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Team</h1>
-            <p className="mt-0.5 text-xs text-[var(--light)]">
-              {staffMembers.length} staff member{staffMembers.length !== 1 ? 's' : ''} · invite-only access
-            </p>
-          </div>
-          {isSuperAdmin && (
-            <button
-              onClick={() => setInviteModal(true)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-600 text-white"
-              style={{ background: 'var(--green)' }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Invite member
-            </button>
-          )}
+        <PageHeader
+          overline="Workspace"
+          title="Team"
+          subtitle="Your recruiters and staff, their access level and workload across all clients."
+          actions={isSuperAdmin ? <Button variant="primary" size="md" icon="user-plus" onClick={() => setInviteModal(true)}>Invite member</Button> : undefined}
+        />
+
+        {/* Stat strip */}
+        <div style={{ display: 'flex', gap: 28, padding: '0 2px 2px', flexWrap: 'wrap' }}>
+          {([
+            ['Members', staffMembers.length],
+            ['Admins', staffMembers.filter((u) => u.role === 'super_admin' || u.role === 'admin').length],
+            ['Recruiters', staffMembers.filter((u) => u.role === 'recruiter').length],
+            ['Pending invites', invites.length],
+          ] as [string, number][]).map(([l, v]) => (
+            <div key={l}>
+              <div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 600, color: NW.black }}>{v}</div>
+              <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>{l}</div>
+            </div>
+          ))}
         </div>
 
         {/* Toolbar */}
@@ -281,87 +285,51 @@ export default function UsersPage() {
           </select>
         </div>
 
-        {/* Users table */}
+        {/* Member cards */}
         {loading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />
           </div>
+        ) : filtered.length === 0 ? (
+          <Card><div style={{ textAlign: 'center', padding: '36px 16px', color: NW.gray400, fontSize: 13 }}>No team members found.</div></Card>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
-            <div className="grid grid-cols-[auto_2fr_1fr_1fr_1fr] gap-0 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-              <div className="w-10" />
-              <div>Member</div>
-              <div>Title</div>
-              <div>Status</div>
-              <div>Joined</div>
-            </div>
-            {filtered.length === 0 ? (
-              <div className="py-16 text-center text-sm text-[var(--light)]">No team members found.</div>
-            ) : (
-              filtered.map((u) => (
-                <div
-                  key={u.id}
-                  onClick={() => setSelectedMember(u)}
-                  className="grid grid-cols-[auto_2fr_1fr_1fr_1fr] items-center gap-0 border-b border-[var(--border)] px-4 py-3 last:border-0 hover:bg-[var(--bg)] cursor-pointer"
-                >
-                  <div className="w-10">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {filtered.map((u) => {
+              const suspended = u.status === 'suspended';
+              const isMe = u.id === currentUser?.uid;
+              const canSuspend = isSuperAdmin && u.role !== 'super_admin' && !isMe && !u.id.startsWith('sa:');
+              return (
+                <Card key={u.id} hover onClick={() => setSelectedMember(u)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
                     {u.photoUrl ? (
-                      <img src={u.photoUrl} alt={u.name} className="h-8 w-8 rounded-full object-cover" />
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.photoUrl} alt={u.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                     ) : (
-                      <div
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-700 text-white"
-                        style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-                      >
-                        {initials(u.name)}
-                      </div>
+                      <Avatar initials={initials(u.name) || '—'} size={48} bg={NW.teal500} />
                     )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>{u.name}{isMe && <span style={{ fontSize: 11, color: NW.gray400, marginLeft: 6 }}>(you)</span>}</div>
+                      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>{u.jobTitle?.trim() || STAFF_ROLE_LABELS[u.role] || u.role}</div>
+                    </div>
+                    <Chip variant={suspended ? 'rose' : roleBadgeVariant(u.role) === 'green' ? 'accent' : 'default'} size="sm">{suspended ? 'Suspended' : STAFF_ROLE_LABELS[u.role] || u.role}</Chip>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-600 text-[var(--black)]">
-                      {u.name}
-                      {u.id === currentUser?.uid && (
-                        <span className="ml-1.5 text-[9px] text-[var(--light)]">(you)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${NW.gray100}` }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: NW.gray500, minWidth: 0 }}>
+                      <Mail className="h-3.5 w-3.5" style={{ color: NW.gray400, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: NW.gray400 }}>{fmtDate(u.createdAt)}</span>
+                      {canSuspend && (
+                        <button onClick={(e) => { e.stopPropagation(); toggleSuspend(u); }} title={suspended ? 'Reactivate' : 'Suspend'} style={{ border: 'none', background: 'transparent', color: NW.gray400, cursor: 'pointer', display: 'inline-flex' }}>
+                          {suspended ? <UserCheck className="h-3.5 w-3.5" /> : <UserX className="h-3.5 w-3.5" />}
+                        </button>
                       )}
-                    </p>
-                    <p className="truncate text-[10px] text-[var(--light)]">{u.email}</p>
-                  </div>
-                  <div>
-                    <Badge
-                      label={u.jobTitle?.trim() || STAFF_ROLE_LABELS[u.role] || u.role}
-                      variant={roleBadgeVariant(u.role)}
-                    />
-                  </div>
-                  <div>
-                    <span
-                      className={`text-[10px] font-600 ${
-                        u.status === 'suspended' ? 'text-red-500' : 'text-emerald-600'
-                      }`}
-                    >
-                      {u.status === 'suspended' ? 'Suspended' : 'Active'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-[var(--light)]">{fmtDate(u.createdAt)}</span>
-                    {isSuperAdmin && u.role !== 'super_admin' && u.id !== currentUser?.uid && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSuspend(u);
-                        }}
-                        title={u.status === 'suspended' ? 'Reactivate' : 'Suspend'}
-                        className="rounded p-1 text-[var(--light)] hover:text-red-500"
-                      >
-                        {u.status === 'suspended' ? (
-                          <UserCheck className="h-3.5 w-3.5" />
-                        ) : (
-                          <UserX className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
+                </Card>
+              );
+            })}
           </div>
         )}
 

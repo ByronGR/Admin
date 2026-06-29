@@ -17,11 +17,12 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
-import { Badge } from '@/components/ui/badge';
-import { initials } from '@/lib/utils';
+import { initials, fmtDate } from '@/lib/utils';
 import { STAFF_ROLE_LABELS } from '@/lib/types';
 import type { StaffRole } from '@/lib/types';
-import { Camera, Link as LinkIcon, Lock } from 'lucide-react';
+import { Camera, Link as LinkIcon } from 'lucide-react';
+import { NW, Icon, Avatar, Button, Chip } from '@/components/nw/primitives';
+import { PageHeader, Card } from '@/components/nw/shell-ui';
 
 export default function ProfilePage() {
   const { showToast } = useToast();
@@ -111,69 +112,44 @@ export default function ProfilePage() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl space-y-5">
-        <div>
-          <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">My Profile</h1>
-          <p className="mt-0.5 text-xs text-[var(--light)]">Manage your personal information</p>
-        </div>
-
-        {/* Avatar + role */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              {displayPhoto ? (
-                <img
-                  src={displayPhoto}
-                  alt={displayName}
-                  className="h-20 w-20 rounded-full object-cover"
-                />
-              ) : (
-                <div
-                  className="flex h-20 w-20 items-center justify-center rounded-full text-2xl font-800 text-white"
-                  style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-                >
-                  {initials(displayName)}
-                </div>
-              )}
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploadingPhoto}
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[var(--green)] text-white hover:bg-[var(--gd)]"
-                title="Change photo"
-              >
-                {uploadingPhoto ? <Spinner size="sm" /> : <Camera className="h-3.5 w-3.5" />}
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setPhotoPreview(URL.createObjectURL(file));
-                    uploadPhoto(file);
-                  }
-                }}
-              />
-            </div>
-            <div>
-              <p className="text-base font-700 text-[var(--black)]">{displayName}</p>
-              <p className="text-xs text-[var(--light)]">{user?.email}</p>
-              <div className="mt-1.5">
-                <Badge
-                  label={STAFF_ROLE_LABELS[profile?.role as StaffRole] ?? profile?.role ?? 'Staff'}
-                  variant="green"
-                />
+      <div>
+        <PageHeader overline="Account" title="Profile" subtitle="Manage your personal information and how candidates reach you." />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 16, alignItems: 'start' }}>
+          {/* Left — identity card */}
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0 4px' }}>
+              <div style={{ position: 'relative' }}>
+                {displayPhoto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={displayPhoto} alt={displayName} style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <Avatar initials={initials(displayName) || '—'} size={84} bg={NW.teal500} />
+                )}
+                <button onClick={() => fileRef.current?.click()} disabled={uploadingPhoto} title="Change photo"
+                  style={{ position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: '50%', border: `2px solid ${NW.white}`, background: NW.teal500, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  {uploadingPhoto ? <Spinner size="sm" /> : <Camera className="h-3.5 w-3.5" />}
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const file = e.target.files?.[0]; if (file) { setPhotoPreview(URL.createObjectURL(file)); uploadPhoto(file); } }} />
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 14, color: NW.black }}>{displayName}</div>
+              <div style={{ fontSize: 13.5, color: NW.gray500, marginTop: 3 }}>{user?.email}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <Chip variant="accent" size="md" icon="shield-check">{STAFF_ROLE_LABELS[profile?.role as StaffRole] ?? profile?.role ?? 'Staff'}</Chip>
               </div>
             </div>
-          </div>
-        </div>
+            <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${NW.gray100}`, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: 13, color: NW.gray600 }}><Icon name="mail" size={15} color={NW.gray400} />{user?.email}</div>
+              {profile?.calendlyLink && <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: 13, color: NW.gray600 }}><Icon name="calendar" size={15} color={NW.gray400} />Calendly connected</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: 13, color: NW.gray600 }}><Icon name="calendar-check" size={15} color={NW.gray400} />Joined {fmtDate(profile?.createdAt) || '—'}</div>
+            </div>
+            <Button variant="secondary" size="md" icon="lock" fullWidth style={{ marginTop: 20 }} onClick={sendReset}>Reset password</Button>
+          </Card>
 
-        {/* Edit form */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <h2 className="mb-4 text-sm font-600 text-[var(--black)]">Personal information</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* Right — editable personal information */}
+          <Card>
+            <h2 style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 16 }}>Personal information</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
                 First name
@@ -234,25 +210,7 @@ export default function ProfilePage() {
               Save changes
             </button>
           </div>
-        </div>
-
-        {/* Password */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-600 text-[var(--black)]">Password</h2>
-              <p className="mt-0.5 text-xs text-[var(--light)]">
-                We&apos;ll send a reset link to {user?.email}
-              </p>
-            </div>
-            <button
-              onClick={sendReset}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <Lock className="h-3.5 w-3.5" />
-              Reset password
-            </button>
-          </div>
+          </Card>
         </div>
       </div>
     </MainLayout>

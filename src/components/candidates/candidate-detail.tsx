@@ -13,7 +13,6 @@ import {
   updateDoc,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
-import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -22,7 +21,6 @@ import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
   Candidate,
-  WorkHistoryEntry,
   Timestamp,
   Pipeline,
   PipelineCandidate,
@@ -39,7 +37,6 @@ import {
   MapPin,
   ExternalLink,
   FileText,
-  MessageCircle,
   GitBranch,
   ArrowRight,
   Award,
@@ -47,10 +44,12 @@ import {
   Briefcase,
   Languages,
   GraduationCap,
-  Volume2,
   Pencil,
   Inbox,
+  Calendar,
+  ChevronRight,
 } from 'lucide-react';
+import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
 const CEFR_TO_PCT: Record<CEFRLevel, number> = {
@@ -92,6 +91,31 @@ function tsToDate(ts: unknown): Date | null {
   return null;
 }
 
+// Parse a free-text work-history date ("2024", "Jan 2024", "Present"…) into a
+// sortable number (year*12 + month). "Present/current" → very large so a current
+// role floats to the top; unparseable → null.
+const WORK_PRESENT = Number.MAX_SAFE_INTEGER;
+function workWhenKey(s?: string): number | null {
+  if (!s) return null;
+  const t = s.trim().toLowerCase();
+  if (!t || t === '-' || t === '—') return null;
+  if (/present|current|now|ongoing|actual|today/.test(t)) return WORK_PRESENT;
+  const ym = t.match(/(19|20)\d{2}/);
+  if (!ym) return null;
+  const year = parseInt(ym[0], 10);
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  let month = 0;
+  for (let i = 0; i < 12; i++) if (t.includes(months[i])) { month = i + 1; break; }
+  return year * 12 + month;
+}
+// Recency of a role: prefer its end date; a missing end with a known start is
+// treated as ongoing (current); fully unknown sorts last.
+function workRecency(w: { from?: string; to?: string }): number {
+  const end = workWhenKey(w.to);
+  if (end != null) return end;
+  return workWhenKey(w.from) != null ? WORK_PRESENT : -1;
+}
+
 // ─── Candidate detail (shared by the /candidates/[id] route) ───────────────────
 
 export function CandidateDetail({ candidate }: { candidate: Candidate }) {
@@ -102,6 +126,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   >([]);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+
+  // Profile tabs (redesign) — exact prototype tabs.
+  const [detailTab, setDetailTab] = useState<'experience' | 'education' | 'languages' | 'skills' | 'applications'>('experience');
 
   // ── English assessment (Nearwork-recorded level + comments) ────────────────
   const [englishScore, setEnglishScore] = useState<EnglishScore | undefined>(candidate.englishScore);
@@ -310,10 +337,10 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       .finally(() => setApplicationsLoading(false));
   }, [candidate.id, candidate.code, candidate.email]);
 
-  function applicationStatus(app: ApplicationDoc): { label: string; variant: 'amber' | 'green' | 'red' } {
-    if (app.status === 'rejected') return { label: 'Not selected — pre-filter', variant: 'red' };
-    if (app.status === 'approved' || app.inPipeline) return { label: 'In pipeline', variant: 'green' };
-    return { label: 'Pending review', variant: 'amber' };
+  function applicationStatus(app: ApplicationDoc): { label: string; color: string; bg: string } {
+    if (app.status === 'rejected') return { label: 'Not selected — pre-filter', color: NW.rose600, bg: NW.rose50 };
+    if (app.status === 'approved' || app.inPipeline) return { label: 'In pipeline', color: NW.green600, bg: NW.green50 };
+    return { label: 'Pending review', color: '#A16207', bg: NW.yellow50 };
   }
 
   // ── Assessment & Nearwork Score ────────────────────────────────────────────
@@ -374,14 +401,6 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
   // Nearwork Score + 90-day validity.
   const nearworkScore = assessment?.nearworkScore ?? null;
-  const scoreDate = tsToDate(assessment?.completedAt);
-  const scoreValidUntil = scoreDate
-    ? new Date(scoreDate.getTime() + NEARWORK_SCORE_VALID_DAYS * 24 * 60 * 60 * 1000)
-    : null;
-  const scoreExpired = scoreValidUntil ? Date.now() > scoreValidUntil.getTime() : false;
-  const scoreDaysLeft = scoreValidUntil
-    ? Math.ceil((scoreValidUntil.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-    : null;
 
   // Skills radar — auto-fed from real data (English, Technical, Experience,
   // Communication & Culture). Communication/Culture are derived from DISC.
@@ -398,8 +417,6 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
     const disc = assessment?.discScores;
     const total = disc ? (disc.D ?? 0) + (disc.I ?? 0) + (disc.S ?? 0) + (disc.C ?? 0) : 0;
-    // Influence + Steadiness lean toward strong communication; Steadiness +
-    // Conscientiousness lean toward team/culture fit. Scaled to 0-100.
     const communicationPct =
       disc && total > 0
         ? Math.min(100, Math.round((((disc.I ?? 0) + (disc.S ?? 0) * 0.5) / total) * 200))
@@ -424,7 +441,6 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     if (!noteText.trim()) return;
     setSavingNote(true);
     try {
-      // Resolve @handles in the note to staff user ids
       const handles = Array.from(noteText.matchAll(/@(\w+)/g)).map((m) => m[1].toLowerCase());
       const mentions = staff.filter((u) => handles.includes(u.handle)).map((u) => u.id);
       await addDoc(collection(db, 'candidateNotes'), {
@@ -468,722 +484,506 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       : `https://${candidate.linkedIn}`
     : null;
 
+  // ── Header / quick-fact derivations ─────────────────────────────────────────
+  const jobTitle = [candidate.currentRole, candidate.targetRole, candidate.headline, candidate.role]
+    .map((x) => (x ?? '').trim())
+    .find((x) => x && x.toLowerCase() !== 'candidate') || '—';
+  const cityLabel = candidate.city || candidate.location || '';
+  const yearsExp = candidate.experience;
+  const statusActive = !['rejected', 'withdrawn', 'inactive'].includes(String(candidate.status ?? '').toLowerCase());
+  const cvUrl = candidate.resumeUrl || candidate.cvUrl || null;
+  // Always newest → oldest: most-recent/current role first, descending by end
+  // date (then start date as a tiebreaker), regardless of stored order.
+  const work = (candidate.workHistory ?? [])
+    .filter((w) => w.company || w.title)
+    .slice()
+    .sort((a, b) => {
+      const ra = workRecency(a);
+      const rb = workRecency(b);
+      if (rb !== ra) return rb - ra;
+      const fa = workWhenKey(a.from) ?? -1;
+      const fb = workWhenKey(b.from) ?? -1;
+      return fb - fa;
+    });
+  const monthlySalary = candidate.expectedSalaryAmount != null
+    ? `${fmtCurrency(Number(candidate.expectedSalaryAmount), candidate.expectedSalaryCurrency || 'USD')}/mo`
+    : typeof candidate.expectedSalary === 'number'
+      ? `${fmtCurrency(candidate.expectedSalary, 'USD')}/mo`
+      : (typeof candidate.expectedSalary === 'string' && candidate.expectedSalary.trim()) ? candidate.expectedSalary : null;
+  const activePipe = pipelineEntries.find(({ entry }) => entry.stage !== 'not-selected');
+  const appsCount = pipelineEntries.length + applicationEntries.length;
+  const pastApps = applicationEntries;
+
+  const DETAIL_TABS: { key: typeof detailTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'experience', label: 'Experience', icon: <Briefcase className="h-4 w-4" /> },
+    { key: 'education', label: 'Education', icon: <GraduationCap className="h-4 w-4" /> },
+    { key: 'languages', label: 'Languages', icon: <Languages className="h-4 w-4" /> },
+    { key: 'skills', label: 'Skills', icon: <Award className="h-4 w-4" /> },
+    { key: 'applications', label: 'Applications', icon: <Inbox className="h-4 w-4" /> },
+  ];
+
+  const card: React.CSSProperties = { background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.03)', padding: 22 };
+  const cardHead = (icon: React.ReactNode, title: string, sub?: string, action?: React.ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: NW.gray600 }}>{icon}</span>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>{title}</div>
+          {sub && <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>{sub}</div>}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+  const snapRow = (label: string, value: React.ReactNode, last = false) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderBottom: last ? 'none' : `1px solid ${NW.gray100}` }}>
+      <span style={{ fontSize: 12.5, color: NW.gray500 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: NW.black, textAlign: 'right' }}>{value}</span>
+    </div>
+  );
+  const cefrPct = (lvl?: CEFRLevel) => (lvl ? CEFR_TO_PCT[lvl] : 0);
+
   return (
     <>
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      {/* Left: details */}
-      <div className="space-y-5">
-        {/* Bio card */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <div className="flex items-start gap-4">
-            {candidate.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={candidate.photoUrl}
-                alt={candidate.name}
-                className="h-14 w-14 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <div
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-800 text-white"
-                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-              >
-                {initials(candidate.name)}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-700 text-[var(--black)]">{candidate.name}</h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(candidate.code ?? candidate.id);
-                    showToast(`Candidate ID ${candidate.code ?? candidate.id} copied`, 'success');
-                  }}
-                  title="Copy candidate ID"
-                  className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 font-mono text-[10px] font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-                >
-                  {candidate.code ?? candidate.id}
-                </button>
-              </div>
-              <p className="text-xs text-[var(--mid)]">
-                {candidate.currentRole ?? '—'}
-                {candidate.currentCompany ? ` at ${candidate.currentCompany}` : ''}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--light)]">
-                {candidate.email && (
-                  <a
-                    href={`mailto:${candidate.email}`}
-                    className="flex items-center gap-1 hover:text-[var(--green)]"
-                  >
-                    <Mail className="h-3 w-3" />
-                    {candidate.email}
-                  </a>
-                )}
-                {candidate.phone && (
-                  <span className="flex items-center gap-1">
-                    <Phone className="h-3 w-3" />
-                    {candidate.phone}
-                  </span>
-                )}
-                {candidate.location && (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {candidate.location}
-                  </span>
-                )}
-                {linkedInUrl && (
-                  <a
-                    href={linkedInUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-[var(--green)] hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    LinkedIn
-                  </a>
-                )}
-              </div>
-            </div>
-            {candidate.status && <Badge label={candidate.status} variant="status" />}
-          </div>
-
-          {/* Actions: CV + WhatsApp */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(candidate.resumeUrl || candidate.cvUrl) ? (
-              <a
-                href={candidate.resumeUrl || candidate.cvUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                View CV
-              </a>
-            ) : (
-              <span className="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--light)]">
-                <FileText className="h-3.5 w-3.5" />
-                No CV on file
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
+          {candidate.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={candidate.photoUrl} alt={candidate.name} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          ) : (
+            <NWAvatar initials={initials(candidate.name) || '—'} size={64} bg={NW.teal500} />
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: NW.black }}>{candidate.name || 'Unnamed candidate'}</h1>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: statusActive ? NW.green600 : NW.gray500, background: statusActive ? NW.green50 : NW.gray50, border: `1px solid ${(statusActive ? NW.green600 : NW.gray500)}22`, borderRadius: 999, padding: '3px 10px' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusActive ? NW.green500 : NW.gray300 }} />
+                {statusActive ? 'Active' : 'Inactive'}
               </span>
-            )}
-            <button
-              type="button"
-              disabled
-              title="WhatsApp messaging is coming soon"
-              className="flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--light)] opacity-70"
-            >
-              <MessageCircle className="h-3.5 w-3.5" />
-              WhatsApp (coming soon)
-            </button>
-          </div>
-
-          {candidate.skills && candidate.skills.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {candidate.skills.map((s, i) => (
-                <span
-                  key={i}
-                  className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs font-500 text-[var(--mid)]"
-                >
-                  {s}
-                </span>
-              ))}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap', fontSize: 13.5, color: NW.gray600 }}>
+              <span>{jobTitle}</span>
+              {cityLabel && <><span style={{ color: NW.gray300 }}>·</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><MapPin className="h-3.5 w-3.5" style={{ color: NW.gray400 }} />{cityLabel}</span></>}
+              {yearsExp != null && <><span style={{ color: NW.gray300 }}>·</span><span>{yearsExp}+ yrs experience</span></>}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            disabled
+            title="Scheduling is coming soon"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', fontSize: 14, fontWeight: 600, color: NW.black, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, cursor: 'not-allowed', opacity: 0.7 }}
+          >
+            <Calendar className="h-4 w-4" /> Schedule
+          </button>
+          {cvUrl ? (
+            <a href={cvUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', fontSize: 14, fontWeight: 600, color: NW.white, background: NW.teal500, borderRadius: 999, textDecoration: 'none' }}>
+              <FileText className="h-4 w-4" /> View CV
+            </a>
+          ) : (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', fontSize: 14, fontWeight: 600, color: NW.gray400, background: NW.white, border: `1px dashed ${NW.gray200}`, borderRadius: 999 }}>
+              <FileText className="h-4 w-4" /> No CV
+            </span>
           )}
         </div>
+      </div>
 
-        {/* English assessment — staff-entered level + comments, visible to the client */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
-              <Volume2 className="h-4 w-4 text-[var(--green)]" />
-              English assessment
-            </h3>
-            <button
-              type="button"
-              onClick={openEnglishModal}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              {englishScore ? 'Edit' : 'Add assessment'}
-            </button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, alignItems: 'start' }} className="nw-cand-grid">
+        {/* Left — tabs */}
+        <div>
+          <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
+            {DETAIL_TABS.map((t) => {
+              const on = detailTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setDetailTab(t.key)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 13px', marginBottom: -1, cursor: 'pointer' }}
+                >
+                  <span style={{ color: on ? NW.teal600 : NW.gray400 }}>{t.icon}</span>
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-          {englishScore ? (
-            <div className="mt-3 flex items-start gap-3">
-              <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-800 text-white"
-                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-              >
-                {englishScore.level}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs leading-relaxed text-[var(--mid)]">{englishScore.feedback}</p>
-                {(englishScore.assessedBy || englishScore.assessedAt) && (
-                  <p className="mt-1.5 text-[10px] text-[var(--light)]">
-                    {englishScore.assessedBy ? `Assessed by ${englishScore.assessedBy}` : 'Assessed'}
-                    {englishScore.assessedAt ? ` · ${fmtDate(englishScore.assessedAt)}` : ''}
-                  </p>
+
+          {/* Experience */}
+          {detailTab === 'experience' && (
+            <div style={card}>
+              {cardHead(<Briefcase className="h-4 w-4" />, 'Work experience', work.length ? `${work.length} role${work.length === 1 ? '' : 's'}${yearsExp != null ? ` · ${yearsExp}+ years` : ''}` : undefined)}
+              {work.length === 0 ? (
+                <div style={{ fontSize: 13, color: NW.gray400, padding: '6px 0' }}>No work history on file yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {work.map((w, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ width: 12, height: 12, borderRadius: '50%', background: i === 0 ? NW.teal500 : NW.white, border: `2px solid ${i === 0 ? NW.teal500 : NW.gray200}`, marginTop: 4 }} />
+                        {i < work.length - 1 && <span style={{ width: 2, flex: 1, minHeight: 40, background: NW.gray100 }} />}
+                      </div>
+                      <div style={{ paddingBottom: 20, flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{w.title || 'Role'}</span>
+                          {(w.from || w.to) && <span style={{ fontSize: 12, color: NW.gray400 }}>{w.from || '?'} – {w.to === 'present' ? 'Present' : (w.to || '?')}</span>}
+                        </div>
+                        {w.company && <div style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, marginTop: 2 }}>{w.company}</div>}
+                        {w.contact && <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 4 }}>Contact: {w.contact}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {candidate.summary && (
+                <div style={{ marginTop: work.length ? 6 : 0, paddingTop: 14, borderTop: `1px solid ${NW.gray100}` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400, marginBottom: 6 }}>Summary</div>
+                  <p style={{ fontSize: 13.5, lineHeight: 1.6, color: NW.gray600, margin: 0 }}>{candidate.summary}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Education */}
+          {detailTab === 'education' && (
+            <div style={card}>
+              {cardHead(<GraduationCap className="h-4 w-4" />, 'Education & certifications')}
+              {(candidate.certifications ?? []).length === 0 ? (
+                <div style={{ fontSize: 13, color: NW.gray400, padding: '6px 0' }}>No education or certifications on file yet.</div>
+              ) : (
+                <div>
+                  {(candidate.certifications ?? []).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '11px 0', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}` }}>
+                      <span style={{ width: 36, height: 36, borderRadius: 10, background: NW.violet50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.violet500 }}>
+                        <GraduationCap className="h-4 w-4" />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{c.name}</div>
+                        {c.issuer && <div style={{ fontSize: 12.5, color: NW.gray600, marginTop: 1 }}>{c.issuer}</div>}
+                      </div>
+                      {c.date && <span style={{ fontSize: 12, color: NW.gray400 }}>{c.date}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Languages */}
+          {detailTab === 'languages' && (
+            <div style={card}>
+              {cardHead(
+                <Languages className="h-4 w-4" />, 'Languages', undefined,
+                <button onClick={openEnglishModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '6px 12px', cursor: 'pointer' }}>
+                  <Pencil className="h-3.5 w-3.5" /> {englishScore ? 'Edit English' : 'Add English'}
+                </button>,
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* English (assessed) */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>English</span>
+                    <span style={{ fontSize: 12.5, color: NW.gray500 }}>{englishScore?.level ?? bestEnglish ?? 'Not assessed'}</span>
+                  </div>
+                  <div style={{ height: 7, background: NW.gray100, borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${cefrPct(englishScore?.level ?? bestEnglish ?? undefined)}%`, height: '100%', background: NW.teal500, borderRadius: 4 }} />
+                  </div>
+                  {englishScore?.feedback && <p style={{ fontSize: 12, color: NW.gray500, marginTop: 6, lineHeight: 1.5 }}>{englishScore.feedback}</p>}
+                </div>
+                {/* Other languages */}
+                {(candidate.languages ?? []).map((lang) => (
+                  <div key={lang}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{lang}</span>
+                      <span style={{ fontSize: 12.5, color: NW.gray500 }}>Conversational</span>
+                    </div>
+                    <div style={{ height: 7, background: NW.gray100, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: '70%', height: '100%', background: NW.blue500, borderRadius: 4 }} />
+                    </div>
+                  </div>
+                ))}
+                {!englishScore && !bestEnglish && (candidate.languages ?? []).length === 0 && (
+                  <div style={{ fontSize: 13, color: NW.gray400 }}>No languages recorded yet.</div>
                 )}
               </div>
             </div>
-          ) : (
-            <p className="mt-2 text-xs text-[var(--light)]">
-              No English level recorded yet. Add a CEFR level and comments — this is shown to the client.
-            </p>
           )}
-        </div>
 
-        {/* Hired banner — link to the placement / contractor profile */}
-        {placement && (
-          <a
-            href={`/hired/${placement.id}`}
-            className="group flex items-center justify-between gap-3 rounded-2xl border p-4 transition-colors hover:border-[var(--green)]"
-            style={{ borderColor: 'var(--green)', background: 'rgba(22,160,133,0.06)' }}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-              >
-                <Briefcase className="h-4 w-4" />
+          {/* Skills */}
+          {detailTab === 'skills' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={card}>
+                {cardHead(<Award className="h-4 w-4" />, 'Skills', undefined, nearworkScore != null ? <MatchScore value={nearworkScore} size={44} /> : undefined)}
+                {(candidate.skills ?? []).length ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {(candidate.skills ?? []).map((s) => (
+                      <span key={s} style={{ fontSize: 12, fontWeight: 500, color: NW.gray700, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 999, padding: '4px 10px' }}>{s}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: NW.gray400 }}>No skills tagged yet.</div>
+                )}
+                <div style={{ fontSize: 12, color: NW.gray400, marginTop: 16 }}>Match score reflects the candidate&apos;s Nearwork Score. Skills are drawn from CV, assessments and recruiter tags.</div>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs font-700 text-[var(--black)]">
-                  Hired{placement.orgName ? ` at ${placement.orgName}` : ''}
-                </p>
-                <p className="truncate text-[10px] text-[var(--mid)]">
-                  {placement.openingTitle ?? 'Placement'}
-                  {placement.startDate ? ` · since ${fmtDate(placement.startDate)}` : ''}
-                </p>
-              </div>
-            </div>
-            <span className="flex items-center gap-1 text-xs font-600 text-[var(--green)]">
-              View hired profile
-              <ArrowRight className="h-3.5 w-3.5" />
-            </span>
-          </a>
-        )}
 
-        {/* Nearwork Score & assessment */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
-            <Award className="h-4 w-4 text-[var(--green)]" />
-            Nearwork Score &amp; assessment
-          </h3>
-
-          {assessmentLoading ? (
-            <div className="flex h-16 items-center justify-center">
-              <Spinner size="sm" />
-            </div>
-          ) : !assessment ? (
-            <p className="py-4 text-center text-xs text-[var(--light)]">
-              No assessment on file yet.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {/* Score header */}
-              <div className="flex items-stretch gap-3">
-                <div className="flex flex-col items-center justify-center rounded-xl bg-[var(--bg)] px-5 py-3">
-                  <span className="text-3xl font-800 leading-none text-[var(--black)]">
-                    {nearworkScore != null ? nearworkScore : '—'}
-                  </span>
-                  <span className="mt-1 text-[9px] font-600 uppercase tracking-wider text-[var(--light)]">
-                    Nearwork Score
-                  </span>
-                </div>
-                <div className="flex flex-1 flex-col justify-center gap-1.5">
-                  {nearworkScore != null && scoreValidUntil ? (
-                    scoreExpired ? (
-                      <Badge label="Score expired — re-assess" variant="amber" />
-                    ) : (
-                      <Badge
-                        label={`Valid ${scoreDaysLeft}d · until ${fmtDate(scoreValidUntil.toISOString())}`}
-                        variant="green"
-                      />
-                    )
-                  ) : (
-                    <span className="text-[10px] text-[var(--light)]">
-                      Not scored yet — scored after the assessment is completed
-                    </span>
+              {/* Assessment + radar (folded in) */}
+              {assessmentLoading ? (
+                <div style={{ ...card, display: 'flex', justifyContent: 'center', padding: 28 }}><Spinner size="sm" /></div>
+              ) : assessment ? (
+                <div style={card}>
+                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>Technical</div>
+                      <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.technicalScore != null ? `${assessment.technicalScore}/50 · ${Math.round((assessment.technicalScore / 50) * 100)}%` : '—'}</div>
+                    </div>
+                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>DISC style</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.discStyle ? `${assessment.discStyle} — ${DISC_LABELS[assessment.discStyle].name}` : '—'}</div>
+                    </div>
+                  </div>
+                  {hasRadarData && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                      <RadarChart data={radarData} />
+                    </div>
                   )}
-                  <p className="text-[10px] text-[var(--light)]">
-                    Nearwork Scores are valid for {NEARWORK_SCORE_VALID_DAYS} days from completion.
-                  </p>
                 </div>
-              </div>
-
-              {/* Technical + DISC */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-xl border border-[var(--border)] p-3">
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                    Technical
-                  </p>
-                  <p className="mt-0.5 font-700 text-[var(--black)]">
-                    {assessment.technicalScore != null
-                      ? `${assessment.technicalScore}/50 · ${Math.round((assessment.technicalScore / 50) * 100)}%`
-                      : '—'}
-                  </p>
+              ) : (
+                <div style={card}>
+                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
+                  <div style={{ fontSize: 13, color: NW.gray400 }}>No assessment on file yet.</div>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] p-3">
-                  <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                    DISC style
-                  </p>
-                  <p className="mt-0.5 font-700 text-[var(--black)]">
-                    {assessment.discStyle
-                      ? `${assessment.discStyle} — ${DISC_LABELS[assessment.discStyle].name}`
-                      : '—'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[var(--light)]">
-                  {assessment.completedAt
-                    ? `Completed ${fmtDate(assessment.completedAt as Timestamp | string)}`
-                    : 'Not completed yet'}
-                </span>
-                <a
-                  href="/assessments"
-                  className="flex items-center gap-1 text-[10px] font-600 text-[var(--green)] hover:underline"
-                >
-                  View in assessments
-                  <ArrowRight className="h-3 w-3" />
-                </a>
-              </div>
+              )}
             </div>
           )}
-        </div>
 
-        {/* Skills radar */}
-        {hasRadarData && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
-              <Activity className="h-4 w-4 text-[var(--green)]" />
-              Skills radar
-            </h3>
-            <p className="mb-3 text-[10px] text-[var(--light)]">
-              Auto-generated from assessment, English &amp; experience data.
-            </p>
-            <div className="flex justify-center">
-              <RadarChart data={radarData} />
-            </div>
-          </div>
-        )}
-
-        {/* Pipelines & openings */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
-            <GitBranch className="h-4 w-4 text-[var(--green)]" />
-            Pipelines &amp; openings
-          </h3>
-
-          {pipelinesLoading ? (
-            <div className="flex h-16 items-center justify-center">
-              <Spinner size="sm" />
-            </div>
-          ) : pipelineEntries.length === 0 ? (
-            <p className="py-4 text-center text-xs text-[var(--light)]">
-              Not in any pipeline yet.
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {pipelineEntries.map(({ pipeline, entry }) => {
-                const notSelected = entry.stage === 'not-selected';
-                const furthest = entry.furthestStage ?? entry.stage;
-                return (
-                  <a
-                    key={pipeline.id}
-                    href={`/pipeline?focus=${encodeURIComponent(pipeline.code)}`}
-                    className="group block rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 transition-colors hover:border-[var(--green)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-700 text-[var(--black)]">
-                          {pipeline.title}
-                        </p>
-                        <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">
-                          {pipeline.orgName ?? '—'} · {pipeline.code}
-                        </p>
-                      </div>
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--light)] transition-colors group-hover:text-[var(--green)]" />
+          {/* Applications */}
+          {detailTab === 'applications' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={card}>
+                {cardHead(<GitBranch className="h-4 w-4" />, 'Current application', activePipe ? undefined : 'Not in an active pipeline')}
+                {pipelinesLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><Spinner size="sm" /></div>
+                ) : activePipe ? (
+                  <a href={`/pipeline?focus=${encodeURIComponent(activePipe.pipeline.code)}`} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 12, border: `1px solid ${NW.gray100}`, background: NW.offWhite, textDecoration: 'none' }}>
+                    <span style={{ width: 42, height: 42, borderRadius: 11, background: NW.teal500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.teal600 }}><Briefcase className="h-5 w-5" /></span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{activePipe.pipeline.title}</div>
+                      <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 1 }}>{activePipe.pipeline.orgName ?? '—'} · {activePipe.pipeline.code}</div>
                     </div>
-
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                      {notSelected ? (
-                        <Badge label="Not Selected" variant="neutral" />
-                      ) : (
-                        <Badge label={stageLabel(entry.stage)} variant="green" />
-                      )}
-                      <span className="text-[10px] text-[var(--light)]">
-                        Furthest: <span className="font-600 text-[var(--mid)]">{stageLabel(furthest)}</span>
-                      </span>
-                      {pipeline.status && pipeline.status !== 'active' && (
-                        <span className="text-[10px] capitalize text-[var(--light)]">· {pipeline.status}</span>
-                      )}
-                    </div>
-
-                    {notSelected && entry.dropOffReason && (
-                      <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-2.5 py-2">
-                        <p className="text-[10px] font-700 uppercase tracking-wider text-red-600">
-                          Fell off · {DROP_OFF_REASON_LABELS[entry.dropOffReason]}
-                        </p>
-                        {entry.dropOffNote && (
-                          <p className="mt-0.5 text-[11px] text-[var(--mid)]">{entry.dropOffNote}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {entry.englishScore && (
-                      <p className="mt-2 text-[10px] text-[var(--light)]">
-                        English: <span className="font-600 text-[var(--mid)]">{entry.englishScore.level}</span>
-                      </p>
-                    )}
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Applications */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-600 text-[var(--black)]">
-            <Inbox className="h-4 w-4 text-[var(--green)]" />
-            Applications
-          </h3>
-
-          {applicationsLoading ? (
-            <div className="flex h-16 items-center justify-center">
-              <Spinner size="sm" />
-            </div>
-          ) : applicationEntries.length === 0 ? (
-            <p className="py-4 text-center text-xs text-[var(--light)]">
-              No applications submitted yet.
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {applicationEntries.map((app) => {
-                const { label, variant } = applicationStatus(app);
-                const roleTitle = app.openingTitle || app.jobTitle || app.title || app.openingCode || 'Unknown role';
-                const cardClass =
-                  'group block rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 transition-colors hover:border-[var(--green)]';
-                const content = (
-                  <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-700 text-[var(--black)]">{roleTitle}</p>
-                        {app.openingCode && (
-                          <p className="mt-0.5 truncate text-[10px] text-[var(--light)]">{app.openingCode}</p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <Badge label={label} variant={variant} />
-                        {app.openingCode && (
-                          <ArrowRight className="h-3.5 w-3.5 text-[var(--light)] transition-colors group-hover:text-[var(--green)]" />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--light)]">
-                      <span>Applied {fmtDate(app.submittedAt)} · {fmtRelative(app.submittedAt)}</span>
-                      {app.status === 'rejected' && app.rejectedAt && (
-                        <span>· Rejected {fmtRelative(app.rejectedAt)}</span>
-                      )}
-                    </div>
-                  </>
-                );
-                return app.openingCode ? (
-                  <a
-                    key={app.id}
-                    href={`/pipeline?focus=${encodeURIComponent(app.openingCode)}`}
-                    className={cardClass}
-                  >
-                    {content}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 500, color: NW.gray700 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: NW.teal500 }} />{stageLabel(activePipe.entry.stage)}
+                    </span>
+                    <ChevronRight className="h-4 w-4" style={{ color: NW.gray400 }} />
                   </a>
                 ) : (
-                  <div key={app.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5">
-                    {content}
+                  <div style={{ fontSize: 13, color: NW.gray500, background: NW.gray50, borderRadius: 12, padding: 16 }}>This candidate isn&apos;t in any active pipeline right now.</div>
+                )}
+              </div>
+
+              <div style={card}>
+                {cardHead(<Inbox className="h-4 w-4" />, 'Application history', `${pastApps.length} application${pastApps.length === 1 ? '' : 's'}`)}
+                {applicationsLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><Spinner size="sm" /></div>
+                ) : pastApps.length === 0 ? (
+                  <div style={{ fontSize: 13, color: NW.gray400 }}>No applications on record.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {pastApps.map((a) => {
+                      const st = applicationStatus(a);
+                      const title = a.openingTitle || a.jobTitle || a.title || a.openingCode || 'Role';
+                      const inner = (
+                        <>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{title}</div>
+                            <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>{a.openingCode || ''}{a.submittedAt ? `${a.openingCode ? ' · ' : ''}applied ${fmtRelative(a.submittedAt)}` : ''}</div>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: st.color, background: st.bg, borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap' }}>{st.label}</span>
+                          {a.openingCode && <ChevronRight className="h-3.5 w-3.5" style={{ color: NW.gray400 }} />}
+                        </>
+                      );
+                      return a.openingCode ? (
+                        <a key={a.id} href={`/pipeline?focus=${encodeURIComponent(a.openingCode)}`} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: '12px 14px', textDecoration: 'none' }}>{inner}</a>
+                      ) : (
+                        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: '12px 14px' }}>{inner}</div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Work history (Jobs applicants) */}
-        {Array.isArray(candidate.workHistory) && candidate.workHistory.some(w => w.company || w.title) && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Work history</h3>
-            <div className="space-y-3">
-              {candidate.workHistory.filter(w => w.company || w.title).map((w, i) => (
-                <div key={i} className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg)] text-[10px] font-800 text-[var(--mid)]">
-                    {i + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-600 text-[var(--black)]">{w.title || '—'}</p>
-                    <p className="text-[11px] text-[var(--mid)]">{w.company || '—'}</p>
-                    {(w.from || w.to) && (
-                      <p className="mt-0.5 text-[10px] text-[var(--light)]">
-                        {w.from || '?'} → {w.to === 'present' ? 'Present' : w.to || '?'}
-                      </p>
-                    )}
-                    {w.contact && (
-                      <p className="mt-0.5 text-[10px] text-[var(--light)]">Contact: {w.contact}</p>
-                    )}
-                  </div>
+        {/* Right — rail */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Hired banner */}
+          {placement && (
+            <a href={`/hired/${placement.id}`} style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderColor: NW.teal500, background: 'rgba(22,160,133,0.06)', textDecoration: 'none', padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                <span style={{ width: 36, height: 36, borderRadius: '50%', background: NW.teal500, color: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Briefcase className="h-4 w-4" /></span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: NW.black }}>Hired{placement.orgName ? ` at ${placement.orgName}` : ''}</div>
+                  <div style={{ fontSize: 11.5, color: NW.gray500 }}>{placement.openingTitle ?? 'Placement'}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Languages */}
-        {Array.isArray(candidate.languages) && candidate.languages.length > 0 && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-600 text-[var(--black)]">
-              <Languages className="h-4 w-4 text-blue-500" /> Languages
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {candidate.languages.map((lang) => (
-                <span
-                  key={lang}
-                  className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-600 text-blue-700"
-                >
-                  <Languages className="h-3 w-3" />{lang}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Certifications & courses */}
-        {Array.isArray(candidate.certifications) && candidate.certifications.length > 0 && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-600 text-[var(--black)]">
-              <GraduationCap className="h-4 w-4 text-amber-500" /> Certifications &amp; courses
-            </h3>
-            <div className="space-y-2.5">
-              {candidate.certifications.map((c, i) => (
-                <div key={i} className="flex gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-xs font-800 text-amber-600">
-                    ✓
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-600 text-[var(--black)]">{c.name}</p>
-                    {c.issuer && <p className="text-[11px] text-[var(--mid)]">{c.issuer}</p>}
-                    {c.date && <p className="mt-0.5 text-[10px] text-[var(--light)]">{c.date}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Summary */}
-        {candidate.summary && (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-            <h3 className="mb-2 text-sm font-600 text-[var(--black)]">Summary</h3>
-            <p className="text-xs leading-relaxed text-[var(--mid)]">{candidate.summary}</p>
-          </div>
-        )}
-
-        {/* Gathered info / details */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Details</h3>
-          <div className="grid gap-3 sm:grid-cols-2 text-xs">
-            {(candidate.city || candidate.location) && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">City / Location</p>
-                <p className="mt-0.5 text-[var(--black)]">{candidate.city || candidate.location}</p>
               </div>
-            )}
-            {candidate.english && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">English level</p>
-                <p className="mt-0.5 text-[var(--black)]">{candidate.english}</p>
-              </div>
-            )}
-            {(candidate.expectedSalaryAmount != null || candidate.expectedSalary != null) && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Expected salary</p>
-                <p className="mt-0.5 text-[var(--black)]">
-                  {candidate.expectedSalaryAmount
-                    ? `${fmtCurrency(Number(candidate.expectedSalaryAmount), candidate.expectedSalaryCurrency || 'USD')}/mo`
-                    : typeof candidate.expectedSalary === 'number'
-                      ? `${fmtCurrency(candidate.expectedSalary, 'USD')}/mo`
-                      : String(candidate.expectedSalary)}
-                </p>
-              </div>
+              <ArrowRight className="h-4 w-4" style={{ color: NW.teal600 }} />
+            </a>
+          )}
+
+          {/* Contact */}
+          <div style={card}>
+            {cardHead(<Mail className="h-4 w-4" />, 'Contact')}
+            {candidate.email && (
+              <a href={`mailto:${candidate.email}`} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', textDecoration: 'none' }}>
+                <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.gray600 }}><Mail className="h-4 w-4" /></span>
+                <span style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, wordBreak: 'break-all' }}>{candidate.email}</span>
+              </a>
             )}
             {candidate.phone && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Phone</p>
-                <p className="mt-0.5 text-[var(--black)]">{candidate.phone}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: candidate.email ? `1px solid ${NW.gray100}` : 'none' }}>
+                <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.gray600 }}><Phone className="h-4 w-4" /></span>
+                <span style={{ fontFamily: MONO, fontSize: 13, color: NW.gray800 }}>{candidate.phone}</span>
               </div>
             )}
-            {typeof candidate.experience === 'number' && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Experience
-                </p>
-                <p className="mt-0.5 text-[var(--black)]">{candidate.experience} years</p>
+            {cvUrl && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: `1px solid ${NW.gray100}` }}>
+                <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.rose50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.rose600 }}><FileText className="h-4 w-4" /></span>
+                <span style={{ flex: 1, fontSize: 13, color: NW.gray700 }}>Resume / CV</span>
+                <a href={cvUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: NW.teal600 }}><ExternalLink className="h-3.5 w-3.5" /> View</a>
               </div>
             )}
-            {candidate.createdAt && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Joined Nearwork
-                </p>
-                <p className="mt-0.5 text-[var(--black)]">
-                  {fmtDate(candidate.createdAt as Timestamp | string | undefined)}
-                </p>
+            {linkedInUrl && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: `1px solid ${NW.gray100}` }}>
+                <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.blue50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.blue500 }}><ExternalLink className="h-4 w-4" /></span>
+                <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: NW.teal700, fontWeight: 500 }}>LinkedIn profile</a>
               </div>
             )}
-            {candidate.source && (
-              <div>
-                <p className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">
-                  Source
-                </p>
-                <p className="mt-0.5 text-[var(--black)]">{candidate.source}</p>
-              </div>
+            {!candidate.email && !candidate.phone && !cvUrl && !linkedInUrl && (
+              <div style={{ fontSize: 13, color: NW.gray400 }}>No contact details on file.</div>
             )}
+          </div>
+
+          {/* Quick facts */}
+          <div style={card}>
+            {cardHead(<Award className="h-4 w-4" />, 'Quick facts')}
+            {snapRow('Status', <span style={{ color: statusActive ? NW.green600 : NW.gray500, fontWeight: 600 }}>{statusActive ? 'Active' : 'Inactive'}</span>)}
+            {snapRow('Salary expectation', <span style={{ fontFamily: MONO }}>{monthlySalary ?? '—'}</span>)}
+            {snapRow('Location', cityLabel || '—')}
+            {snapRow('Experience', yearsExp != null ? `${yearsExp}+ years` : '—')}
+            {snapRow('Source', candidate.source || '—')}
+            {snapRow('Applications', `${appsCount} total`, true)}
+          </div>
+
+          {/* Latest assessment */}
+          {assessment && (assessment.technicalScore != null || assessment.discStyle) && (
+            <div style={card}>
+              {cardHead(<Activity className="h-4 w-4" />, 'Latest assessment')}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                {assessment.technicalScore != null && (
+                  <div>
+                    <div style={{ fontSize: 11, color: NW.gray500 }}>Technical</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 30, fontWeight: 500, color: NW.teal600, letterSpacing: '-0.02em' }}>{assessment.technicalScore}</span>
+                      <span style={{ fontSize: 12, color: NW.gray400 }}>/50</span>
+                    </div>
+                  </div>
+                )}
+                {assessment.discStyle && (
+                  <div style={{ borderLeft: assessment.technicalScore != null ? `1px solid ${NW.gray100}` : 'none', paddingLeft: assessment.technicalScore != null ? 20 : 0 }}>
+                    <div style={{ fontSize: 11, color: NW.gray500, marginBottom: 4 }}>DISC</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{assessment.discStyle} — {DISC_LABELS[assessment.discStyle].name}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div style={card}>
+            {cardHead(<Pencil className="h-4 w-4" />, 'Notes')}
+            <div style={{ position: 'relative' }}>
+              <textarea
+                ref={noteRef}
+                value={noteText}
+                onChange={(e) => onNoteChange(e.target.value, e.target.selectionStart)}
+                onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+                placeholder="Add a note… type @ to mention a Nearwork teammate"
+                rows={3}
+                className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+              {mentionOpen && mentionMatches.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-lg">
+                  <p className="border-b border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">Nearwork team</p>
+                  {mentionMatches.map((u) => (
+                    <button key={u.id} type="button" onMouseDown={(e) => { e.preventDefault(); pickMention(u); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-[var(--bg)]">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white" style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}>{u.initials}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-600 text-[var(--black)]">{u.name}</span>
+                        <span className="block truncate text-[10px] text-[var(--light)]">@{u.handle} · {u.role}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={addNote} disabled={savingNote || !noteText.trim()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-600 text-white disabled:opacity-50" style={{ background: 'var(--green)' }}>
+              {savingNote && <Spinner size="sm" />} Add note
+            </button>
+            <div className="mt-4 space-y-3">
+              {notes.map((n) => (
+                <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
+                  <p className="text-xs text-[var(--black)]">{n.body}</p>
+                  <p className="mt-1.5 text-[10px] text-[var(--light)]">{n.authorName ?? 'Nearwork team'} · {fmtRelative(n.createdAt as Timestamp | string | undefined)}</p>
+                </div>
+              ))}
+              {notes.length === 0 && <p className="text-center text-xs text-[var(--light)]">No notes yet.</p>}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right: notes */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-        <h3 className="mb-3 text-sm font-600 text-[var(--black)]">Notes</h3>
-        <div className="relative">
-          <textarea
-            ref={noteRef}
-            value={noteText}
-            onChange={(e) => onNoteChange(e.target.value, e.target.selectionStart)}
-            onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
-            placeholder="Add a note... type @ to mention a Nearwork teammate"
-            rows={3}
-            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)] focus:bg-white"
-          />
-          {mentionOpen && mentionMatches.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-lg">
-              <p className="border-b border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
-                Nearwork team
-              </p>
-              {mentionMatches.map((u) => (
+      {/* English assessment edit modal */}
+      <Modal open={engModalOpen} onClose={() => setEngModalOpen(false)} title={englishScore ? 'Edit English assessment' : 'Add English assessment'} size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">CEFR Level *</label>
+            <div className="flex gap-2 flex-wrap">
+              {CEFR_LEVELS.map((level) => (
                 <button
-                  key={u.id}
+                  key={level}
                   type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pickMention(u);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => setEngLevel(level)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-700 transition-colors ${
+                    engLevel === level ? 'text-white' : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                  }`}
+                  style={engLevel === level ? { background: 'var(--green)' } : {}}
                 >
-                  <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-700 text-white"
-                    style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-                  >
-                    {u.initials}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-600 text-[var(--black)]">{u.name}</span>
-                    <span className="block truncate text-[10px] text-[var(--light)]">
-                      @{u.handle} · {u.role}
-                    </span>
-                  </span>
+                  {level}
                 </button>
               ))}
             </div>
-          )}
-        </div>
-        <button
-          onClick={addNote}
-          disabled={savingNote || !noteText.trim()}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-600 text-white disabled:opacity-50"
-          style={{ background: 'var(--green)' }}
-        >
-          {savingNote && <Spinner size="sm" />}
-          Add note
-        </button>
-
-        <div className="mt-4 space-y-3">
-          {notes.map((n) => (
-            <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
-              <p className="text-xs text-[var(--black)]">{n.body}</p>
-              <p className="mt-1.5 text-[10px] text-[var(--light)]">
-                {n.authorName ?? 'Nearwork team'} ·{' '}
-                {fmtRelative(n.createdAt as Timestamp | string | undefined)}
-              </p>
-            </div>
-          ))}
-          {notes.length === 0 && (
-            <p className="text-center text-xs text-[var(--light)]">No notes yet.</p>
-          )}
-        </div>
-      </div>
-    </div>
-
-    {/* English assessment edit modal */}
-    <Modal
-      open={engModalOpen}
-      onClose={() => setEngModalOpen(false)}
-      title={englishScore ? 'Edit English assessment' : 'Add English assessment'}
-      size="md"
-    >
-      <div className="space-y-4">
-        <div>
-          <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">CEFR Level *</label>
-          <div className="flex gap-2 flex-wrap">
-            {CEFR_LEVELS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() => setEngLevel(level)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-700 transition-colors ${
-                  engLevel === level
-                    ? 'text-white'
-                    : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
-                }`}
-                style={engLevel === level ? { background: 'var(--green)' } : {}}
-              >
-                {level}
-              </button>
-            ))}
+            <p className="mt-1 text-[10px] text-[var(--light)]">A1–A2 basic · B1–B2 intermediate · C1–C2 proficient</p>
           </div>
-          <p className="mt-1 text-[10px] text-[var(--light)]">A1–A2 basic · B1–B2 intermediate · C1–C2 proficient</p>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Comments *</label>
+            <textarea
+              value={engFeedback}
+              onChange={(e) => setEngFeedback(e.target.value)}
+              rows={3}
+              placeholder="Describe the candidate's English proficiency: fluency, accent, comprehension, professional communication…"
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+            <p className="mt-1 text-[10px] text-[var(--light)]">Visible to Nearwork staff and to the client.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setEngModalOpen(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
+            <button type="button" onClick={saveEnglishAssessment} disabled={engSaving || !engFeedback.trim()} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60" style={{ background: 'var(--green)' }}>
+              {engSaving && <Spinner size="sm" />} Save
+            </button>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Comments *</label>
-          <textarea
-            value={engFeedback}
-            onChange={(e) => setEngFeedback(e.target.value)}
-            rows={3}
-            placeholder="Describe the candidate's English proficiency: fluency, accent, comprehension, professional communication…"
-            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-          />
-          <p className="mt-1 text-[10px] text-[var(--light)]">Visible to Nearwork staff and to the client.</p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => setEngModalOpen(false)}
-            className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={saveEnglishAssessment}
-            disabled={engSaving || !engFeedback.trim()}
-            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
-            style={{ background: 'var(--green)' }}
-          >
-            {engSaving && <Spinner size="sm" />}
-            Save
-          </button>
-        </div>
-      </div>
-    </Modal>
+      </Modal>
     </>
   );
 }

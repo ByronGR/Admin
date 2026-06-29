@@ -13,6 +13,7 @@ import {
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,7 +26,6 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Trash2,
   Plus,
   Copy,
   Check,
@@ -330,14 +330,7 @@ export default function AssessmentsPage() {
                           )}
                         </div>
                         <div>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Delete this assessment?')) deleteAssessment(a.id);
-                            }}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--light)] hover:bg-red-50 hover:text-red-500"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <HoldToDelete onConfirm={() => deleteAssessment(a.id)} size="sm" label="Hold to delete" title="Delete this assessment" />
                         </div>
                       </div>
                     );

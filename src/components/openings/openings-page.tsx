@@ -41,6 +41,7 @@ export default function OpeningsPage() {
 
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [counts, setCounts] = useState<Record<string, { pipeline: number; review: number }>>({});
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<OpeningTab>('active');
@@ -49,12 +50,21 @@ export default function OpeningsPage() {
     Promise.allSettled([
       getDocs(collection(db, 'openings')),
       getDocs(collection(db, 'pipelines')),
+      getDocs(collection(db, 'organizations')),
     ])
-      .then(([oRes, pRes]) => {
+      .then(([oRes, pRes, orgRes]) => {
         if (oRes.status === 'fulfilled') {
           setOpenings(sortByTimestamp(oRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
         } else {
           showToast('Failed to load openings', 'error');
+        }
+        if (orgRes.status === 'fulfilled') {
+          const m: Record<string, string> = {};
+          orgRes.value.docs.forEach((d) => {
+            const data = d.data() as { name?: string; shortId?: string };
+            if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; }
+          });
+          setOrgNames(m);
         }
         if (pRes.status === 'fulfilled') {
           const m: Record<string, { pipeline: number; review: number }> = {};
@@ -188,7 +198,9 @@ export default function OpeningsPage() {
                         <span style={{ fontSize: 14, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title || 'Untitled role'}</span>
                         <span style={{ fontFamily: MONO, fontSize: 10.5, color: NW.gray400, background: NW.gray50, borderRadius: 5, padding: '1px 6px', flexShrink: 0 }}>{o.code ?? '—'}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>{o.orgName ?? '—'}{o.department ? ` · ${o.department}` : ''}</div>
+                      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>
+                        {(o.orgName || orgNames[o.orgId] || 'No organization')}{o.department ? ` · ${o.department}` : ''}
+                      </div>
                     </div>
                   </div>
                   <div style={{ fontSize: 12.5, color: NW.gray600 }}>

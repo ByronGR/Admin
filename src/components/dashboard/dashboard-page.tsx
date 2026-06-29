@@ -23,7 +23,7 @@ import {
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtRelative, initials } from '@/lib/utils';
+import { fmtRelative, initials, sortByTimestamp } from '@/lib/utils';
 import {
   PIPELINE_STAGE_LABELS,
   type PipelineStage,
@@ -273,7 +273,7 @@ export default function DashboardPage() {
 
       // Activity — recent candidates
       setActivity(
-        candidates.slice(0, 6).map((c) => ({
+        sortByTimestamp(candidates, 'createdAt').slice(0, 6).map((c) => ({
           id: c.id,
           name: c.name,
           role: c.currentRole,

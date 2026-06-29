@@ -8,13 +8,31 @@ import { db, doc, updateDoc, serverTimestamp } from '@/lib/firebase';
 import { useToast } from '@/components/ui/toast';
 import { Spinner } from '@/components/ui/spinner';
 import Link from 'next/link';
-import { ExternalLink, Tag, FileText, Link as LinkIcon, Bell } from 'lucide-react';
+import { NW, Icon, Button, Chip } from '@/components/nw/primitives';
+import { PageHeader, Card, CardHead } from '@/components/nw/shell-ui';
+import { type IconName } from 'lucide-react/dynamic';
 
-// ─── Settings page ────────────────────────────────────────────────────────────
+function ToggleRow({ title, desc, defaultOn = false }: { title: string; desc: string; defaultOn?: boolean }) {
+  const [on, setOn] = useState(defaultOn);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '15px 0', borderTop: `1px solid ${NW.gray100}` }}>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: NW.black }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 2 }}>{desc}</div>
+      </div>
+      <button onClick={() => setOn(!on)} style={{ width: 42, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, background: on ? NW.teal500 : NW.gray200, position: 'relative', transition: 'background 160ms' }}>
+        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%', background: NW.white, boxShadow: '0 1px 2px rgba(0,0,0,0.2)', transition: 'left 160ms' }} />
+      </button>
+    </div>
+  );
+}
+
+type Section = 'general' | 'notifications' | 'team' | 'integrations' | 'billing';
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
   const { showToast } = useToast();
+  const [section, setSection] = useState<Section>('general');
   const [calendlyLink, setCalendlyLink] = useState(profile?.calendlyLink ?? '');
   const [savingCalendly, setSavingCalendly] = useState(false);
 
@@ -22,10 +40,7 @@ export default function SettingsPage() {
     if (!user) return;
     setSavingCalendly(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        calendlyLink: calendlyLink.trim(),
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, 'users', user.uid), { calendlyLink: calendlyLink.trim(), updatedAt: serverTimestamp() });
       showToast('Calendly link saved', 'success');
     } catch {
       showToast('Failed to save', 'error');
@@ -34,114 +49,116 @@ export default function SettingsPage() {
     }
   }
 
+  const nav: { id: Section; label: string; icon: IconName }[] = [
+    { id: 'general', label: 'General', icon: 'settings-2' },
+    { id: 'notifications', label: 'Notifications', icon: 'bell' },
+    { id: 'team', label: 'Team & roles', icon: 'users' },
+    { id: 'integrations', label: 'Integrations', icon: 'plug' },
+    { id: 'billing', label: 'Billing', icon: 'credit-card' },
+  ];
+
+  const integrations: { name: string; desc: string; icon: IconName; on: boolean }[] = [
+    { name: 'Slack', desc: 'Pipeline alerts to your channels', icon: 'message-square', on: false },
+    { name: 'Google Calendar', desc: 'Sync interview scheduling', icon: 'calendar', on: false },
+    { name: 'Gmail', desc: 'Send candidate emails from Nearwork', icon: 'mail', on: false },
+    { name: 'Stripe', desc: 'Client billing & invoices', icon: 'credit-card', on: true },
+  ];
+
+  const field: React.CSSProperties = { font: 'inherit', fontSize: 13.5, padding: '9px 14px', borderRadius: 9, border: `1px solid ${NW.gray200}`, width: 280, outline: 'none', background: NW.white };
+
   return (
     <MainLayout>
-      <div className="space-y-6 max-w-2xl">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Settings</h1>
-          <p className="mt-0.5 text-xs text-[var(--light)]">App configuration and your preferences.</p>
-        </div>
-
-        {/* Version */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <h2 className="mb-4 text-sm font-600 text-[var(--black)]">Version</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
-              <Tag className="h-4 w-4 text-[var(--green)]" />
-              <span className="text-sm font-700 text-[var(--black)]">{APP_VERSION}</span>
+      <div>
+        <PageHeader overline="Account" title="Settings" subtitle="Manage your workspace, notifications, and integrations." />
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+          <Card pad={10}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {nav.map((n) => {
+                const on = n.id === section;
+                return (
+                  <button key={n.id} onClick={() => setSection(n.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 9, border: 'none', font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500, color: on ? NW.black : NW.gray600, background: on ? NW.gray50 : 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                    <Icon name={n.icon} size={16} color={on ? NW.teal600 : NW.gray500} /> {n.label}
+                  </button>
+                );
+              })}
             </div>
-            <Link
-              href="/changelog"
-              className="flex items-center gap-1.5 text-xs text-[var(--green)] hover:underline"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              View changelog
-            </Link>
-          </div>
-          <p className="mt-3 text-xs text-[var(--light)]">
-            Format: MAJOR.MINOR.PATCH — Major = full rebuild; Minor = new features; Patch = fixes &amp; tweaks.
-          </p>
-        </div>
+          </Card>
 
-        {/* Calendly */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <h2 className="mb-1 text-sm font-600 text-[var(--black)]">Your Calendly link</h2>
-          <p className="mb-4 text-xs text-[var(--light)]">
-            Shown to candidates when scheduling interviews. Only visible to candidates you are managing.
-          </p>
-          <div className="flex gap-3">
-            <div className="relative flex-1">
-              <LinkIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--light)]" />
-              <input
-                type="url"
-                value={calendlyLink}
-                onChange={(e) => setCalendlyLink(e.target.value)}
-                placeholder="https://calendly.com/your-name"
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
-              />
-            </div>
-            <button
-              onClick={saveCalendly}
-              disabled={savingCalendly}
-              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
-              style={{ background: 'var(--green)' }}
-            >
-              {savingCalendly && <Spinner size="sm" />}
-              Save
-            </button>
-          </div>
-          {calendlyLink && (
-            <a
-              href={calendlyLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 flex items-center gap-1.5 text-xs text-[var(--green)] hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Preview your Calendly
-            </a>
-          )}
-        </div>
-
-        {/* Notifications */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Bell className="h-4 w-4 text-[var(--light)]" />
-            <h2 className="text-sm font-600 text-[var(--black)]">Notifications</h2>
-          </div>
-          <div className="space-y-3">
-            {[
-              { label: 'New candidate added to pipeline', desc: 'Get notified when a candidate is added to a pipeline you manage' },
-              { label: 'Stage change', desc: 'Get notified when a candidate advances or is moved to a different stage' },
-              { label: 'Assessment completed', desc: 'Get notified when a candidate completes their assessment' },
-              { label: 'Opening approval required', desc: 'Get notified when an opening is submitted for review' },
-            ].map(({ label, desc }) => (
-              <div key={label} className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-600 text-[var(--black)]">{label}</p>
-                  <p className="text-[10px] text-[var(--light)]">{desc}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {section === 'general' ? (
+              <>
+                <Card>
+                  <CardHead icon="tag" title="Version" sub="MAJOR.MINOR.PATCH — Major = rebuild · Minor = features · Patch = fixes" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${NW.gray200}`, background: NW.gray50, borderRadius: 9, padding: '8px 12px' }}>
+                      <Icon name="tag" size={15} color={NW.teal600} /><span style={{ fontSize: 14, fontWeight: 700, color: NW.black }}>{APP_VERSION}</span>
+                    </span>
+                    <Link href="/changelog" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: NW.teal600 }}><Icon name="file-text" size={14} color={NW.teal600} />View changelog</Link>
+                  </div>
+                </Card>
+                <Card>
+                  <CardHead icon="link" title="Your Calendly link" sub="Shown to candidates you manage when scheduling interviews." />
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <input type="url" value={calendlyLink} onChange={(e) => setCalendlyLink(e.target.value)} placeholder="https://calendly.com/your-name" style={{ ...field, flex: 1, width: 'auto' }} />
+                    <Button variant="primary" size="md" onClick={saveCalendly} disabled={savingCalendly}>{savingCalendly ? 'Saving…' : 'Save'}</Button>
+                  </div>
+                  {calendlyLink && <a href={calendlyLink} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: NW.teal600, marginTop: 10 }}><Icon name="external-link" size={13} color={NW.teal600} />Preview your Calendly</a>}
+                </Card>
+                <Card>
+                  <CardHead icon="sliders-horizontal" title="Preferences" />
+                  <ToggleRow title="Show candidate scores" desc="Display assessment scores across the ATS" defaultOn />
+                  <ToggleRow title="Auto-assign sourced candidates" desc="Route new sourced candidates by role" defaultOn />
+                  <ToggleRow title="Compact tables" desc="Denser rows in candidate and opening lists" />
+                </Card>
+              </>
+            ) : section === 'notifications' ? (
+              <Card>
+                <CardHead icon="bell" title="Notifications" sub="In-app only for now — email notifications coming in a future update." />
+                <ToggleRow title="New candidate added to pipeline" desc="When a candidate is added to a pipeline you manage" defaultOn />
+                <ToggleRow title="Stage change" desc="When a candidate advances or moves stage" defaultOn />
+                <ToggleRow title="Assessment completed" desc="When a candidate finishes their assessment" defaultOn />
+                <ToggleRow title="Opening approval required" desc="When an opening is submitted for review" defaultOn />
+                <ToggleRow title="Weekly summary email" desc="Monday digest of pipeline health" />
+              </Card>
+            ) : section === 'team' ? (
+              <Card>
+                <CardHead icon="users" title="Team & roles" sub="Admin is invite-only — even @nearwork.co addresses need an invitation." />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px', borderRadius: 12, background: NW.gray50 }}>
+                  <div style={{ fontSize: 13, color: NW.gray600 }}>Manage members, invites and access levels on the Team page.</div>
+                  <Link href="/users"><Button variant="secondary" size="sm" iconRight="arrow-right">Open Team</Button></Link>
                 </div>
-                <label className="relative inline-flex shrink-0 cursor-pointer items-center">
-                  <input type="checkbox" defaultChecked className="peer sr-only" />
-                  <div className="h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-[var(--green)] peer-checked:after:translate-x-full" />
-                </label>
-              </div>
-            ))}
+              </Card>
+            ) : section === 'integrations' ? (
+              <Card>
+                <CardHead icon="plug" title="Integrations" sub="Connect Nearwork to the tools your team uses." />
+                {integrations.map((it, i) => (
+                  <div key={it.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '15px 0', borderTop: i ? `1px solid ${NW.gray100}` : 'none' }}>
+                    <span style={{ width: 38, height: 38, borderRadius: 9, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={it.icon} size={17} color={NW.gray600} /></span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{it.name}</div>
+                      <div style={{ fontSize: 12.5, color: NW.gray500 }}>{it.desc}</div>
+                    </div>
+                    {it.on ? <Chip variant="success" size="sm" icon="check">Connected</Chip> : <Button variant="secondary" size="sm">Connect</Button>}
+                  </div>
+                ))}
+                <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 14 }}>Integration management is illustrative — wiring lands in a later pass.</div>
+              </Card>
+            ) : (
+              <Card>
+                <CardHead icon="credit-card" title="Billing" sub="Plan and payment." />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: NW.teal50, border: `1px solid ${NW.teal500}25`, borderRadius: 12, padding: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: NW.teal700 }}>Nearwork · Internal</div>
+                    <div style={{ fontSize: 13, color: NW.gray600, marginTop: 3 }}>Full workspace · unlimited seats · all modules</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 13, color: NW.gray500 }}>Client billing runs through Stripe</div>
+                    <Link href="/organizations"><Button variant="ghost" size="sm" iconRight="arrow-right" style={{ marginTop: 4 }}>View accounts</Button></Link>
+                  </div>
+                </div>
+              </Card>
+            )}
           </div>
-          <p className="mt-3 text-[10px] text-[var(--light)]">
-            In-app notifications only. Email notifications will be available in a future update.
-          </p>
-        </div>
-
-        {/* Invite-only notice */}
-        <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
-          <h2 className="mb-1 text-sm font-600 text-[var(--black)]">Access control</h2>
-          <p className="text-xs text-[var(--light)]">
-            The admin is invite-only. Even users with @nearwork.co email addresses must receive an invitation
-            to create an account. Manage invitations and team members on the{' '}
-            <a href="/users" className="text-[var(--green)] hover:underline">Team page</a>.
-          </p>
         </div>
       </div>
     </MainLayout>

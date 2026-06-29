@@ -7,7 +7,6 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { ContractorDetail } from '@/components/hired/contractor-detail';
 import type { Placement } from '@/lib/types';
-import { ArrowLeft } from 'lucide-react';
 
 export default function HiredDetailPage() {
   const params = useParams();
@@ -39,24 +38,6 @@ export default function HiredDetailPage() {
   return (
     <MainLayout>
       <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <a
-            href="/hired"
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All placements
-          </a>
-          {placement && (
-            <>
-              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">
-                {placement.candidateName ?? 'Contractor'}
-              </h1>
-              <p className="text-xs text-[var(--light)]">{placement.orgName}</p>
-            </>
-          )}
-        </div>
-
         {loading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />

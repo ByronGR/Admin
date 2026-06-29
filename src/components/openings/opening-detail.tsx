@@ -657,7 +657,7 @@ export function OpeningDetail({
       </div>
 
       {/* ── Unified status bar ────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-[16px] border border-[#EBEBEB] bg-white px-5 py-3">
         {/* Step 1: Brief */}
         <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-700 ${
           briefDone  ? 'bg-emerald-50 text-emerald-700' :
@@ -784,7 +784,7 @@ export function OpeningDetail({
       </div>
 
       {/* ── Kick-off Brief ─────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+      <div className="rounded-[16px] border border-[#EBEBEB] bg-white p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-3 min-w-0">
             <div
@@ -816,7 +816,7 @@ export function OpeningDetail({
 
       {/* ── Linked pipeline ────────────────────────────────────────────── */}
       <div
-        className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-white px-5 py-3 cursor-pointer hover:border-[var(--green)]"
+        className="flex items-center justify-between gap-4 rounded-[16px] border border-[#EBEBEB] bg-white px-5 py-3 cursor-pointer hover:border-[var(--green)]"
         onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}
       >
         <div className="flex items-center gap-3">
@@ -828,7 +828,7 @@ export function OpeningDetail({
       </div>
 
       {/* ── Opening details ────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-white p-6">
+      <div className="rounded-[16px] border border-[#EBEBEB] bg-white p-6">
         <div className="mb-5 flex items-center gap-4">
           <div
             className="flex h-12 w-12 items-center justify-center rounded-xl text-lg"
@@ -1005,7 +1005,7 @@ export function OpeningDetail({
       )}
 
       {/* ── Opening sheet (for jobs.nearwork.co) ───────────────────────── */}
-      <div className={`rounded-2xl border bg-white ${briefStatus === 'approved' && !sheetReady && !opening.published ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-[var(--border)]'}`}>
+      <div className={`rounded-[16px] border bg-white ${briefStatus === 'approved' && !sheetReady && !opening.published ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-[#EBEBEB]'}`}>
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-[var(--border)]">

@@ -94,25 +94,30 @@ export default function HiredPage() {
 
   async function load() {
     setLoading(true);
-    try {
-      const [placeSnap, candSnap, orgSnap] = await Promise.all([
-        getDocs(collection(db, 'placements')),
-        getDocs(collection(db, 'candidates')),
-        getDocs(collection(db, 'organizations')),
-      ]);
-      setPlacements(sortByTimestamp(placeSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
-      setCandidates(candSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)));
+    // Each collection loads independently — a failure on one (e.g. orgs rules)
+    // must never block the candidate directory used by the placement picker.
+    const [placeRes, candRes, orgRes] = await Promise.allSettled([
+      getDocs(collection(db, 'placements')),
+      getDocs(collection(db, 'candidates')),
+      getDocs(collection(db, 'organizations')),
+    ]);
+    if (placeRes.status === 'fulfilled') {
+      setPlacements(sortByTimestamp(placeRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
+    } else {
+      showToast('Failed to load placements', 'error');
+    }
+    if (candRes.status === 'fulfilled') {
+      setCandidates(candRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)));
+    }
+    if (orgRes.status === 'fulfilled') {
       const m: Record<string, string> = {};
-      orgSnap.docs.forEach((d) => {
+      orgRes.value.docs.forEach((d) => {
         const data = d.data() as Organization & { shortId?: string };
         if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; }
       });
       setOrgNames(m);
-    } catch {
-      showToast('Failed to load placements', 'error');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   const orgNameOf = (p: Placement) => p.orgName || orgNames[p.orgId] || 'No organization';

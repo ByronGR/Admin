@@ -115,6 +115,9 @@ function KickoffInner() {
 
   // Anchored Rail: active section tracker
   const [activeSection, setActiveSection] = useState('s1');
+  // Stepped wizard: show one section at a time. Sections stay MOUNTED (hidden
+  // via CSS) so the uncontrolled form never loses values when stepping.
+  const [step, setStep] = useState(0);
 
   const formRef = useRef<HTMLFormElement>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -653,21 +656,22 @@ function KickoffInner() {
           <div className="px-4 pt-4 pb-3 border-b border-[#F0EFEB]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#9E9E9E]">Progress</span>
-              <span className="text-[11px] font-semibold text-[#16A085]">9 sections</span>
+              <span className="text-[11px] font-semibold text-[#16A085]">Step {step + 1} / {SECTIONS.length}</span>
             </div>
             <div className="h-1 bg-[#F0EFEB] rounded-full overflow-hidden">
-              <div className="h-full bg-[#16A085] rounded-full transition-all" style={{ width: '11%' }} />
+              <div className="h-full bg-[#16A085] rounded-full transition-all" style={{ width: `${((step + 1) / SECTIONS.length) * 100}%` }} />
             </div>
           </div>
 
           <nav className="flex flex-col py-2 flex-1">
-            {SECTIONS.map(({ id, num, icon, label }) => {
-              const isActive = activeSection === id;
+            {SECTIONS.map(({ id, num, icon, label }, idx) => {
+              const isActive = step === idx;
               return (
-                <a
+                <button
                   key={id}
-                  href={`#${id}`}
-                  className={`flex items-center gap-2.5 px-3 py-2 mx-2 rounded-lg text-[12px] font-medium transition-all ${
+                  type="button"
+                  onClick={() => setStep(idx)}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 mx-2 rounded-lg text-left text-[12px] font-medium transition-all ${
                     isActive
                       ? 'bg-[#EEF9F6] text-[#16A085] font-semibold'
                       : 'text-[#666] hover:bg-[#F8F7F3] hover:text-[#111]'
@@ -683,7 +687,7 @@ function KickoffInner() {
                     <span className="w-5 h-5 flex items-center justify-center text-sm flex-shrink-0">{icon}</span>
                   )}
                   <span className="truncate leading-snug">{label}</span>
-                </a>
+                </button>
               );
             })}
           </nav>
@@ -755,7 +759,7 @@ function KickoffInner() {
           <form ref={formRef} onInput={scheduleAutoSave} className="space-y-5">
 
             {/* ── S1 Role Overview ──────────────────────────────────────── */}
-            <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement" partnerVisible>
+            <Section id="s1" num={1} icon="🎯" title="Role Overview" desc="Core information about the position and engagement" partnerVisible active={step === 0}>
 
               {/* Organization — required, always visible */}
               <div className={`mb-5 p-4 rounded-xl border-2 ${selectedOrgId ? 'border-[#E5E4E0] bg-white' : 'border-amber-300 bg-amber-50'}`}>
@@ -856,7 +860,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S2 Compensation ───────────────────────────────────────── */}
-            <Section id="s2" num={2} icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes" partnerVisible>
+            <Section id="s2" num={2} icon="💰" title="Compensation & Benefits" desc="Salary range, pay frequency, and what the role includes" partnerVisible active={step === 1}>
 
               {/* Nearwork suggested rate (from Airtable) */}
               {selectedRole && (selectedRole.suggestedMin || selectedRole.suggestedMax) && (
@@ -890,7 +894,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S3 Role Description ───────────────────────────────────── */}
-            <Section id="s3" num={3} icon="📋" title="Role Description" desc="What this person will actually do and what success looks like" partnerVisible>
+            <Section id="s3" num={3} icon="📋" title="Role Description" desc="What this person will actually do and what success looks like" partnerVisible active={step === 2}>
               <Field label="Role Summary / Elevator Pitch" required><textarea name="roleSummary" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="2–4 sentences describing the role, its purpose, and why it matters…" /></Field>
               <div className="mt-4">
                 <Field label="Key Responsibilities">
@@ -911,7 +915,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S4 Requirements ───────────────────────────────────────── */}
-            <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications" partnerVisible>
+            <Section id="s4" num={4} icon="🎓" title="Candidate Requirements" desc="Must-haves, nice-to-haves, experience, and qualifications" partnerVisible active={step === 3}>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Must-Have Skills / Experience">
                   <DynamicList items={mustHaveSkills} setItems={setMustHaveSkills} disabled={isReadOnly} placeholder="e.g. 5+ years Python, REST API design…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
@@ -947,7 +951,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S5 Team & Culture ─────────────────────────────────────── */}
-            <Section id="s5" num={5} icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment" partnerVisible>
+            <Section id="s5" num={5} icon="🤝" title="Team & Reporting Structure" desc="Who they'll work with, report to, and the working environment" partnerVisible active={step === 4}>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Team Size"><input type="number" name="teamSize" disabled={isReadOnly} className={inp} placeholder="e.g. 8" /></Field>
                 <Field label="Reports To (Title)"><input name="reportsToTitle" disabled={isReadOnly} className={inp} placeholder="e.g. VP of Engineering" /></Field>
@@ -971,7 +975,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S7 Tools & Tech (now section 6 in the UI) ────────────── */}
-            <Section id="s7" num={6} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems" partnerVisible>
+            <Section id="s7" num={6} icon="🛠️" title="Tools & Technology" desc="Required stack, software, and internal systems" partnerVisible active={step === 5}>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Required Tools / Software">
                   <DynamicList items={requiredTools} setItems={setRequiredTools} disabled={isReadOnly} placeholder="e.g. Jira, Slack, Figma…" onAdd={scheduleAutoSave} cancelSave={cancelAutoSave} />
@@ -990,7 +994,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S8 Nearwork Assignment (now section 7) ────────────────── */}
-            <Section id="s8" num={7} icon="🏢" title="Nearwork Team Assignment" desc="Who's on the search, timelines, and strategy — internal use">
+            <Section id="s8" num={7} icon="🏢" title="Nearwork Team Assignment" desc="Who's on the search, timelines, and strategy — internal use" active={step === 6}>
               <div className="grid grid-cols-2 gap-4 mb-4">
 
                 {/* Recruiter picker — uses Nearwork staff directory */}
@@ -1049,7 +1053,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S9 Administrative (now section 8) ────────────────────── */}
-            <Section id="s9" num={8} icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations" partnerVisible>
+            <Section id="s9" num={8} icon="📄" title="Administrative Details" desc="Contract, equipment, compliance, and legal considerations" partnerVisible active={step === 7}>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <Field label="Contract Type">
                   <Select name="contractType" disabled={isReadOnly} options={['Employment (Payroll)','B2B Contractor','Freelance','Internship','Part-time Employment']} />
@@ -1071,7 +1075,7 @@ function KickoffInner() {
             </Section>
 
             {/* ── S10 Additional Notes (now section 9) ─────────────────── */}
-            <Section id="s10" num={9} icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above" partnerVisible>
+            <Section id="s10" num={9} icon="📝" title="Additional Notes" desc="Anything discussed that doesn't fit above" partnerVisible active={step === 8}>
               <div className="mb-4">
                 <Field label="Additional Notes / Special Instructions"><textarea name="additionalNotes" disabled={isReadOnly} className={ta} style={{minHeight:100}} placeholder="Client preferences, special considerations, context for this search…" /></Field>
               </div>
@@ -1081,7 +1085,7 @@ function KickoffInner() {
           </form>
 
           {/* Audit Trail */}
-          <div id="audit" className="bg-white border border-[#E5E4E0] rounded-xl mt-5 overflow-hidden scroll-mt-28">
+          <div id="audit" style={step === 9 ? undefined : { display: 'none' }} className="bg-white border border-[#E5E4E0] rounded-xl mt-5 overflow-hidden scroll-mt-28">
             <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
               <span className="text-lg">📋</span>
               <div>
@@ -1112,6 +1116,38 @@ function KickoffInner() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* ── Stepped wizard footer ─────────────────────────────────────── */}
+          <div className="sticky bottom-0 z-30 mt-5 bg-white border border-[#E5E4E0] rounded-xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+            <span className="text-xs font-semibold text-[#555]">Step {step + 1} of {SECTIONS.length}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={step === 0}
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+                className="px-3 py-1.5 bg-white border border-[#E5E4E0] text-[11px] font-semibold rounded-lg text-[#555] hover:border-[#16A085] hover:text-[#16A085] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                ← Back
+              </button>
+              {step < SECTIONS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setStep((s) => Math.min(SECTIONS.length - 1, s + 1))}
+                  className="px-3 py-1.5 bg-[#111] text-white text-[11px] font-semibold rounded-lg hover:bg-[#333] transition-colors"
+                >
+                  Next: {SECTIONS[step + 1].label} →
+                </button>
+              ) : (status !== 'approved' && status !== 'submitted' && !isReadOnly) ? (
+                <button
+                  type="button"
+                  onClick={() => openConfirm('submit')}
+                  className="px-3 py-1.5 bg-[#16A085] text-white text-[11px] font-semibold rounded-lg hover:bg-[#12866E] transition-colors"
+                >
+                  Submit for client review →
+                </button>
+              ) : null}
             </div>
           </div>
         </main>
@@ -1157,9 +1193,9 @@ const ta = `${inp} resize-y min-h-[80px] leading-relaxed`;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ id, num, icon, title, desc, partnerVisible, children }: { id: string; num: number; icon: string; title: string; desc: string; partnerVisible?: boolean; children: ReactNode }) {
+function Section({ id, num, icon, title, desc, partnerVisible, active = true, children }: { id: string; num: number; icon: string; title: string; desc: string; partnerVisible?: boolean; active?: boolean; children: ReactNode }) {
   return (
-    <div id={id} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
+    <div id={id} style={active ? undefined : { display: 'none' }} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
         <div className="w-7 h-7 rounded-full bg-[#111] flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">{num}</div>
         <div>

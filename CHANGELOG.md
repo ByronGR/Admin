@@ -5,6 +5,17 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.0.0] — 2026-06-29
+
+### Added
+- Complete Admin redesign: new design system (NW palette, Poppins, shared primitives) and full-height shell (new sidebar, centered global search, rounded content inset).
+- Every section rebuilt to the new design — Dashboard, Organizations, Pipeline (list + kanban), Candidates, Openings (3-tab detail) + kick-off wizard, Hired (staffing + 7-tab HR/EOR profile), Managed teams, SPP, Team, Profile, Settings, FX & rates.
+- Hold-to-delete safety control on every destructive delete.
+
+> Note: the in-app changelog (Settings → changelog) is the maintained source of truth; this file resumes at the 1.0.0 milestone.
+
+---
+
 ## [0.1.3] — 2026-05-28
 
 ### Added

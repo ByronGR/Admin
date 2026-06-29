@@ -649,52 +649,43 @@ function KickoffInner() {
       </div>
 
       {/* ── Body: Rail + Content ─────────────────────────────────────────── */}
-      <div className="flex min-h-[calc(100vh-105px)] bg-[#F5F4F0]">
+      <div className="bg-[#F5F4F0] min-h-[calc(100vh-105px)]">
 
-        {/* ── Anchored Rail ─────────────────────────────────────────────── */}
-        <aside className="hidden md:flex flex-col w-[200px] flex-shrink-0 sticky top-[105px] h-[calc(100vh-105px)] bg-white border-r border-[#E5E4E0] overflow-y-auto">
-          <div className="px-4 pt-4 pb-3 border-b border-[#F0EFEB]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#9E9E9E]">Progress</span>
-              <span className="text-[11px] font-semibold text-[#16A085]">Step {step + 1} / {SECTIONS.length}</span>
-            </div>
-            <div className="h-1 bg-[#F0EFEB] rounded-full overflow-hidden">
-              <div className="h-full bg-[#16A085] rounded-full transition-all" style={{ width: `${((step + 1) / SECTIONS.length) * 100}%` }} />
-            </div>
-          </div>
-
-          <nav className="flex flex-col py-2 flex-1">
+        {/* ── Horizontal stepper ─────────────────────────────────────────── */}
+        <div className="bg-white border-b border-[#E5E4E0] px-5">
+          <div className="max-w-[1080px] mx-auto flex items-stretch gap-1 overflow-x-auto">
             {SECTIONS.map(({ id, num, icon, label }, idx) => {
-              const isActive = step === idx;
+              const on = step === idx;
+              const passed = idx < step;
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setStep(idx)}
-                  className={`flex w-full items-center gap-2.5 px-3 py-2 mx-2 rounded-lg text-left text-[12px] font-medium transition-all ${
-                    isActive
-                      ? 'bg-[#EEF9F6] text-[#16A085] font-semibold'
-                      : 'text-[#666] hover:bg-[#F8F7F3] hover:text-[#111]'
-                  }`}
+                  title={label}
+                  className="flex-1 min-w-[84px] bg-transparent border-none cursor-pointer px-1.5 pt-3 pb-2.5 flex flex-col items-center gap-1.5"
+                  style={{ borderBottom: `2px solid ${on ? '#16A085' : 'transparent'}` }}
                 >
-                  {num > 0 ? (
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-all ${
-                      isActive ? 'bg-[#16A085] text-white' : 'bg-[#F0EFEB] text-[#999]'
-                    }`}>
-                      {num}
-                    </span>
-                  ) : (
-                    <span className="w-5 h-5 flex items-center justify-center text-sm flex-shrink-0">{icon}</span>
-                  )}
-                  <span className="truncate leading-snug">{label}</span>
+                  <span
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                    style={{ background: on ? '#111' : passed ? '#16A085' : '#EBEBEB', color: on || passed ? '#fff' : '#757575' }}
+                  >
+                    {passed && !on ? '✓' : num > 0 ? num : icon}
+                  </span>
+                  <span
+                    className="text-[10.5px] truncate max-w-[92px]"
+                    style={{ color: on ? '#111' : '#757575', fontWeight: on ? 700 : 500 }}
+                  >
+                    {label}
+                  </span>
                 </button>
               );
             })}
-          </nav>
-        </aside>
+          </div>
+        </div>
 
         {/* ── Main content ───────────────────────────────────────────────── */}
-        <main className="flex-1 px-6 py-6 max-w-[860px]">
+        <main className="px-6 py-7 max-w-[820px] mx-auto">
 
           {/* ── Submission timeline (Item 9) ───────────────────────────────── */}
           {(timelineSubmitted || auditHistory.length > 0) && (
@@ -1193,25 +1184,27 @@ const ta = `${inp} resize-y min-h-[80px] leading-relaxed`;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ id, num, icon, title, desc, partnerVisible, active = true, children }: { id: string; num: number; icon: string; title: string; desc: string; partnerVisible?: boolean; active?: boolean; children: ReactNode }) {
+function Section({ id, num, title, desc, partnerVisible, active = true, children }: { id: string; num: number; icon: string; title: string; desc: string; partnerVisible?: boolean; active?: boolean; children: ReactNode }) {
+  const accent = partnerVisible ? '#0E6B58' : '#784899';
   return (
-    <div id={id} style={active ? undefined : { display: 'none' }} className="bg-white border border-[#E5E4E0] rounded-xl overflow-hidden scroll-mt-28">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E5E4E0] bg-[#FAFAF9]">
-        <div className="w-7 h-7 rounded-full bg-[#111] flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">{num}</div>
-        <div>
-          <div className="text-sm font-bold">{title}</div>
-          <div className="text-xs text-[#9E9E9E] mt-0.5">{desc}</div>
-        </div>
-        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-          {partnerVisible && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#16A085] bg-[#E8F8F5] border border-[rgba(22,160,133,.25)] rounded-full px-2 py-0.5">
-              👁 Partner can see this
-            </span>
-          )}
-          <span className="text-base">{icon}</span>
-        </div>
+    <div id={id} style={active ? undefined : { display: 'none' }} className="scroll-mt-28">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Section {num} / 9</span>
+        {partnerVisible ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#16A085] bg-[#E8F8F5] border border-[rgba(22,160,133,.25)] rounded-full px-2 py-0.5">👁 Partner can see this</span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#784899] bg-[#F7F2FC] border border-[rgba(175,122,197,.3)] rounded-full px-2 py-0.5">🔒 Internal only</span>
+        )}
       </div>
-      <div className="p-5">{children}</div>
+      <h1 className="text-[28px] font-bold tracking-tight text-[#111] leading-tight mb-1.5">{title}</h1>
+      <p className="text-[14px] text-[#757575] mb-5 leading-snug">{desc}</p>
+      {!partnerVisible && (
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#F7F2FC] border border-[rgba(175,122,197,.2)] mb-5">
+          <span>🔒</span>
+          <span className="text-[12.5px] text-[#784899]">Visible to Nearwork staff only — never shown to the client.</span>
+        </div>
+      )}
+      <div className="bg-white border border-[#E5E4E0] rounded-xl p-5">{children}</div>
     </div>
   );
 }

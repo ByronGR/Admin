@@ -24,7 +24,7 @@ import { WORK_MODE_LABELS, PIPELINE_STAGE_LABELS } from '@/lib/types';
 import {
   Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle,
   ChevronRight, FileText, Globe, ExternalLink, Pause, Play,
-  Users, UserCheck, Calendar, Banknote, Radar,
+  Users, UserCheck, Calendar, Banknote, Radar, Mail,
 } from 'lucide-react';
 import { NW, MONO, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
@@ -99,8 +99,11 @@ export function OpeningDetail({
     return () => { alive = false; };
   }, [briefCode]);
 
-  // ── Redesign tabs (Pipeline & sourcing | Opening & brief) ──
+  // ── Redesign tabs (Pipeline & sourcing | Kick-off notes) ──
   const [tab, setTab] = useState<'pipeline' | 'opening'>('pipeline');
+  // Talent-pool multi-select for bulk outreach.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const togglePick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   // Pipeline for this opening (shared code) — candidates by stage.
   const [pipeCandidates, setPipeCandidates] = useState<PipelineCandidate[]>([]);
@@ -392,12 +395,29 @@ export function OpeningDetail({
     .sort((a, b) => b.overlap - a.overlap)
     .slice(0, 8);
 
+  const scoredPipe = pipeCandidates.filter((c) => typeof c.score === 'number');
+  const avgScore = scoredPipe.length ? Math.round(scoredPipe.reduce((s, c) => s + (c.score ?? 0), 0) / scoredPipe.length) : null;
+
   const statItems = [
     { icon: <Users className="h-3.5 w-3.5" />, label: 'In pipeline', value: inPipelineCount, sub: 'candidates' },
     { icon: <UserCheck className="h-3.5 w-3.5" />, label: 'To pre-qualify', value: applicantCount, sub: 'new applicants' },
     { icon: <Calendar className="h-3.5 w-3.5" />, label: 'Days open', value: daysOpen != null ? `${daysOpen}d` : '—', sub: 'since posted' },
+    { icon: <Radar className="h-3.5 w-3.5" />, label: 'Avg. score', value: avgScore ?? '—', sub: 'pipeline quality' },
     { icon: <Banknote className="h-3.5 w-3.5" />, label: 'Budget', value: band, sub: opening.location ?? 'Remote' },
   ];
+
+  // ── Read-only kick-off notes (the approved brief) ──
+  const asArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter(Boolean).map(String)
+      : typeof v === 'string' && v.trim() ? v.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+  const briefRoleOverview = String(opening.content_about ?? opening.publicSummary ?? opening.description ?? '');
+  const briefRequirements = asArr(opening.content_qualifications ?? opening.requirements);
+  const briefNiceToHave = asArr(opening.niceToHave);
+  const briefSeniority = String(opening.seniority ?? '');
+  const ENGAGEMENT: Record<string, string> = { managed_team: 'Managed team', eor: 'EOR & benefits', spp: 'SPP', direct: 'Placement' };
+  const contractVal = opening.contract ? String(opening.contract).trim() : '';
+  const briefEngagement = contractVal ? (ENGAGEMENT[contractVal] ?? contractVal) : 'Placement';
+  const briefApproved = briefStatus === 'approved';
 
   return (
     <div>
@@ -439,7 +459,7 @@ export function OpeningDetail({
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
-        {([['pipeline', 'Pipeline & sourcing'], ['opening', 'Opening & brief']] as const).map(([k, label]) => {
+        {([['pipeline', 'Pipeline & sourcing'], ['opening', 'Kick-off notes']] as const).map(([k, label]) => {
           const on = tab === k;
           return (
             <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>{label}</button>
@@ -510,18 +530,41 @@ export function OpeningDetail({
                 {talentPool.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>No available candidates to surface.</div>
                 ) : (
-                  talentPool.map(({ c, overlap }, i) => (
-                    <div key={c.id} onClick={() => router.push(`/candidates/${c.id}`)} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}`, cursor: 'pointer', borderRadius: 8 }}>
-                      <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.email}</div>
-                        <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—')}</div>
+                  talentPool.map(({ c, overlap }, i) => {
+                    const on = picked.has(c.id);
+                    return (
+                      <div key={c.id} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}`, borderRadius: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => togglePick(c.id)}
+                          style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? NW.teal500 : NW.gray300}`, background: on ? NW.teal500 : NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, padding: 0 }}
+                          aria-label={on ? 'Deselect' : 'Select'}
+                        >
+                          {on && <CheckCircle className="h-3 w-3" style={{ color: '#fff' }} />}
+                        </button>
+                        <div onClick={() => router.push(`/candidates/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                          <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.email}</div>
+                            <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—')}</div>
+                          </div>
+                          {overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
+                        </div>
                       </div>
-                      {overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+              {picked.size > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                  <a
+                    href={`mailto:?bcc=${encodeURIComponent(talentPool.filter(({ c }) => picked.has(c.id) && c.email).map(({ c }) => c.email).join(','))}&subject=${encodeURIComponent(`Opportunity: ${opening.title || 'a role'} at ${orgName || 'a Nearwork client'}`)}`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', fontSize: 13, fontWeight: 600, color: '#fff', background: NW.teal500, borderRadius: 999, textDecoration: 'none' }}
+                  >
+                    <Mail className="h-4 w-4" /> Email {picked.size} selected
+                  </a>
+                </div>
+              )}
             </div>
             <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 12 }}>Details</div>
@@ -536,6 +579,82 @@ export function OpeningDetail({
 
       {tab === 'opening' && (
       <div className="space-y-4">
+
+      {/* ── Read-only kick-off notes (the approved brief) ─────────────── */}
+      <div className="rounded-2xl border p-5" style={{ background: briefApproved ? NW.teal50 : NW.offWhite, borderColor: (briefApproved ? NW.teal500 : NW.gray200) + '40' }}>
+        <div className="flex items-center gap-3">
+          <span style={{ color: briefApproved ? NW.teal600 : '#A16207' }}>{briefApproved ? <CheckCircle className="h-5 w-5" /> : <Clock className="h-5 w-5" />}</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: NW.black }}>{briefApproved ? `Brief approved${orgName ? ` by ${orgName}` : ''}` : 'Kick-off brief not yet approved'}</div>
+            <div style={{ fontSize: 12.5, color: NW.gray600, marginTop: 2 }}>{briefApproved ? 'This is the requisition the client signed off on. Sourcing works against these notes.' : 'These notes become final once the client approves the kick-off brief.'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {briefRoleOverview && (
+            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 10 }}>Role overview</div>
+              <p style={{ fontSize: 13.5, lineHeight: 1.6, color: NW.gray600, margin: 0 }}>{briefRoleOverview}</p>
+            </div>
+          )}
+          <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Requirements</div>
+            <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1, marginBottom: 14 }}>Must-have qualifications</div>
+            {briefRequirements.length ? (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {briefRequirements.map((r, i) => (
+                  <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13.5, color: NW.gray700 }}>
+                    <CheckCircle className="h-4 w-4" style={{ color: NW.teal500, flexShrink: 0, marginTop: 1 }} />{r}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: 13, color: NW.gray400 }}>No requirements captured yet — fill them in the kick-off brief.</div>
+            )}
+          </div>
+          {briefNiceToHave.length > 0 && (
+            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 12 }}>Nice to have</div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {briefNiceToHave.map((r, i) => (
+                  <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13.5, color: NW.gray600 }}>
+                    <span style={{ color: NW.gray300, marginTop: 1 }}>+</span>{r}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 8 }}>Compensation &amp; engagement</div>
+            {[['Budget', <span key="b" style={{ fontFamily: MONO }}>{band}</span>], ['Seniority', briefSeniority || '—'], ['Location', opening.location || '—'], ['Engagement', briefEngagement]].map(([l, v], i, arr) => (
+              <div key={String(l)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: i < arr.length - 1 ? `1px solid ${NW.gray100}` : 'none' }}>
+                <span style={{ fontSize: 12.5, color: NW.gray500 }}>{l}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 8 }}>Owners</div>
+            {[['Hiring manager', opening.hiringManager || '—'], ['Account manager', opening.accountManager || '—'], ['Recruiter', opening.recruiter || '—']].map(([l, v], i, arr) => (
+              <div key={l} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: i < arr.length - 1 ? `1px solid ${NW.gray100}` : 'none' }}>
+                <span style={{ fontSize: 12.5, color: NW.gray500 }}>{l}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Manage & publish — the real workflow (kept; not in the read-only brief) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0' }}>
+        <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: NW.gray400 }}>Manage &amp; publish</span>
+        <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
+      </div>
 
       {/* ── Unified status bar ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-white px-5 py-3">

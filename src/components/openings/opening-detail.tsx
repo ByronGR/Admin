@@ -99,8 +99,8 @@ export function OpeningDetail({
     return () => { alive = false; };
   }, [briefCode]);
 
-  // ── Redesign tabs (Pipeline & sourcing | Kick-off notes) ──
-  const [tab, setTab] = useState<'pipeline' | 'opening'>('pipeline');
+  // ── Redesign tabs (Pipeline & sourcing | Kick-off notes | Jobs listing) ──
+  const [tab, setTab] = useState<'pipeline' | 'notes' | 'jobs'>('pipeline');
   // Talent-pool multi-select for bulk outreach.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const togglePick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -459,7 +459,7 @@ export function OpeningDetail({
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
-        {([['pipeline', 'Pipeline & sourcing'], ['opening', 'Kick-off notes']] as const).map(([k, label]) => {
+        {([['pipeline', 'Pipeline & sourcing'], ['notes', 'Kick-off notes'], ['jobs', 'Jobs listing']] as const).map(([k, label]) => {
           const on = tab === k;
           return (
             <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>{label}</button>
@@ -577,7 +577,7 @@ export function OpeningDetail({
         </div>
       )}
 
-      {tab === 'opening' && (
+      {tab === 'notes' && (
       <div className="space-y-4">
 
       {/* ── Read-only kick-off notes (the approved brief) ─────────────── */}
@@ -649,12 +649,11 @@ export function OpeningDetail({
         </div>
       </div>
 
-      {/* Manage & publish — the real workflow (kept; not in the read-only brief) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0' }}>
-        <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: NW.gray400 }}>Manage &amp; publish</span>
-        <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
       </div>
+      )}
+
+      {tab === 'jobs' && (
+      <div className="space-y-4">
 
       {/* ── Unified status bar ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 rounded-[16px] border border-[#EBEBEB] bg-white px-5 py-3">

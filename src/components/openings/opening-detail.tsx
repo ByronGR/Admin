@@ -376,9 +376,13 @@ export function OpeningDetail({
     else if (typeof start === 'string') ms = Date.parse(start) || 0;
     return ms ? Math.max(0, Math.floor((Date.now() - ms) / 86400000)) : null;
   })();
+  const sCur = opening.salaryCurrency || 'USD';
+  const sMin = opening.salaryMin && opening.salaryMin > 0 ? opening.salaryMin : null;
+  const sMax = opening.salaryMax && opening.salaryMax > 0 ? opening.salaryMax : null;
   const band = opening.hideSalary ? 'Hidden'
-    : opening.salaryMin && opening.salaryMax ? `${fmtCurrency(opening.salaryMin, opening.salaryCurrency || 'USD')}–${fmtCurrency(opening.salaryMax, opening.salaryCurrency || 'USD')}`
-    : opening.salaryMin ? `${fmtCurrency(opening.salaryMin, opening.salaryCurrency || 'USD')}+` : '—';
+    : sMin && sMax ? `${fmtCurrency(sMin, sCur)}–${fmtCurrency(sMax, sCur)}`
+    : sMin ? `${fmtCurrency(sMin, sCur)}+`
+    : sMax ? `Up to ${fmtCurrency(sMax, sCur)}` : '—';
   const inPipelineCount = pipeCandidates.filter((c) => c.stage !== 'not-selected').length;
   const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
   const openingSkills = (opening.skills ?? []).map((s) => s.toLowerCase());

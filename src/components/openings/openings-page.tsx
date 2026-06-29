@@ -118,8 +118,11 @@ export default function OpeningsPage() {
   function band(o: Opening): string {
     if (o.hideSalary) return 'Hidden';
     const cur = o.salaryCurrency || 'USD';
-    if (o.salaryMin && o.salaryMax) return `${fmtCurrency(o.salaryMin, cur)}–${fmtCurrency(o.salaryMax, cur)}`;
-    if (o.salaryMin) return `${fmtCurrency(o.salaryMin, cur)}+`;
+    const min = o.salaryMin && o.salaryMin > 0 ? o.salaryMin : null;
+    const max = o.salaryMax && o.salaryMax > 0 ? o.salaryMax : null;
+    if (min && max) return `${fmtCurrency(min, cur)}–${fmtCurrency(max, cur)}`;
+    if (min) return `${fmtCurrency(min, cur)}+`;
+    if (max) return `Up to ${fmtCurrency(max, cur)}`;
     return '—';
   }
 

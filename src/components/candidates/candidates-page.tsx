@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/toast';
 import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader, Card as NWCard, SegTabs } from '@/components/nw/shell-ui';
 import { type IconName } from 'lucide-react/dynamic';
@@ -464,14 +465,7 @@ export default function CandidatesPage() {
           >
             Cancel
           </button>
-          <button
-            onClick={confirmDelete}
-            disabled={deleting}
-            className="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2 text-xs font-600 text-white hover:bg-red-600 disabled:opacity-60"
-          >
-            {deleting && <Spinner size="sm" />}
-            {deleting ? 'Deleting…' : 'Delete permanently'}
-          </button>
+          <HoldToDelete onConfirm={confirmDelete} busy={deleting} label="Hold to delete" />
         </div>
       </Modal>
 

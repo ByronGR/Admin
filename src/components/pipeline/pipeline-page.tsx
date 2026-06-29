@@ -42,6 +42,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
@@ -1053,7 +1054,6 @@ function PipelineRow({
   onAddCandidate: (pipelineCode: string, stage: string) => void;
   onOpenBrief: (c: PipelineCandidate, pipelineCode: string) => void;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [spreadOpen, setSpreadOpen] = useState(false);
   const [rowHover, setRowHover] = useState(false);
@@ -1062,7 +1062,6 @@ function PipelineRow({
     setDeleting(true);
     await onDelete(pipeline.id);
     setDeleting(false);
-    setConfirmDelete(false);
   }
 
   const cands = pipeline.candidates ?? [];
@@ -1162,17 +1161,7 @@ function PipelineRow({
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end' }} onClick={(e) => e.stopPropagation()}>
-          {confirmDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600 font-500">Delete?</span>
-              <button onClick={handleDelete} disabled={deleting} className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60">{deleting ? 'Deleting…' : 'Yes'}</button>
-              <button onClick={() => setConfirmDelete(false)} className="text-xs text-[var(--mid)] hover:underline">Cancel</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)} title="Delete pipeline" className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <HoldToDelete onConfirm={handleDelete} busy={deleting} size="sm" label="Hold to delete" hideIcon={false} title="Delete pipeline" />
           <button onClick={onToggle} title={expanded ? 'Collapse board' : 'Expand board'} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[var(--light)] hover:border-[var(--green)] hover:text-[var(--green)]">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>

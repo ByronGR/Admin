@@ -22,11 +22,12 @@ import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
 import { WORK_MODE_LABELS, PIPELINE_STAGE_LABELS } from '@/lib/types';
 import {
-  Edit3, Briefcase, Trash2, CheckCircle, Clock, AlertCircle,
+  Edit3, Briefcase, CheckCircle, Clock, AlertCircle,
   ChevronRight, FileText, Globe, ExternalLink, Pause, Play,
   Users, UserCheck, Calendar, Banknote, Radar, Mail,
 } from 'lucide-react';
 import { NW, MONO, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
 
 // ── Brief status badge (used by openings-page list too) ──────────────────────
@@ -136,7 +137,6 @@ export function OpeningDetail({
   // ── Opening core edit state ──
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [editForm, setEditForm] = useState({
@@ -337,7 +337,6 @@ export function OpeningDetail({
     } catch {
       showToast('Failed to delete opening', 'error');
       setDeleting(false);
-      setConfirmDelete(false);
     }
   }
 
@@ -849,22 +848,7 @@ export function OpeningDetail({
             >
               <Edit3 className="h-3.5 w-3.5" />Edit
             </button>
-            {confirmDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-red-600 font-500">Delete this opening?</span>
-                <button onClick={handleDelete} disabled={deleting} className="text-xs font-700 text-red-600 hover:underline disabled:opacity-60">
-                  {deleting ? 'Deleting…' : 'Yes, delete'}
-                </button>
-                <button onClick={() => setConfirmDelete(false)} className="text-xs text-[var(--mid)] hover:underline">Cancel</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-500 text-red-500 hover:border-red-400 hover:bg-red-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />Delete
-              </button>
-            )}
+            <HoldToDelete onConfirm={handleDelete} busy={deleting} size="sm" label="Hold to delete" title="Delete this opening" />
           </div>
         </div>
 

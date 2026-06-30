@@ -9,6 +9,46 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Display label for a candidate's location.
+ * Colombia → "City, Department"; any other country → just the country name.
+ * Falls back to whatever location text exists.
+ */
+export function candidateLocationLabel(c: {
+  country?: string; locationCountry?: string;
+  city?: string; locationCity?: string;
+  department?: string; locationDepartment?: string;
+  location?: string;
+}): string {
+  const country = (c.locationCountry || c.country || '').trim();
+  if (country && country.toLowerCase() !== 'colombia') return country;
+  const city = titleCasePlace((c.city || c.locationCity || '').trim());
+  const dept = (c.department || c.locationDepartment || '').trim();
+  return [city, dept].filter(Boolean).join(', ') || (c.location || '').trim();
+}
+
+/** Capitalize each word (first letter up, rest down). For places like "cali" → "Cali". */
+export function titleCasePlace(s: string): string {
+  return String(s || '').replace(/\S+/g, (w) => w.charAt(0).toLocaleUpperCase() + w.slice(1).toLocaleLowerCase());
+}
+
+/**
+ * Tidy a person's name for display: any word typed in ALL CAPS is converted to
+ * Title case ("SEBASTIAN" → "Sebastian"); words that already have mixed case
+ * ("McDonald", "José") are left untouched.
+ */
+export function properName(s?: string): string {
+  return String(s || '')
+    .split(/(\s+)/)
+    .map((w) => {
+      if (!w || /^\s+$/.test(w)) return w;
+      const letters = w.replace(/[^\p{L}]/gu, '');
+      const isAllCaps = letters && letters === letters.toLocaleUpperCase() && letters !== letters.toLocaleLowerCase();
+      return isAllCaps ? w.charAt(0).toLocaleUpperCase() + w.slice(1).toLocaleLowerCase() : w;
+    })
+    .join('');
+}
+
 /** Format a Firestore Timestamp or ISO string into a human-readable date */
 export function fmtDate(
   val: Timestamp | string | null | undefined,

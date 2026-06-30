@@ -16,7 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials, fmtCurrency } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -488,7 +488,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const jobTitle = [candidate.currentRole, candidate.targetRole, candidate.headline, candidate.role]
     .map((x) => (x ?? '').trim())
     .find((x) => x && x.toLowerCase() !== 'candidate') || '—';
-  const cityLabel = candidate.city || candidate.location || '';
+  const cityLabel = candidateLocationLabel(candidate);
   const yearsExp = candidate.experience;
   const statusActive = !['rejected', 'withdrawn', 'inactive'].includes(String(candidate.status ?? '').toLowerCase());
   const cvUrl = candidate.resumeUrl || candidate.cvUrl || null;
@@ -556,7 +556,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: NW.black }}>{candidate.name || 'Unnamed candidate'}</h1>
+              <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: NW.black }}>{properName(candidate.name) || 'Unnamed candidate'}</h1>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: statusActive ? NW.green600 : NW.gray500, background: statusActive ? NW.green50 : NW.gray50, border: `1px solid ${(statusActive ? NW.green600 : NW.gray500)}22`, borderRadius: 999, padding: '3px 10px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusActive ? NW.green500 : NW.gray300 }} />
                 {statusActive ? 'Active' : 'Inactive'}

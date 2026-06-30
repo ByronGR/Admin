@@ -69,16 +69,23 @@ function GlobalSearch() {
   }, [q]);
 
   async function runSearch(term: string) {
-    try {
-      const [cSnap, oSnap, opSnap, pSnap, hSnap] = await Promise.all([
-        getDocs(collection(db, 'candidates')),
-        getDocs(collection(db, 'organizations')),
-        getDocs(collection(db, 'openings')),
-        getDocs(collection(db, 'pipelines')),
-        getDocs(collection(db, 'placements')),
-      ]);
+    // Each collection is read independently — a failure on one (rules, missing
+    // index) must not silently wipe out the whole search.
+    const [cRes, oRes, opRes, pRes, hRes] = await Promise.allSettled([
+      getDocs(collection(db, 'candidates')),
+      getDocs(collection(db, 'organizations')),
+      getDocs(collection(db, 'openings')),
+      getDocs(collection(db, 'pipelines')),
+      getDocs(collection(db, 'placements')),
+    ]);
+    const cDocs = cRes.status === 'fulfilled' ? cRes.value.docs : [];
+    const oDocs = oRes.status === 'fulfilled' ? oRes.value.docs : [];
+    const opDocs = opRes.status === 'fulfilled' ? opRes.value.docs : [];
+    const pDocs = pRes.status === 'fulfilled' ? pRes.value.docs : [];
+    const hDocs = hRes.status === 'fulfilled' ? hRes.value.docs : [];
+    {
       const res: SearchResult[] = [];
-      cSnap.docs.forEach((d) => {
+      cDocs.forEach((d) => {
         const data = d.data();
         const name = (data.name ?? '') as string;
         const email = (data.email ?? '') as string;
@@ -87,7 +94,7 @@ function GlobalSearch() {
           res.push({ id: d.id, label: name || email, sub: role || email, type: 'Candidate', href: `/candidates/${d.id}`, init: initials(name || email), bg: colorFor(d.id), round: true });
         }
       });
-      oSnap.docs.forEach((d) => {
+      oDocs.forEach((d) => {
         const data = d.data();
         const name = (data.name ?? '') as string;
         const industry = (data.industry ?? '') as string;
@@ -95,7 +102,7 @@ function GlobalSearch() {
           res.push({ id: d.id, label: name, sub: industry || 'Organization', type: 'Organization', href: `/organizations/${d.id}`, init: initials(name), bg: colorFor(d.id) });
         }
       });
-      opSnap.docs.forEach((d) => {
+      opDocs.forEach((d) => {
         const data = d.data();
         const title = (data.title ?? '') as string;
         const orgName = (data.orgName ?? '') as string;
@@ -103,7 +110,7 @@ function GlobalSearch() {
           res.push({ id: d.id, label: title, sub: orgName, type: 'Role', href: `/openings/${d.id}`, icon: 'briefcase', bg: NW.gray500 });
         }
       });
-      pSnap.docs.forEach((d) => {
+      pDocs.forEach((d) => {
         const data = d.data();
         const title = (data.title ?? data.openingTitle ?? '') as string;
         const code = (data.code ?? '') as string;
@@ -111,7 +118,7 @@ function GlobalSearch() {
           res.push({ id: d.id, label: title || code, sub: code, type: 'Pipeline', href: `/pipeline/${d.id}`, icon: 'kanban-square', bg: '#6366F1' });
         }
       });
-      hSnap.docs.forEach((d) => {
+      hDocs.forEach((d) => {
         const data = d.data();
         const name = (data.name ?? data.candidateName ?? '') as string;
         const role = (data.role ?? '') as string;
@@ -121,8 +128,6 @@ function GlobalSearch() {
       });
       setResults(res.slice(0, 10));
       setOpen(true);
-    } catch {
-      /* silently fail */
     }
   }
 

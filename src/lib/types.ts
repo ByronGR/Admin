@@ -318,6 +318,12 @@ export interface Candidate {
   location?: string;
   country?: string;
   city?: string;
+  // Structured location written by Talent/Jobs onboarding. For non-Colombia
+  // candidates only locationCountry is set (no city/department).
+  locationCountry?: string;
+  locationCity?: string;
+  locationDepartment?: string;
+  department?: string;
   linkedIn?: string;
   portfolio?: string;
   resumeUrl?: string;

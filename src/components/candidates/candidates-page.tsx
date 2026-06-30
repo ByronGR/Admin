@@ -17,7 +17,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
@@ -204,7 +204,8 @@ export default function CandidatesPage() {
       .filter((x) => x && x.toLowerCase() !== 'candidate');
     return titles[0] || '';
   };
-  const candCity = (c: Candidate) => c.city || c.location || '';
+  // Location label: Colombia → "City, Department"; other countries → country.
+  const candCity = (c: Candidate) => candidateLocationLabel(c);
   function roleGroup(role: string): string {
     const r = role.toLowerCase();
     if (/engineer|developer|devops|sre|backend|frontend|full.?stack|software/.test(r)) return 'Engineering';
@@ -401,7 +402,7 @@ export default function CandidatesPage() {
                                   {isEmpty(c) && <span style={{ fontSize: 9, fontWeight: 700, color: NW.rose600, background: NW.rose50, borderRadius: 999, padding: '1px 6px' }}>Empty</span>}
                                 </span>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: NW.gray500, marginTop: 2 }}>
-                                  <Icon name="map-pin" size={12} color={NW.gray400} />{candCity(c) ? [candCity(c), c.country].filter(Boolean).join(' · ') : (c.email || '—')}
+                                  <Icon name="map-pin" size={12} color={NW.gray400} />{candCity(c) || c.email || '—'}
                                 </span>
                               </span>
                             </span>

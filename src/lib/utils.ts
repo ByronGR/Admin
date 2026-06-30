@@ -9,6 +9,24 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Display label for a candidate's location.
+ * Colombia → "City, Department"; any other country → just the country name.
+ * Falls back to whatever location text exists.
+ */
+export function candidateLocationLabel(c: {
+  country?: string; locationCountry?: string;
+  city?: string; locationCity?: string;
+  department?: string; locationDepartment?: string;
+  location?: string;
+}): string {
+  const country = (c.locationCountry || c.country || '').trim();
+  if (country && country.toLowerCase() !== 'colombia') return country;
+  const city = (c.city || c.locationCity || '').trim();
+  const dept = (c.department || c.locationDepartment || '').trim();
+  return [city, dept].filter(Boolean).join(', ') || (c.location || '').trim();
+}
+
 /** Format a Firestore Timestamp or ISO string into a human-readable date */
 export function fmtDate(
   val: Timestamp | string | null | undefined,

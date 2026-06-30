@@ -16,7 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials, fmtCurrency } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -488,7 +488,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const jobTitle = [candidate.currentRole, candidate.targetRole, candidate.headline, candidate.role]
     .map((x) => (x ?? '').trim())
     .find((x) => x && x.toLowerCase() !== 'candidate') || '—';
-  const cityLabel = candidate.city || candidate.location || '';
+  const cityLabel = candidateLocationLabel(candidate);
   const yearsExp = candidate.experience;
   const statusActive = !['rejected', 'withdrawn', 'inactive'].includes(String(candidate.status ?? '').toLowerCase());
   const cvUrl = candidate.resumeUrl || candidate.cvUrl || null;

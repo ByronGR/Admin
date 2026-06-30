@@ -17,7 +17,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
@@ -398,12 +398,14 @@ export default function CandidatesPage() {
                               )}
                               <span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{c.name || 'No name'}</span>
+                                  <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{properName(c.name) || 'No name'}</span>
                                   {isEmpty(c) && <span style={{ fontSize: 9, fontWeight: 700, color: NW.rose600, background: NW.rose50, borderRadius: 999, padding: '1px 6px' }}>Empty</span>}
                                 </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: NW.gray500, marginTop: 2 }}>
-                                  <Icon name="map-pin" size={12} color={NW.gray400} />{candCity(c) || c.email || '—'}
-                                </span>
+                                {candCity(c) && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+                                    <Icon name="map-pin" size={12} color={NW.gray400} />{candCity(c)}
+                                  </span>
+                                )}
                               </span>
                             </span>
                           </td>

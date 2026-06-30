@@ -23,7 +23,7 @@ import {
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtRelative, initials, sortByTimestamp } from '@/lib/utils';
+import { fmtRelative, initials } from '@/lib/utils';
 import {
   PIPELINE_STAGE_LABELS,
   type PipelineStage,
@@ -32,8 +32,20 @@ import {
   type Candidate,
   type Pipeline,
   type Placement,
+  type Application,
+  type Timestamp,
   type Notification as AppNotification,
 } from '@/lib/types';
+
+// Application docs written by jobs/talent carry a few fields beyond the typed
+// `Application` shape (the apply timestamp is `submittedAt`, not `appliedAt`).
+type AppDoc = Application & {
+  submittedAt?: Timestamp;
+  createdAt?: Timestamp;
+  title?: string;
+  jobTitle?: string;
+  isMockData?: boolean;
+};
 import { type IconName } from 'lucide-react/dynamic';
 import { NW, MONO, Icon, Avatar, Button, Chip } from '@/components/nw/primitives';
 import { PageHeader, Card, CardHead, FilterButton } from '@/components/nw/shell-ui';
@@ -135,8 +147,12 @@ function AttentionRow({ n, onView }: { n: AppNotification; onView: () => void })
   );
 }
 
-// ── Activity row (recent candidates) ──────────────────────────────────────────
-function ActivityRow({ item, last }: { item: { id: string; name: string; role?: string; when?: string; bg: string }; last: boolean }) {
+// ── Activity row (candidate sign-ups + role applications) ─────────────────────
+function ActivityRow({ item, last }: { item: ActivityItem; last: boolean }) {
+  const applied = item.kind === 'applied';
+  const metaIcon: IconName = applied ? 'briefcase' : 'user-plus';
+  const metaColor = applied ? NW.teal600 : NW.violet500;
+  const metaLabel = applied ? 'New application' : item.detail;
   return (
     <div style={{ display: 'flex', gap: 12, padding: '11px 0' }}>
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -145,11 +161,16 @@ function ActivityRow({ item, last }: { item: { id: string; name: string; role?: 
       </div>
       <div style={{ flex: 1, minWidth: 0, paddingBottom: 2 }}>
         <div style={{ fontSize: 13, color: NW.gray700, lineHeight: 1.4 }}>
-          <span style={{ fontWeight: 600, color: NW.black }}>{item.name}</span> joined the ATS
+          <span style={{ fontWeight: 600, color: NW.black }}>{item.name}</span>{' '}
+          {applied ? (
+            <>applied for <span style={{ fontWeight: 600, color: NW.black }}>{item.detail || 'a role'}</span></>
+          ) : (
+            'joined the ATS'
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-          <Icon name="user-plus" size={12} color={NW.violet500} />
-          {item.role && <span style={{ fontSize: 11.5, color: NW.gray500 }}>{item.role}</span>}
+          <Icon name={metaIcon} size={12} color={metaColor} />
+          {metaLabel && <span style={{ fontSize: 11.5, color: NW.gray500 }}>{metaLabel}</span>}
           {item.when && <span style={{ fontSize: 11.5, color: NW.gray400 }}>· {item.when}</span>}
         </div>
       </div>
@@ -169,6 +190,18 @@ const FUNNEL_COLOR: Record<string, string> = {
   hired: NW.green600,
 };
 
+// Normalize the various timestamp shapes Firestore docs carry into epoch ms.
+function toMs(v: unknown): number {
+  if (!v) return 0;
+  if (typeof v === 'object' && v !== null && 'toMillis' in v) return (v as { toMillis(): number }).toMillis();
+  if (typeof v === 'object' && v !== null && 'seconds' in v) return (v as { seconds: number }).seconds * 1000;
+  if (typeof v === 'string' || typeof v === 'number') {
+    const t = new Date(v).getTime();
+    return isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
+
 function colorFor(seed: string) {
   const palette = [NW.teal500, NW.rose500, NW.violet500, NW.blue500, NW.teal600, '#EAB308', '#EC5290'];
   let h = 0;
@@ -187,7 +220,15 @@ interface DashStats {
   hiresThisMonth: number;
   recentHireNames: string;
 }
-interface ActivityItem { id: string; name: string; role?: string; when?: string; bg: string }
+interface ActivityItem {
+  id: string;
+  name: string;
+  kind: 'joined' | 'applied';
+  detail?: string;   // current role (joined) · role applied for (applied)
+  ts: number;        // epoch ms used to order the merged feed
+  when?: string;
+  bg: string;
+}
 interface BandwidthItem { name: string; role: string; openingCount: number; pct: number }
 interface FunnelItem { stage: PipelineStage; label: string; count: number }
 
@@ -223,13 +264,14 @@ export default function DashboardPage() {
   async function loadDashboard() {
     setLoading(true);
     try {
-      const [orgsRes, openingsRes, candidatesRes, pipelinesRes, placementsRes, staffRes] = await Promise.allSettled([
+      const [orgsRes, openingsRes, candidatesRes, pipelinesRes, placementsRes, staffRes, applicationsRes] = await Promise.allSettled([
         getDocs(collection(db, 'organizations')),
         getDocs(collection(db, 'openings')),
         getDocs(collection(db, 'candidates')),
         getDocs(collection(db, 'pipelines')),
         getDocs(collection(db, 'placements')),
         getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'applications')),
       ]);
 
       function docsOf<T>(res: PromiseSettledResult<Awaited<ReturnType<typeof getDocs>>>): T[] {
@@ -242,6 +284,7 @@ export default function DashboardPage() {
       const candidates = docsOf<Candidate>(candidatesRes);
       const pipelines = docsOf<Pipeline>(pipelinesRes);
       const placements = docsOf<Placement>(placementsRes);
+      const applications = docsOf<AppDoc>(applicationsRes);
       const staff =
         staffRes.status === 'fulfilled'
           ? staffRes.value.docs.map((d) => d.data()).filter((m) => isNearworkEmail((m.email as string) ?? ''))
@@ -271,15 +314,33 @@ export default function DashboardPage() {
         recentHireNames: hiresThisMonth.length ? hiresThisMonth.slice(0, 2).map((p) => p.candidateName ?? '—').join(' · ') : 'None yet this month',
       });
 
-      // Activity — recent candidates
+      // Activity — merge recent candidate sign-ups + recent role applications,
+      // newest first across both event types.
+      const joinedItems: ActivityItem[] = candidates.map((c) => ({
+        id: `cand-${c.id}`,
+        name: c.name,
+        kind: 'joined' as const,
+        detail: c.currentRole,
+        ts: toMs(c.createdAt),
+        when: c.createdAt ? fmtRelative(c.createdAt) : undefined,
+        bg: colorFor(c.id),
+      }));
+      const appliedItems: ActivityItem[] = applications
+        .filter((a) => a.isMockData !== true)
+        .map((a) => {
+          const at = a.submittedAt ?? a.appliedAt ?? a.updatedAt ?? a.createdAt;
+          return {
+            id: `app-${a.id}`,
+            name: a.candidateName || 'A candidate',
+            kind: 'applied' as const,
+            detail: a.openingTitle || a.title || a.jobTitle,
+            ts: toMs(at),
+            when: at ? fmtRelative(at) : undefined,
+            bg: colorFor(a.candidateId || a.id),
+          };
+        });
       setActivity(
-        sortByTimestamp(candidates, 'createdAt').slice(0, 6).map((c) => ({
-          id: c.id,
-          name: c.name,
-          role: c.currentRole,
-          when: c.createdAt ? fmtRelative(c.createdAt) : undefined,
-          bg: colorFor(c.id),
-        })),
+        [...joinedItems, ...appliedItems].sort((x, y) => y.ts - x.ts).slice(0, 8),
       );
 
       // Recruiter bandwidth — openings owned per staff recruiter

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.1.0',
+    date: '2026-06-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Dashboard “Live activity” now shows candidates applying for roles (e.g. “Maria Lopez applied for Senior CSM”), not just new sign-ups. Account creations and applications are merged into one feed, newest first.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-06-29',

@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.1.0] — 2026-06-30
+
+### Added
+- Dashboard "Live activity" feed now also surfaces candidates **applying for roles** (e.g. "Maria Lopez applied for Senior CSM"), merged with new account sign-ups into a single newest-first feed.
+
+---
+
 ## [1.0.0] — 2026-06-29
 
 ### Added

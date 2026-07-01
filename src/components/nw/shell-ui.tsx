@@ -50,7 +50,7 @@ export function PageHeader({
             {overline}
           </div>
         )}
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05, color: NW.black, margin: 0 }}>
+        <h1 className="nw-page-title" style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05, color: NW.black, margin: 0 }}>
           {title}
         </h1>
         {subtitle && <p style={{ fontSize: 14, color: NW.gray500, margin: '8px 0 0', maxWidth: 620 }}>{subtitle}</p>}

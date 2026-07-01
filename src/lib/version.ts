@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.3.0',
+    date: '2026-07-01',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Mobile-friendly layout (first pass). The app now renders at the phone’s real width instead of a zoomed-out desktop view.',
+          'On phones the sidebar collapses into a slide-in menu opened by a ☰ button in the top bar; tapping a link closes it.',
+          'Top bar, page titles, dashboard stat cards and two-column sections now stack/shrink to fit small screens; the Candidates table scrolls sideways instead of overlapping.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Added a viewport meta (device-width), a useIsMobile() hook, and a responsive CSS layer (.nw-content / .nw-grid-4 / .nw-grid-2col / .nw-table-scroll / .nw-topbar). Layout/CSS only — no data or behaviour changes.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.2.1',
     date: '2026-06-30',

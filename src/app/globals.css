@@ -235,6 +235,52 @@ button:disabled {
   background: var(--nw-gray-50);
 }
 
+/* ── Mobile / responsive layer ───────────────────────────────────────────────
+   The app is built with inline styles sized for desktop. These class hooks let
+   us collapse wide grids, shrink padding, and make wide tables scroll on small
+   screens without touching any data or logic. `!important` is needed to win
+   over the inline styles. */
+
+/* Any wide table wrapped in this scrolls sideways instead of overflowing. */
+.nw-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  /* Main content gutters shrink on phones */
+  .nw-content {
+    padding: 18px 16px 40px !important;
+  }
+  /* Page titles scale down so they don't wrap awkwardly */
+  .nw-page-title {
+    font-size: 22px !important;
+  }
+  /* 4-up stat rows → 2-up on tablet/large phone */
+  .nw-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Two-column content rows (e.g. dashboard) stack */
+  .nw-grid-2col {
+    grid-template-columns: 1fr !important;
+  }
+  /* Top bar tightens up and hides the long user name */
+  .nw-topbar {
+    gap: 10px !important;
+    padding: 0 12px !important;
+  }
+  .nw-user-name {
+    display: none !important;
+  }
+}
+
+@media (max-width: 460px) {
+  /* Stack stat cards fully on small phones */
+  .nw-grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

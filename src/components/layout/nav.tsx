@@ -46,7 +46,7 @@ function colorFor(seed: string) {
   return palette[h % palette.length];
 }
 
-function GlobalSearch() {
+function GlobalSearch({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -132,7 +132,7 @@ function GlobalSearch() {
   }
 
   return (
-    <div ref={containerRef} style={{ width: 520, flexShrink: 1, position: 'relative' }}>
+    <div ref={containerRef} style={compact ? { flex: 1, minWidth: 0, position: 'relative' } : { width: 520, flexShrink: 1, position: 'relative' }}>
       <Icon name="search" size={16} color={NW.gray400} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', zIndex: 1 }} />
       <input
         value={q}
@@ -214,7 +214,7 @@ function GlobalSearch() {
 
 // ─── Top bar ──────────────────────────────────────────────────────────────────
 
-export function Nav() {
+export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onMenuClick?: () => void } = {}) {
   const { user, profile } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -264,6 +264,7 @@ export function Nav() {
 
   return (
     <header
+      className="nw-topbar"
       style={{
         height: 'var(--nw-topbar-h)',
         minHeight: 'var(--nw-topbar-h)',
@@ -275,9 +276,18 @@ export function Nav() {
         background: NW.white,
       }}
     >
-      <div style={{ flex: 1 }} />
-      <GlobalSearch />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+      {showMenu && (
+        <button
+          onClick={onMenuClick}
+          aria-label="Open menu"
+          style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: `1px solid ${NW.gray100}`, background: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Icon name="menu" size={20} color={NW.gray700} />
+        </button>
+      )}
+      {!showMenu && <div style={{ flex: 1 }} />}
+      <GlobalSearch compact={showMenu} />
+      <div style={{ flex: showMenu ? '0 0 auto' : 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
         {/* Bell */}
         <div ref={bellRef} style={{ position: 'relative' }}>
           <button
@@ -334,7 +344,7 @@ export function Nav() {
             ) : (
               <span style={{ width: 28, height: 28, borderRadius: '50%', background: NW.teal500, color: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{initials(displayName)}</span>
             )}
-            <span style={{ fontSize: 13.5, fontWeight: 500, color: NW.gray700 }}>{displayName}</span>
+            <span className="nw-user-name" style={{ fontSize: 13.5, fontWeight: 500, color: NW.gray700 }}>{displayName}</span>
             <Icon name="chevron-down" size={14} color={NW.gray500} />
           </button>
           {menuOpen && (

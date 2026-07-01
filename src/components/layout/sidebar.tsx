@@ -47,11 +47,12 @@ const FOOTER_ITEMS: NavItem[] = [
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const [hov, setHov] = useState(false);
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -98,7 +99,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || (pathname?.startsWith(href + '/') ?? false);
 
@@ -162,7 +163,7 @@ export function Sidebar() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {sec.items.map((it) => (
-                <NavLink key={it.href} item={it} active={isActive(it.href)} />
+                <NavLink key={it.href} item={it} active={isActive(it.href)} onNavigate={onNavigate} />
               ))}
             </div>
           </div>
@@ -172,10 +173,10 @@ export function Sidebar() {
       {/* Footer nav */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 12, marginTop: 8, borderTop: `1px solid ${NW.gray200}` }}>
         {FOOTER_ITEMS.map((it) => (
-          <NavLink key={it.href} item={it} active={isActive(it.href)} />
+          <NavLink key={it.href} item={it} active={isActive(it.href)} onNavigate={onNavigate} />
         ))}
       </div>
-      <Link href="/changelog" style={{ padding: '12px 11px 2px', fontSize: 10.5, color: NW.gray400, fontFamily: MONO }}>
+      <Link href="/changelog" onClick={onNavigate} style={{ padding: '12px 11px 2px', fontSize: 10.5, color: NW.gray400, fontFamily: MONO }}>
         Nearwork Admin · v{APP_VERSION}
       </Link>
     </aside>

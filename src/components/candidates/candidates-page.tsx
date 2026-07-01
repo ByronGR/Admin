@@ -390,8 +390,8 @@ export default function CandidatesPage() {
           <div className="flex h-40 items-center justify-center"><Spinner /></div>
         ) : (
           <NWCard pad={0}>
-            <div style={{ padding: '14px 6px 4px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+            <div className="nw-table-scroll" style={{ padding: '14px 6px 4px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 640 }}>
                 <thead>
                   <tr>
                     {[['Candidate', 'left', 22], ['Role', 'left', 16], ['Status', 'left', 16], ['Salary expectation', 'left', 16], ['Last activity', 'left', 16], ['', 'right', 22]].map(([label, align, padX], i) => (

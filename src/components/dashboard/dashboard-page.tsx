@@ -398,7 +398,7 @@ export default function DashboardPage() {
       />
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 18 }}>
+      <div className="nw-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 18 }}>
         <StatCard icon="building-2" label="Active organizations" value={stats?.activeOrgs ?? '—'} sub={stats?.topOrgNames ?? '—'} accent />
         <StatCard icon="briefcase" label="Open openings" value={stats?.activeOpenings ?? '—'} sub={`${stats?.totalOpenings ?? 0} total`} />
         <StatCard icon="users" label="Candidates in ATS" value={stats?.totalCandidates ?? '—'} sub={`${stats?.activeCandidates ?? 0} active`} />
@@ -406,7 +406,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Attention + activity */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, marginBottom: 18 }}>
+      <div className="nw-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, marginBottom: 18 }}>
         <Card>
           <CardHead
             icon="bell-ring"
@@ -448,7 +448,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Funnel + bandwidth */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16 }}>
+      <div className="nw-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16 }}>
         <Card>
           <CardHead icon="filter" title="Pipeline funnel" sub="Candidates by stage · all active pipelines" action={<FilterButton label="Stages" value="Live" />} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>

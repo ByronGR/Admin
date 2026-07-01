@@ -45,12 +45,14 @@ function MenuFilter({
   value,
   options,
   onChange,
+  openUp = false,
 }: {
   icon: IconName;
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
+  openUp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => o.value === value);
@@ -68,7 +70,7 @@ function MenuFilter({
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 61, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 14px 36px rgba(0,0,0,0.16)', padding: 5, minWidth: 190, maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', ...(openUp ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 61, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 14px 36px rgba(0,0,0,0.16)', padding: 5, minWidth: 190, maxHeight: 300, overflowY: 'auto' }}>
             {options.map((o) => {
               const on = o.value === value;
               return (
@@ -380,7 +382,6 @@ export default function CandidatesPage() {
             <MenuFilter icon="briefcase" label="Role" value={roleG} options={[{ value: 'all', label: 'All roles' }, ...ROLE_GROUPS.map((g) => ({ value: g, label: g }))]} onChange={setRoleG} />
             <MenuFilter icon="map-pin" label="Location" value={cityF} options={[{ value: 'all', label: 'All locations' }, ...cityOptions.map((c) => ({ value: c, label: c }))]} onChange={setCityF} />
             <MenuFilter icon="arrow-down-up" label="Sort" value={sortF} options={[{ value: 'recent', label: 'Most recent' }, { value: 'name', label: 'Name (A–Z)' }, { value: 'salary', label: 'Salary (high→low)' }]} onChange={setSortF} />
-            <MenuFilter icon="list" label="Per page" value={String(pageSize)} options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: `${n} per page` }))} onChange={(v) => setPageSize(Number(v))} />
           </div>
         </div>
 
@@ -468,9 +469,12 @@ export default function CandidatesPage() {
             </div>
             {display.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '14px 22px', borderTop: `1px solid ${NW.gray100}` }}>
-                <span style={{ fontSize: 12.5, color: NW.gray500 }}>
-                  Showing <strong style={{ color: NW.black }}>{pageStart + 1}–{Math.min(pageStart + pageSize, display.length)}</strong> of {display.length}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12.5, color: NW.gray500 }}>
+                    Showing <strong style={{ color: NW.black }}>{pageStart + 1}–{Math.min(pageStart + pageSize, display.length)}</strong> of {display.length}
+                  </span>
+                  <MenuFilter openUp icon="list" label="Per page" value={String(pageSize)} options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: `${n} per page` }))} onChange={(v) => setPageSize(Number(v))} />
+                </div>
                 {totalPages > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button

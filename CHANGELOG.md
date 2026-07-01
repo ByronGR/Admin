@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.4.0] — 2026-07-01
+
+### Fixed
+- **Deleting a candidate now fully removes them.** Previously delete only removed the candidate record, leaving their login account (Firebase Auth) and data in other collections behind — which blocked them from ever signing up again. It now also deletes their login account, `users` profile, applications, assessments, activity, notifications and notes, and strips them from any pipeline. Hired/payroll records are kept as business records. (Matches the Talent self-delete, which already did a full purge.)
+
+### Technical
+- New server route `POST /api/delete-candidate` (staff-only, Bearer token). Resolves the Auth user by email for Admin-created candidates that store no uid; batch-deletes Firestore docs then removes the Auth user last so a partial failure stays retryable.
+
+---
+
 ## [1.3.0] — 2026-07-01
 
 ### Added

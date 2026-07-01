@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  auth,
   db,
   collection,
   getDocs,
@@ -11,7 +12,6 @@ import {
   doc,
   getDoc,
   setDoc,
-  deleteDoc,
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
@@ -128,12 +128,30 @@ export default function CandidatesPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteDoc(doc(db, 'candidates', deleteTarget.id));
+      // Full purge on the server: Firestore docs across every candidate-owned
+      // collection, pipeline references, AND the Firebase Auth account — so the
+      // person can sign up again later. (Client can only delete the one doc.)
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Your session expired — please sign in again.');
+      const res = await fetch('/api/delete-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          candidateId: deleteTarget.id,
+          code: deleteTarget.code ?? null,
+          email: deleteTarget.email ?? null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete candidate');
       setCandidates((prev) => prev.filter((c) => c.id !== deleteTarget.id));
-      showToast(`Deleted ${deleteTarget.name || deleteTarget.id}`, 'success');
+      showToast(
+        `Deleted ${deleteTarget.name || deleteTarget.id}${data.authDeleted ? ' · account & data fully removed' : ''}`,
+        'success',
+      );
       setDeleteTarget(null);
-    } catch {
-      showToast('Failed to delete candidate', 'error');
+    } catch (e) {
+      showToast((e as Error)?.message || 'Failed to delete candidate', 'error');
     } finally {
       setDeleting(false);
     }
@@ -508,7 +526,8 @@ export default function CandidatesPage() {
           {deleteTarget && isEmpty(deleteTarget) && (
             <span className="ml-1 text-red-500">This candidate has no profile data.</span>
           )}{' '}
-          This action cannot be undone.
+          This removes their profile, applications, assessments, notes and login
+          account across the ATS (hired/payroll records are kept). It cannot be undone.
         </p>
         <div className="flex justify-end gap-2">
           <button

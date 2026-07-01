@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.2.1',
+    date: '2026-06-30',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'FX & rates page showed “Failed to load FX data”. The live USD/COP rate is fetched from the jsdelivr CDN, which the Content-Security-Policy was blocking. Added cdn.jsdelivr.net to connect-src so the rate and 90-day history load again.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.2.0',
     date: '2026-06-30',

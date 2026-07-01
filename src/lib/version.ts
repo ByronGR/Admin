@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.2.0',
+    date: '2026-06-30',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidates (ATS) list is now paginated — 25 candidates per page with Prev/Next controls and a “Showing X–Y of Z” count. Filters, sort, and CSV export still apply across the whole list.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-06-30',

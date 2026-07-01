@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import Link from 'next/link';
 import { NW, Icon, Button, Chip } from '@/components/nw/primitives';
 import { PageHeader, Card, CardHead } from '@/components/nw/shell-ui';
+import { AccountCleanup } from '@/components/settings/account-cleanup';
 import { type IconName } from 'lucide-react/dynamic';
 
 function ToggleRow({ title, desc, defaultOn = false }: { title: string; desc: string; defaultOn?: boolean }) {
@@ -27,7 +28,7 @@ function ToggleRow({ title, desc, defaultOn = false }: { title: string; desc: st
   );
 }
 
-type Section = 'general' | 'notifications' | 'team' | 'integrations' | 'billing';
+type Section = 'general' | 'notifications' | 'team' | 'integrations' | 'billing' | 'cleanup';
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
@@ -55,6 +56,7 @@ export default function SettingsPage() {
     { id: 'team', label: 'Team & roles', icon: 'users' },
     { id: 'integrations', label: 'Integrations', icon: 'plug' },
     { id: 'billing', label: 'Billing', icon: 'credit-card' },
+    { id: 'cleanup', label: 'Data cleanup', icon: 'shield-alert' },
   ];
 
   const integrations: { name: string; desc: string; icon: IconName; on: boolean }[] = [
@@ -143,6 +145,8 @@ export default function SettingsPage() {
                 ))}
                 <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 14 }}>Integration management is illustrative — wiring lands in a later pass.</div>
               </Card>
+            ) : section === 'cleanup' ? (
+              <AccountCleanup />
             ) : (
               <Card>
                 <CardHead icon="credit-card" title="Billing" sub="Plan and payment." />

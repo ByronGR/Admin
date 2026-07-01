@@ -25,8 +25,10 @@ import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/compon
 import { PageHeader, Card as NWCard, SegTabs } from '@/components/nw/shell-ui';
 import { type IconName } from 'lucide-react/dynamic';
 
-// How many candidates to show per page in the ATS list.
-const PAGE_SIZE = 25;
+// How many candidates to show per page in the ATS list — user-selectable,
+// defaulting to 25.
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
 
 const AVA_PALETTE = ['#16A085', '#E74C7C', '#AF7AC5', '#3B82F6', '#12866E', '#EAB308', '#EC5290'];
 function colorFor(seed: string): string {
@@ -102,6 +104,7 @@ export default function CandidatesPage() {
   const [cityF, setCityF] = useState('all');
   const [sortF, setSortF] = useState('recent');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pipelineTitles, setPipelineTitles] = useState<Record<string, string>>({});
   // Latest application per candidate (id/code → {title, when, status}) so the
   // "Last activity" column also reflects applicants who applied and are waiting.
@@ -273,15 +276,15 @@ export default function CandidatesPage() {
   });
   const display = rows;
 
-  // ── Pagination (25 per page) ───────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(display.length / PAGE_SIZE));
+  // ── Pagination (page size is user-selectable, default 25) ──────────────────
+  const totalPages = Math.max(1, Math.ceil(display.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const pageRows = display.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageRows = display.slice(pageStart, pageStart + pageSize);
 
-  // Jump back to the first page whenever the filters/sort/tab change, so you
-  // never land on a now-empty page.
-  useEffect(() => { setPage(1); }, [listTab, roleG, cityF, sortF]);
+  // Jump back to the first page whenever the filters/sort/tab or page size
+  // change, so you never land on a now-empty page.
+  useEffect(() => { setPage(1); }, [listTab, roleG, cityF, sortF, pageSize]);
   // Keep the page in range if the list shrinks (e.g. after a delete).
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
@@ -377,6 +380,7 @@ export default function CandidatesPage() {
             <MenuFilter icon="briefcase" label="Role" value={roleG} options={[{ value: 'all', label: 'All roles' }, ...ROLE_GROUPS.map((g) => ({ value: g, label: g }))]} onChange={setRoleG} />
             <MenuFilter icon="map-pin" label="Location" value={cityF} options={[{ value: 'all', label: 'All locations' }, ...cityOptions.map((c) => ({ value: c, label: c }))]} onChange={setCityF} />
             <MenuFilter icon="arrow-down-up" label="Sort" value={sortF} options={[{ value: 'recent', label: 'Most recent' }, { value: 'name', label: 'Name (A–Z)' }, { value: 'salary', label: 'Salary (high→low)' }]} onChange={setSortF} />
+            <MenuFilter icon="list" label="Per page" value={String(pageSize)} options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: `${n} per page` }))} onChange={(v) => setPageSize(Number(v))} />
           </div>
         </div>
 
@@ -465,7 +469,7 @@ export default function CandidatesPage() {
             {display.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '14px 22px', borderTop: `1px solid ${NW.gray100}` }}>
                 <span style={{ fontSize: 12.5, color: NW.gray500 }}>
-                  Showing <strong style={{ color: NW.black }}>{pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, display.length)}</strong> of {display.length}
+                  Showing <strong style={{ color: NW.black }}>{pageStart + 1}–{Math.min(pageStart + pageSize, display.length)}</strong> of {display.length}
                 </span>
                 {totalPages > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

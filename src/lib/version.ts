@@ -28,7 +28,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       {
         title: 'Added',
         items: [
-          'Candidates (ATS) list is now paginated — 25 candidates per page with Prev/Next controls and a “Showing X–Y of Z” count. Filters, sort, and CSV export still apply across the whole list.',
+          'Candidates (ATS) list is now paginated — Prev/Next controls, a “Showing X–Y of Z” count, and a “Per page” selector (25 / 50 / 100, default 25). Filters, sort, and CSV export still apply across the whole list.',
         ],
       },
     ],

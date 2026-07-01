@@ -8,7 +8,7 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 ## [1.2.0] — 2026-06-30
 
 ### Added
-- Candidates (ATS) list is now **paginated at 25 per page**, with Prev/Next controls and a "Showing X–Y of Z" count. Tabs, filters, sort, and CSV export continue to apply across the entire list.
+- Candidates (ATS) list is now **paginated**, with Prev/Next controls, a "Showing X–Y of Z" count, and a **"Per page" selector (25 / 50 / 100, default 25)**. Tabs, filters, sort, and CSV export continue to apply across the entire list.
 
 ---
 

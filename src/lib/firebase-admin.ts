@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { ExternalAccountClient } from 'google-auth-library';
 import { getVercelOidcToken } from '@vercel/functions/oidc';
+import { Storage, type Bucket } from '@google-cloud/storage';
 
 // Load @google-cloud/firestore at module level so the Firestore constructor
 // and the FieldValue sentinels always come from the same module instance.
@@ -28,6 +29,7 @@ export const GCFieldValue = _gc.FieldValue;
 
 const DEFAULT_SA_EMAIL = 'firebase-adminsdk-fbsvc@nearwork-97e3c.iam.gserviceaccount.com';
 const DEFAULT_PROJECT_ID = 'nearwork-97e3c';
+const DEFAULT_STORAGE_BUCKET = 'nearwork-97e3c.firebasestorage.app';
 
 let cachedApp: App | null = null;
 
@@ -103,6 +105,45 @@ function adminApp(): App {
 
 export function adminAuth() {
   return getAuth(adminApp());
+}
+
+// Raw ExternalAccountClient for libraries that take a google-auth-library
+// AuthClient directly (@google-cloud/storage's `authClient` option).
+function buildWifAuthClient() {
+  const audience = process.env.GCP_WIF_AUDIENCE;
+  if (!audience) return null;
+  const saEmail = process.env.FIREBASE_SA_EMAIL || DEFAULT_SA_EMAIL;
+  return ExternalAccountClient.fromJSON({
+    type: 'external_account',
+    audience,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
+    token_url: 'https://sts.googleapis.com/v1/token',
+    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${saEmail}:generateAccessToken`,
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    subject_token_supplier: {
+      getSubjectToken: async () => getVercelOidcToken(),
+    },
+  });
+}
+
+let cachedStorage: Storage | null = null;
+
+// @google-cloud/storage client, constructed directly with the WIF auth client
+// (firebase-admin's getStorage() rejects non-cert/ADC credentials). Falls back
+// to ADC when GCP_WIF_AUDIENCE is not set.
+export function adminStorage(): Storage {
+  if (cachedStorage) return cachedStorage;
+  const authClient = buildWifAuthClient();
+  cachedStorage = new Storage({
+    projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
+    authClient: (authClient ?? undefined) as never,
+  });
+  return cachedStorage;
+}
+
+export function adminBucket(): Bucket {
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+  return adminStorage().bucket(bucketName);
 }
 
 let cachedFirestore: ReturnType<typeof getFirestore> | null = null;

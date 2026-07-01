@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { DocumentReference } from '@google-cloud/firestore';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { adminAuth, adminDb, adminBucket } from '@/lib/firebase-admin';
 
 // POST /api/delete-candidate
 // Fully removes a candidate when a Nearwork staff member deletes them from the
@@ -139,6 +139,45 @@ async function collect(
   }
 }
 
+// Extract a Storage object path from a Firebase download URL or gs:// URL.
+function storagePathFromUrl(url: string): string {
+  if (!url) return '';
+  try {
+    if (url.startsWith('gs://')) {
+      const rest = url.slice(5);
+      const i = rest.indexOf('/');
+      return i >= 0 ? rest.slice(i + 1) : '';
+    }
+    const m = url.match(/\/o\/([^?]+)/);
+    if (m) return decodeURIComponent(m[1]);
+  } catch { /* ignore malformed URLs */ }
+  return '';
+}
+
+// Delete the candidate's uploaded files: everything under their uid folders
+// (CV + photo + attachments) plus anything referenced directly by profile URLs.
+// Best-effort — Storage problems never block the account/data deletion.
+async function purgeStorage(uid: string, fileUrls: string[]) {
+  try {
+    const bucket = adminBucket();
+    const tasks: Promise<unknown>[] = [];
+    if (uid) {
+      for (const prefix of [`candidate-cvs/${uid}/`, `candidate-photos/${uid}/`]) {
+        tasks.push(
+          bucket.getFiles({ prefix })
+            .then(([files]) => Promise.all(files.map((f) => f.delete().catch(() => null))))
+            .catch(() => null),
+        );
+      }
+    }
+    for (const url of fileUrls) {
+      const path = storagePathFromUrl(url);
+      if (path) tasks.push(bucket.file(path).delete().catch(() => null));
+    }
+    await Promise.all(tasks);
+  } catch { /* best-effort */ }
+}
+
 export async function POST(req: Request) {
   const cors = corsHeaders(req.headers.get('origin'));
 
@@ -160,14 +199,19 @@ export async function POST(req: Request) {
   try {
     const db = adminDb();
 
-    // Read the candidate doc for any stored uid + email we weren't given.
+    // Read the candidate doc for any stored uid + email + file URLs we weren't given.
     let storedUid = '';
+    const fileUrls: string[] = [];
     if (docId) {
       const cs = await db.collection('candidates').doc(docId).get();
       if (cs.exists) {
         const cd = (cs.data() || {}) as Record<string, unknown>;
         email = email || String(cd.email || '').toLowerCase();
         storedUid = String(cd.ownerUid || cd.authUid || cd.uid || '');
+        for (const k of ['cvUrl', 'resumeUrl', 'photoUrl']) {
+          const v = String(cd[k] || '');
+          if (v) fileUrls.push(v);
+        }
       }
     }
 
@@ -235,6 +279,9 @@ export async function POST(req: Request) {
       finalRefs.slice(i, i + 450).forEach((r) => batch.delete(r));
       await batch.commit();
     }
+
+    // ── Storage: CV, photo and any attached files (best-effort) ──
+    await purgeStorage(uid, fileUrls);
 
     // ── Auth user last, so a partial failure above stays retryable ──
     let authDeleted = false;

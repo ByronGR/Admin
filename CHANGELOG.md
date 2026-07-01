@@ -8,7 +8,7 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 ## [1.4.0] — 2026-07-01
 
 ### Fixed
-- **Deleting a candidate now fully removes them.** Previously delete only removed the candidate record, leaving their login account (Firebase Auth) and data in other collections behind — which blocked them from ever signing up again. It now also deletes their login account, `users` profile, applications, assessments, activity, notifications and notes, and strips them from any pipeline. Hired/payroll records are kept as business records. (Matches the Talent self-delete, which already did a full purge.)
+- **Deleting a candidate now fully removes them.** Previously delete only removed the candidate record, leaving their login account (Firebase Auth) and data in other collections behind — which blocked them from ever signing up again. It now also deletes their login account, `users` profile, applications, assessments, activity, notifications and notes, their **uploaded CV/photo/files in Storage**, and strips them from any pipeline. Hired/payroll records are kept as business records. (Matches the Talent self-delete, which already did a full purge.)
 
 - **New Settings → Data cleanup.** Scan Firebase for **orphaned login accounts** — accounts with a login but no candidate profile, i.e. leftovers from older deletes that never removed the Auth account (or abandoned sign-ups). Staff and client accounts are never listed. Read-only until you press-and-hold to remove a specific account.
 

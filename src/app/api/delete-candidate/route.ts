@@ -24,13 +24,96 @@ function corsHeaders(origin: string | null) {
   const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) });
+}
+
+// Verify the caller is a signed-in Nearwork staff member. Returns their email or null.
+async function requireStaff(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) return null;
+  try {
+    const decoded = await adminAuth().verifyIdToken(token);
+    const email = (decoded.email || '').toLowerCase();
+    return email.endsWith('@nearwork.co') ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+// GET /api/delete-candidate → read-only audit.
+// Cross-checks every Firebase Auth user against candidate records and returns
+// the "orphans": non-staff, non-client accounts that have a login but NO
+// candidate profile — i.e. leftovers from the old delete (which never removed
+// the Auth account) or abandoned sign-ups. Deletes nothing.
+export async function GET(req: Request) {
+  const cors = corsHeaders(req.headers.get('origin'));
+  const staff = await requireStaff(req);
+  if (!staff) return NextResponse.json({ ok: false, error: 'Staff only' }, { status: 401, headers: cors });
+
+  try {
+    const db = adminDb();
+    const [candSnap, usersSnap] = await Promise.all([
+      db.collection('candidates').get(),
+      db.collection('users').get(),
+    ]);
+
+    const candById = new Set<string>();
+    const candByEmail = new Set<string>();
+    const candByCode = new Set<string>();
+    candSnap.docs.forEach((d) => {
+      candById.add(d.id);
+      const data = d.data() as Record<string, unknown>;
+      const em = String(data.email || '').toLowerCase();
+      if (em) candByEmail.add(em);
+      const code = String(data.code || '');
+      if (code) candByCode.add(code);
+    });
+
+    const usersById = new Map<string, Record<string, unknown>>();
+    usersSnap.docs.forEach((d) => usersById.set(d.id, d.data() as Record<string, unknown>));
+
+    const orphans: Array<{
+      uid: string; email: string; name: string;
+      createdAt: string | null; lastSignIn: string | null; hasUsersDoc: boolean;
+    }> = [];
+    let scanned = 0;
+    let pageToken: string | undefined;
+    do {
+      const page = await adminAuth().listUsers(1000, pageToken);
+      for (const u of page.users) {
+        scanned++;
+        const email = (u.email || '').toLowerCase();
+        if (email.endsWith('@nearwork.co')) continue;            // staff — never touch
+        const udoc = usersById.get(u.uid);
+        if (udoc && (udoc.orgId || udoc.organizationId)) continue; // client / partner — skip
+        const code = udoc ? String(udoc.candidateCode || '') : '';
+        const hasCandidate = candById.has(u.uid) || (!!email && candByEmail.has(email)) || (!!code && candByCode.has(code));
+        if (hasCandidate) continue;                               // active candidate — skip
+        orphans.push({
+          uid: u.uid,
+          email: u.email || '(no email)',
+          name: u.displayName || (udoc ? String(udoc.name || '') : '') || '',
+          createdAt: u.metadata?.creationTime || null,
+          lastSignIn: u.metadata?.lastSignInTime || null,
+          hasUsersDoc: !!udoc,
+        });
+      }
+      pageToken = page.pageToken;
+    } while (pageToken);
+
+    orphans.sort((a, b) => a.email.localeCompare(b.email));
+    return NextResponse.json({ ok: true, scanned, orphans }, { headers: cors });
+  } catch (e) {
+    console.error('[delete-candidate audit] failed:', e);
+    return NextResponse.json({ ok: false, error: (e as Error)?.message || 'Scan failed' }, { status: 500, headers: cors });
+  }
 }
 
 type Db = ReturnType<typeof adminDb>;
@@ -60,27 +143,18 @@ export async function POST(req: Request) {
   const cors = corsHeaders(req.headers.get('origin'));
 
   // ── Auth: only signed-in Nearwork staff may purge a candidate ──
-  const authHeader = req.headers.get('authorization') ?? '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!token) return NextResponse.json({ ok: false, error: 'Missing auth token' }, { status: 401, headers: cors });
-
-  let callerEmail = '';
-  try {
-    const decoded = await adminAuth().verifyIdToken(token);
-    callerEmail = (decoded.email || '').toLowerCase();
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid or expired session' }, { status: 401, headers: cors });
-  }
-  if (!callerEmail.endsWith('@nearwork.co')) {
-    return NextResponse.json({ ok: false, error: 'Only Nearwork staff can delete candidates' }, { status: 403, headers: cors });
+  const staff = await requireStaff(req);
+  if (!staff) {
+    return NextResponse.json({ ok: false, error: 'Only Nearwork staff can delete candidates' }, { status: 401, headers: cors });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { candidateId?: string; code?: string; email?: string };
+  const body = (await req.json().catch(() => ({}))) as { candidateId?: string; code?: string; email?: string; uid?: string };
   const docId = String(body.candidateId || body.code || '').trim();
   const code = String(body.code || body.candidateId || '').trim();
+  const bodyUid = String(body.uid || '').trim();
   let email = String(body.email || '').trim().toLowerCase();
-  if (!docId && !email) {
-    return NextResponse.json({ ok: false, error: 'candidateId or email is required' }, { status: 400, headers: cors });
+  if (!docId && !email && !bodyUid) {
+    return NextResponse.json({ ok: false, error: 'candidateId, uid or email is required' }, { status: 400, headers: cors });
   }
 
   try {
@@ -97,8 +171,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Resolve the Firebase Auth user. Admin-created candidates have none.
-    let uid = storedUid;
+    // Resolve the Firebase Auth user. Admin-created candidates have none;
+    // orphan-cleanup passes the uid directly.
+    let uid = bodyUid || storedUid;
     if (!uid && email) {
       try { uid = (await adminAuth().getUserByEmail(email)).uid; } catch { /* no auth account for this email */ }
     }

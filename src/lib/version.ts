@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogRelease[] = [
         title: 'Fixed',
         items: [
           'Deleting a candidate now fully removes them. Before, delete only removed the candidate record and left their login account (Firebase Auth) and data in other collections behind — which blocked them from signing up again. It now also deletes their login account, users profile, applications, assessments, activity, notifications and notes, and removes them from any pipeline. Hired/payroll records are kept as business records.',
+          'New Settings → Data cleanup: scan Firebase for orphaned login accounts (leftovers from older deletes) — accounts with a login but no candidate profile — and remove each one with a press-and-hold. Staff and client accounts are never listed. Read-only until you confirm each removal.',
         ],
       },
       {

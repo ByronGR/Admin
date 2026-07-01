@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.2.1] — 2026-06-30
+
+### Fixed
+- FX & rates page showed "Failed to load FX data". The live USD/COP rate is fetched from the jsdelivr CDN, which the Content-Security-Policy was blocking; added `cdn.jsdelivr.net` to `connect-src` (both enforced and report-only) so the rate and 90-day history load again.
+
+---
+
 ## [1.2.0] — 2026-06-30
 
 ### Added

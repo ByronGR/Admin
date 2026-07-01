@@ -81,7 +81,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           }}
         >
           <Nav showMenu={isMobile} onMenuClick={() => setDrawerOpen(true)} />
-          <main style={{ flex: 1, overflowY: 'auto', background: NW.white }}>
+          <main className="nw-main" style={{ flex: 1, overflowY: 'auto', background: NW.white }}>
             <div className="nw-content" style={{ maxWidth: 1340, margin: '0 auto', padding: '30px 36px 48px' }}>{children}</div>
           </main>
         </div>

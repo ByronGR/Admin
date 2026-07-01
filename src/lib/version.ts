@@ -30,7 +30,8 @@ export const CHANGELOG: ChangelogRelease[] = [
         items: [
           'Mobile-friendly layout (first pass). The app now renders at the phone’s real width instead of a zoomed-out desktop view.',
           'On phones the sidebar collapses into a slide-in menu opened by a ☰ button in the top bar; tapping a link closes it.',
-          'Top bar, page titles, dashboard stat cards and two-column sections now stack/shrink to fit small screens; the Candidates table scrolls sideways instead of overlapping.',
+          'Top bar, page titles, dashboard stat cards and two-column sections now stack/shrink to fit small screens; wide tables scroll sideways instead of overlapping.',
+          'On mobile the page sits on a light grey canvas so white cards/sections regain clear framing, and the page no longer pans sideways (pinch-to-read) — wide tables scroll within their own card instead.',
         ],
       },
       {

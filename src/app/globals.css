@@ -247,10 +247,23 @@ button:disabled {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Never let the whole page pan sideways — inner wide blocks scroll on their own. */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 @media (max-width: 768px) {
+  /* Grey canvas + white cards so sections regain visible framing on mobile,
+     and clip any stray-wide element so the page never needs pinch/pan. */
+  .nw-main {
+    overflow-x: hidden;
+    background: var(--bg) !important;
+  }
   /* Main content gutters shrink on phones */
   .nw-content {
-    padding: 18px 16px 40px !important;
+    padding: 16px 14px 40px !important;
   }
   /* Page titles scale down so they don't wrap awkwardly */
   .nw-page-title {

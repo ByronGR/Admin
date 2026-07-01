@@ -266,7 +266,11 @@ export function FlagChip({ flag }: { flag?: string | null }) {
 
 // ── Table primitives ──────────────────────────────────────────────────────────
 export function Table({ children }: { children: ReactNode }) {
-  return <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>{children}</table>;
+  return (
+    <div className="nw-table-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 560 }}>{children}</table>
+    </div>
+  );
 }
 export function Th({ children, align = 'left', style }: { children?: ReactNode; align?: CSSProperties['textAlign']; style?: CSSProperties }) {
   return (

@@ -25,6 +25,11 @@ import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/compon
 import { PageHeader, Card as NWCard, SegTabs } from '@/components/nw/shell-ui';
 import { type IconName } from 'lucide-react/dynamic';
 
+// How many candidates to show per page in the ATS list — user-selectable,
+// defaulting to 25.
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
+
 const AVA_PALETTE = ['#16A085', '#E74C7C', '#AF7AC5', '#3B82F6', '#12866E', '#EAB308', '#EC5290'];
 function colorFor(seed: string): string {
   let h = 0;
@@ -40,12 +45,14 @@ function MenuFilter({
   value,
   options,
   onChange,
+  openUp = false,
 }: {
   icon: IconName;
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
+  openUp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => o.value === value);
@@ -63,7 +70,7 @@ function MenuFilter({
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 61, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 14px 36px rgba(0,0,0,0.16)', padding: 5, minWidth: 190, maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', ...(openUp ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 61, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 11, boxShadow: '0 14px 36px rgba(0,0,0,0.16)', padding: 5, minWidth: 190, maxHeight: 300, overflowY: 'auto' }}>
             {options.map((o) => {
               const on = o.value === value;
               return (
@@ -98,6 +105,8 @@ export default function CandidatesPage() {
   const [roleG, setRoleG] = useState('all');
   const [cityF, setCityF] = useState('all');
   const [sortF, setSortF] = useState('recent');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pipelineTitles, setPipelineTitles] = useState<Record<string, string>>({});
   // Latest application per candidate (id/code → {title, when, status}) so the
   // "Last activity" column also reflects applicants who applied and are waiting.
@@ -269,6 +278,18 @@ export default function CandidatesPage() {
   });
   const display = rows;
 
+  // ── Pagination (page size is user-selectable, default 25) ──────────────────
+  const totalPages = Math.max(1, Math.ceil(display.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageRows = display.slice(pageStart, pageStart + pageSize);
+
+  // Jump back to the first page whenever the filters/sort/tab or page size
+  // change, so you never land on a now-empty page.
+  useEffect(() => { setPage(1); }, [listTab, roleG, cityF, sortF, pageSize]);
+  // Keep the page in range if the list shrinks (e.g. after a delete).
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
   async function saveNewCandidate() {
     if (!form.name || !form.email) {
       showToast('Name and email are required', 'error');
@@ -382,7 +403,7 @@ export default function CandidatesPage() {
                   {display.length === 0 ? (
                     <tr><td colSpan={6} style={{ padding: '48px 0', textAlign: 'center', fontSize: 14, color: NW.gray400 }}>No candidates found.</td></tr>
                   ) : (
-                    display.map((c) => {
+                    pageRows.map((c) => {
                       const act = lastActivity(c);
                       const active = isActiveCandidate(c);
                       const sal = monthlySalary(c);
@@ -446,6 +467,35 @@ export default function CandidatesPage() {
                 </tbody>
               </table>
             </div>
+            {display.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '14px 22px', borderTop: `1px solid ${NW.gray100}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12.5, color: NW.gray500 }}>
+                    Showing <strong style={{ color: NW.black }}>{pageStart + 1}–{Math.min(pageStart + pageSize, display.length)}</strong> of {display.length}
+                  </span>
+                  <MenuFilter openUp icon="list" label="Per page" value={String(pageSize)} options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: `${n} per page` }))} onChange={(v) => setPageSize(Number(v))} />
+                </div>
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: safePage <= 1 ? NW.gray300 : NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '7px 12px', cursor: safePage <= 1 ? 'not-allowed' : 'pointer' }}
+                    >
+                      <Icon name="chevron-left" size={14} color={safePage <= 1 ? NW.gray300 : NW.gray500} />Prev
+                    </button>
+                    <span style={{ fontSize: 12.5, color: NW.gray600 }}>Page <strong style={{ color: NW.black }}>{safePage}</strong> of {totalPages}</span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: safePage >= totalPages ? NW.gray300 : NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '7px 12px', cursor: safePage >= totalPages ? 'not-allowed' : 'pointer' }}
+                    >
+                      Next<Icon name="chevron-right" size={14} color={safePage >= totalPages ? NW.gray300 : NW.gray500} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </NWCard>
         )}
       </div>

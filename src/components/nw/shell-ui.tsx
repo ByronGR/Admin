@@ -50,7 +50,7 @@ export function PageHeader({
             {overline}
           </div>
         )}
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05, color: NW.black, margin: 0 }}>
+        <h1 className="nw-page-title" style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05, color: NW.black, margin: 0 }}>
           {title}
         </h1>
         {subtitle && <p style={{ fontSize: 14, color: NW.gray500, margin: '8px 0 0', maxWidth: 620 }}>{subtitle}</p>}
@@ -266,7 +266,11 @@ export function FlagChip({ flag }: { flag?: string | null }) {
 
 // ── Table primitives ──────────────────────────────────────────────────────────
 export function Table({ children }: { children: ReactNode }) {
-  return <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>{children}</table>;
+  return (
+    <div className="nw-table-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 560 }}>{children}</table>
+    </div>
+  );
 }
 export function Th({ children, align = 'left', style }: { children?: ReactNode; align?: CSSProperties['textAlign']; style?: CSSProperties }) {
   return (

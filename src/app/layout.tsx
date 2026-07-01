@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { Inter, Roboto } from "next/font/google";
@@ -12,6 +12,14 @@ export const metadata: Metadata = {
   title: 'Nearwork Admin',
   description: 'Nearwork internal admin dashboard',
   manifest: '/site.webmanifest',
+};
+
+// Render at the device's real width on phones/tablets instead of a
+// zoomed-out desktop layout. This is the single biggest mobile fix.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

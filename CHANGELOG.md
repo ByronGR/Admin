@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.3.0] — 2026-07-01
+
+### Added
+- **Mobile-friendly layout (first pass).** The app now renders at the phone's real width instead of a zoomed-out desktop view. On phones the sidebar collapses into a slide-in menu opened by a ☰ button; the top bar, page titles, dashboard stat cards and two-column sections stack/shrink to fit, and the Candidates table scrolls sideways instead of overlapping.
+
+### Technical
+- Added a viewport meta (device-width), a `useIsMobile()` hook, and a responsive CSS layer (`.nw-content` / `.nw-grid-4` / `.nw-grid-2col` / `.nw-table-scroll` / `.nw-topbar`). Layout/CSS only — no data or behaviour changes.
+
+---
+
 ## [1.2.1] — 2026-06-30
 
 ### Fixed

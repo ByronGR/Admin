@@ -54,6 +54,22 @@ const PROGRESS_ORDER = [
 ];
 const rank = (s: string) => PROGRESS_ORDER.indexOf(String(s || '').toLowerCase());
 
+const ASSESSMENT_URL = 'https://talent.nearwork.co/assessment';
+
+// Candidate-safe rejection lines. The recruiter's structured drop-off reason
+// drives the wording; the internal free-text note is NEVER sent to the candidate.
+const REJECTION_LINES: Record<string, string> = {
+  mia: "We weren't able to reconnect with you to keep the process moving.",
+  english: 'For this particular role, we were looking for a different level of English proficiency.',
+  assessment: "Your assessment results weren't the right match for this specific role.",
+  interview: 'After the interviews, the team decided to move forward with other candidates.',
+  partner: 'Our partner decided to move forward with other candidates for this role.',
+  'candidate-withdrew': "As you let us know, you're no longer pursuing this opportunity.",
+  other: "After careful consideration, we've decided to move forward with other candidates for this role.",
+};
+const rejectionLine = (reason?: string) =>
+  REJECTION_LINES[String(reason || '').toLowerCase()] ?? REJECTION_LINES.other;
+
 async function requireStaff(req: Request): Promise<string | null> {
   const authHeader = req.headers.get('authorization') ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -98,6 +114,7 @@ export async function POST(req: Request) {
     candidateEmail?: string;
     roleTitle?: string;
     orgName?: string;
+    dropOffReason?: string;
   };
 
   const action = String(body.action || '');
@@ -180,6 +197,8 @@ export async function POST(req: Request) {
       candidateName: name,
       roleTitle: String(body.roleTitle || 'your application'),
       orgName: String(body.orgName || ''),
+      assessmentUrl: ASSESSMENT_URL,
+      rejectionReason: rejectionLine(body.dropOffReason),
     };
 
     // ── Kill switch: appSettings/stageEmails { enabled: true } required ──

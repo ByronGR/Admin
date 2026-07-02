@@ -141,6 +141,7 @@ async function notifyStageEmail(payload: {
   candidateEmail?: string;
   roleTitle?: string;
   orgName?: string;
+  dropOffReason?: string;
 }) {
   try {
     const token = await auth.currentUser?.getIdToken();
@@ -452,6 +453,7 @@ export default function PipelinePage() {
       candidateEmail: movedEntry?.email,
       roleTitle: pipeline.title,
       orgName: pipeline.orgName,
+      dropOffReason: opts?.dropOff?.reason,
     });
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }

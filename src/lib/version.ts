@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.5.0',
+    date: '2026-07-01',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profile now updates in real time — if another recruiter moves the candidate’s stage while you have their profile open, you’ll see it change without refreshing.',
+          'Candidate profile now shows the last stage a candidate reached before being moved to Not Selected, along with the drop-off reason and note.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.4.0',
     date: '2026-07-01',

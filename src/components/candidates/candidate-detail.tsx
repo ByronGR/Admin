@@ -5,6 +5,7 @@ import {
   db,
   collection,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   query,
   where,
@@ -271,8 +272,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
   useEffect(() => {
     setPipelinesLoading(true);
-    getDocs(collection(db, 'pipelines'))
-      .then((snap) => {
+    // Live subscription so a stage move by another recruiter updates here in
+    // real time (the pipeline board is already live; this keeps the profile in step).
+    const unsub = onSnapshot(
+      collection(db, 'pipelines'),
+      (snap) => {
         const matches: Array<{ pipeline: Pipeline; entry: PipelineCandidate }> = [];
         snap.docs.forEach((d) => {
           const p = { id: d.id, ...d.data() } as Pipeline;
@@ -289,9 +293,14 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           return tb - ta;
         });
         setPipelineEntries(matches);
-      })
-      .catch(() => setPipelineEntries([]))
-      .finally(() => setPipelinesLoading(false));
+        setPipelinesLoading(false);
+      },
+      () => {
+        setPipelineEntries([]);
+        setPipelinesLoading(false);
+      },
+    );
+    return () => unsub();
   }, [candidate.id]);
 
   function stageLabel(stage?: PipelineStage): string {
@@ -511,6 +520,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       ? `${fmtCurrency(candidate.expectedSalary, 'USD')}/mo`
       : (typeof candidate.expectedSalary === 'string' && candidate.expectedSalary.trim()) ? candidate.expectedSalary : null;
   const activePipe = pipelineEntries.find(({ entry }) => entry.stage !== 'not-selected');
+  // Where the candidate was dropped, so we can show the last stage they reached.
+  const rejectedPipe = pipelineEntries.find(({ entry }) => entry.stage === 'not-selected');
   const appsCount = pipelineEntries.length + applicationEntries.length;
   const pastApps = applicationEntries;
 
@@ -761,7 +772,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           {detailTab === 'applications' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={card}>
-                {cardHead(<GitBranch className="h-4 w-4" />, 'Current application', activePipe ? undefined : 'Not in an active pipeline')}
+                {cardHead(<GitBranch className="h-4 w-4" />, 'Current application', activePipe ? undefined : rejectedPipe ? 'Not selected' : 'Not in an active pipeline')}
                 {pipelinesLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><Spinner size="sm" /></div>
                 ) : activePipe ? (
@@ -776,6 +787,32 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                     </span>
                     <ChevronRight className="h-4 w-4" style={{ color: NW.gray400 }} />
                   </a>
+                ) : rejectedPipe ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 12, border: `1px solid ${NW.rose500}22`, background: NW.rose50 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ width: 42, height: 42, borderRadius: 11, background: NW.rose500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.rose600 }}><GitBranch className="h-5 w-5" /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{rejectedPipe.pipeline.title}</div>
+                        <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 1 }}>{rejectedPipe.pipeline.orgName ?? '—'} · {rejectedPipe.pipeline.code}</div>
+                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: NW.rose600, background: NW.white, borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: NW.rose500 }} />Not selected
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ fontSize: 12.5, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 8, padding: '5px 10px' }}>
+                        Last stage reached: <strong style={{ color: NW.black }}>{stageLabel(rejectedPipe.entry.furthestStage)}</strong>
+                      </span>
+                      {rejectedPipe.entry.dropOffReason && (
+                        <span style={{ fontSize: 12.5, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 8, padding: '5px 10px' }}>
+                          Reason: <strong style={{ color: NW.black }}>{DROP_OFF_REASON_LABELS[rejectedPipe.entry.dropOffReason] ?? rejectedPipe.entry.dropOffReason}</strong>
+                        </span>
+                      )}
+                    </div>
+                    {rejectedPipe.entry.dropOffNote && (
+                      <div style={{ fontSize: 12.5, color: NW.gray600, fontStyle: 'italic' }}>&ldquo;{rejectedPipe.entry.dropOffNote}&rdquo;</div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ fontSize: 13, color: NW.gray500, background: NW.gray50, borderRadius: 12, padding: 16 }}>This candidate isn&apos;t in any active pipeline right now.</div>
                 )}

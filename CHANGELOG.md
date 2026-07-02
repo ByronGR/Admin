@@ -5,6 +5,14 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.5.0] — 2026-07-01
+
+### Added
+- **Candidate profile updates in real time** — if another recruiter moves the candidate's stage while you have their profile open, it changes without a refresh (part of the pipeline-emails sprint).
+- **Last stage before "Not Selected"** now shown on the profile, with the drop-off reason and note.
+
+---
+
 ## [1.4.0] — 2026-07-01
 
 ### Fixed

@@ -17,10 +17,9 @@ import { STAGE_TEMPLATES } from './templates';
 //   • Backward (corrective) move → cancel any pending email, send nothing.
 //   • Same-stage drop → no-op (doesn't disturb a pending email).
 //
-// KILL SWITCH: emails only go out when Firestore doc appSettings/stageEmails
-// has { enabled: true }. Until then every eligible move is recorded in
-// stageEmailQueue with mode 'simulated' (no Resend call) so the mechanics can
-// be verified with zero risk of a real candidate being emailed.
+// Always on for every pipeline — the 5-minute grace window + cancel-on-move is
+// the safety net against accidental moves. Every scheduled/cancelled send is
+// recorded in stageEmailQueue for auditing.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -201,35 +200,27 @@ export async function POST(req: Request) {
       rejectionReason: rejectionLine(body.dropOffReason),
     };
 
-    // ── Kill switch: appSettings/stageEmails { enabled: true } required ──
-    const settingsSnap = await db.collection('appSettings').doc('stageEmails').get();
-    const enabled = settingsSnap.exists && settingsSnap.data()?.enabled === true;
-
-    let resendId: string | null = null;
-    let mode: 'scheduled' | 'simulated' = 'simulated';
-
-    if (enabled) {
-      const key = process.env.RESEND_API_KEY;
-      if (!key) {
-        return NextResponse.json({ ok: false, error: 'RESEND_API_KEY not configured' }, { status: 500, headers: cors });
-      }
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-      const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
-      const { subject, html } = template.build(data);
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ from, to: [email], subject, html, scheduled_at: sendAt }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        console.error('[stage-email] Resend schedule failed:', err);
-        return NextResponse.json({ ok: false, error: 'Failed to schedule email' }, { status: 502, headers: cors });
-      }
-      const resData = (await res.json().catch(() => ({}))) as { id?: string };
-      resendId = resData?.id ?? null;
-      mode = 'scheduled';
+    // Always on: stage emails run for every pipeline. The 5-minute grace window
+    // + cancel-on-move is the safety net against accidental moves.
+    const key = process.env.RESEND_API_KEY;
+    if (!key) {
+      return NextResponse.json({ ok: false, error: 'RESEND_API_KEY not configured' }, { status: 500, headers: cors });
     }
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
+    const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+    const { subject, html } = template.build(data);
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ from, to: [email], subject, html, scheduled_at: sendAt }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[stage-email] Resend schedule failed:', err);
+      return NextResponse.json({ ok: false, error: 'Failed to schedule email' }, { status: 502, headers: cors });
+    }
+    const resData = (await res.json().catch(() => ({}))) as { id?: string };
+    const resendId = resData?.id ?? null;
 
     await queueRef.set({
       pipelineCode,
@@ -240,7 +231,7 @@ export async function POST(req: Request) {
       fromStage,
       roleTitle: data.roleTitle,
       orgName: data.orgName,
-      mode,               // 'scheduled' (live) | 'simulated' (kill switch off)
+      mode: 'scheduled',
       resendId,
       sendAt,
       delayMinutes: DELAY_MINUTES,
@@ -248,7 +239,7 @@ export async function POST(req: Request) {
       updatedAt: now,
     });
 
-    return NextResponse.json({ ok: true, scheduled: enabled, mode, sendAt }, { headers: cors });
+    return NextResponse.json({ ok: true, scheduled: true, sendAt }, { headers: cors });
   } catch (e) {
     console.error('[stage-email] failed:', e);
     return NextResponse.json({ ok: false, error: (e as Error)?.message || 'stage-email failed' }, { status: 500, headers: cors });

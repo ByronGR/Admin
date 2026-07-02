@@ -30,6 +30,13 @@ export const CHANGELOG: ChangelogRelease[] = [
         items: [
           'Candidate profile now updates in real time — if another recruiter moves the candidate’s stage while you have their profile open, you’ll see it change without refreshing.',
           'Candidate profile now shows the last stage a candidate reached before being moved to Not Selected, along with the drop-off reason and note.',
+          'Stage-change emails (OFF by default): moving a candidate forward — or to Not Selected — schedules that stage’s email to the candidate with a 5-minute grace window; moving them again within the window cancels it, so accidental moves never email anyone. No email sends until the switch is turned on and the final templates are loaded.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New route POST /api/stage-email (staff-only). Uses Resend scheduled_at (+5 min) and cancel-on-move instead of a cron. Eligibility: forward move or rejection; backward moves cancel; same-stage drops are ignored. Queue/audit in stageEmailQueue; kill switch at appSettings/stageEmails.enabled (default off → “simulated” records only). Placeholder templates per stage in /api/stage-email/templates.ts await Byron’s HTML.',
         ],
       },
     ],

@@ -20,6 +20,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import {
+  auth,
   db,
   collection,
   getDocs,
@@ -123,6 +124,33 @@ const PROGRESS_STAGES: StageKey[] = [
 ];
 function stageRank(s: string): number {
   return PROGRESS_STAGES.indexOf(normalizeStage(s));
+}
+
+// Notify the stage-email service about a move (fire-and-forget). The server
+// debounces: it schedules the stage's email for +5 minutes and cancels it if
+// the candidate moves again — and it's behind a kill switch (appSettings/
+// stageEmails.enabled) so nothing sends until that's turned on. A failure here
+// must never block the actual stage move.
+async function notifyStageEmail(payload: {
+  action: 'stage-moved' | 'cancel';
+  pipelineCode: string;
+  candidateId: string;
+  fromStage?: string;
+  toStage?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  roleTitle?: string;
+  orgName?: string;
+}) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch('/api/stage-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch { /* never block the move */ }
 }
 
 // Card display name: first name + last initial (e.g. "John D.") — keeps cards
@@ -379,6 +407,8 @@ export default function PipelinePage() {
   ) {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
+    const movedEntry = (pipeline.candidates ?? []).find((c) => c.candidateId === candidateCode);
+    const fromStage = movedEntry?.stage;
     const newCandidates = (pipeline.candidates ?? []).map((c) => {
       if (c.candidateId !== candidateCode) return c;
       // Track the furthest (most advanced) stage reached. A drop to Not Selected
@@ -411,6 +441,18 @@ export default function PipelinePage() {
       activePipelineStage: toStage,
       updatedAt: serverTimestamp(),
     }).catch(() => null);
+    // Debounced stage email (fire-and-forget; kill-switched server-side)
+    notifyStageEmail({
+      action: 'stage-moved',
+      pipelineCode,
+      candidateId: candidateCode,
+      fromStage,
+      toStage,
+      candidateName: movedEntry?.name,
+      candidateEmail: movedEntry?.email,
+      roleTitle: pipeline.title,
+      orgName: pipeline.orgName,
+    });
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }
 
@@ -520,6 +562,8 @@ export default function PipelinePage() {
         candidates: newCandidates,
         updatedAt: serverTimestamp(),
       });
+      // A removed candidate must not receive a pending stage email.
+      notifyStageEmail({ action: 'cancel', pipelineCode, candidateId: candidateCode });
       showToast('Candidate removed from pipeline', 'success');
     } catch {
       showToast('Failed to remove candidate', 'error');

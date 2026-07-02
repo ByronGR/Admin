@@ -10,6 +10,10 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 ### Added
 - **Candidate profile updates in real time** — if another recruiter moves the candidate's stage while you have their profile open, it changes without a refresh (part of the pipeline-emails sprint).
 - **Last stage before "Not Selected"** now shown on the profile, with the drop-off reason and note.
+- **Stage-change emails (OFF by default).** Moving a candidate forward — or to Not Selected — schedules that stage's email to the candidate with a **5-minute grace window**; moving them again within the window cancels it, so accidental moves never email anyone. Backward (corrective) moves send nothing. Nothing sends until the kill switch (`appSettings/stageEmails.enabled`) is turned on and the final templates are loaded.
+
+### Technical
+- New route `POST /api/stage-email` (staff-only): Resend `scheduled_at` (+5 min) + cancel-on-move instead of a cron; queue/audit records in `stageEmailQueue`; placeholder per-stage templates in `/api/stage-email/templates.ts` awaiting the final HTML.
 
 ---
 

@@ -30,6 +30,7 @@ export const CHANGELOG: ChangelogRelease[] = [
         items: [
           'Candidate profile now updates in real time — if another recruiter moves the candidate’s stage while you have their profile open, you’ll see it change without refreshing.',
           'Candidate profile now shows the last stage a candidate reached before being moved to Not Selected, along with the drop-off reason and note.',
+          'You can now change a candidate’s stage directly from their profile — but only when they’re in an active opening and an active pipeline. Moving to Not Selected asks for the reason first. It behaves exactly like the board (updates everywhere in real time, and sends the same stage email after the 5-minute grace window).',
           'Stage-change emails — on for every pipeline: moving a candidate forward — or to Not Selected — sends that stage’s email to the candidate after a 5-minute grace window; moving them again within the window cancels it, so accidental moves never email anyone (that delay is the safety net). The 7 branded stage templates are loaded (Background Check → Not Selected); the “Applied” stage sends nothing because the apply-time email already welcomes them. The rejection email uses a candidate-safe line chosen from the reason you pick when dropping someone; the assessment email links to talent.nearwork.co/assessment.',
           'The apply-time “Application received” email was refreshed to the new branded design.',
         ],

@@ -20,7 +20,6 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  auth,
   db,
   collection,
   getDocs,
@@ -35,6 +34,7 @@ import {
   onSnapshot,
   arrayUnion,
 } from '@/lib/firebase';
+import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { MainLayout } from '@/components/layout/main-layout';
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader } from '@/components/nw/shell-ui';
@@ -124,34 +124,6 @@ const PROGRESS_STAGES: StageKey[] = [
 ];
 function stageRank(s: string): number {
   return PROGRESS_STAGES.indexOf(normalizeStage(s));
-}
-
-// Notify the stage-email service about a move (fire-and-forget). The server
-// debounces: it schedules the stage's email for +5 minutes and cancels it if
-// the candidate moves again — and it's behind a kill switch (appSettings/
-// stageEmails.enabled) so nothing sends until that's turned on. A failure here
-// must never block the actual stage move.
-async function notifyStageEmail(payload: {
-  action: 'stage-moved' | 'cancel';
-  pipelineCode: string;
-  candidateId: string;
-  fromStage?: string;
-  toStage?: string;
-  candidateName?: string;
-  candidateEmail?: string;
-  roleTitle?: string;
-  orgName?: string;
-  dropOffReason?: string;
-}) {
-  try {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return;
-    await fetch('/api/stage-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload),
-    });
-  } catch { /* never block the move */ }
 }
 
 // Card display name: first name + last initial (e.g. "John D.") — keeps cards

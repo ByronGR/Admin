@@ -10,6 +10,7 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 ### Added
 - **Candidate profile updates in real time** — if another recruiter moves the candidate's stage while you have their profile open, it changes without a refresh (part of the pipeline-emails sprint).
 - **Last stage before "Not Selected"** now shown on the profile, with the drop-off reason and note.
+- **Change a candidate's stage from their profile** — only when they're in an active opening + active pipeline. A stage dropdown appears on the "Current application" card; picking Not Selected asks for the reason first. Behaves exactly like the board (real-time everywhere + same 5-minute-delayed stage email).
 - **Stage-change emails** — on for every pipeline. Moving a candidate forward — or to Not Selected — sends that stage's email to the candidate after a **5-minute grace window**; moving them again within the window cancels it, so accidental moves never email anyone (this delay is the safety net). Backward (corrective) moves send nothing. The **7 branded stage templates** are loaded (Background Check → Not Selected); "Applied" sends nothing (the apply-time email already welcomes them). Rejection email uses a candidate-safe line chosen from the drop-off reason; assessment email links to talent.nearwork.co/assessment.
 - Apply-time **"Application received" email refreshed** to the new branded design.
 

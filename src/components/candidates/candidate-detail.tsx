@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
+  auth,
   db,
   collection,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   query,
   where,
@@ -12,8 +14,11 @@ import {
   doc,
   updateDoc,
 } from '@/lib/firebase';
+import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
+import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
@@ -25,6 +30,7 @@ import type {
   Pipeline,
   PipelineCandidate,
   PipelineStage,
+  DropOffReason,
   Assessment,
   Placement,
   CEFRLevel,
@@ -271,8 +277,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
   useEffect(() => {
     setPipelinesLoading(true);
-    getDocs(collection(db, 'pipelines'))
-      .then((snap) => {
+    // Live subscription so a stage move by another recruiter updates here in
+    // real time (the pipeline board is already live; this keeps the profile in step).
+    const unsub = onSnapshot(
+      collection(db, 'pipelines'),
+      (snap) => {
         const matches: Array<{ pipeline: Pipeline; entry: PipelineCandidate }> = [];
         snap.docs.forEach((d) => {
           const p = { id: d.id, ...d.data() } as Pipeline;
@@ -289,14 +298,133 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           return tb - ta;
         });
         setPipelineEntries(matches);
-      })
-      .catch(() => setPipelineEntries([]))
-      .finally(() => setPipelinesLoading(false));
+        setPipelinesLoading(false);
+      },
+      () => {
+        setPipelineEntries([]);
+        setPipelinesLoading(false);
+      },
+    );
+    return () => unsub();
   }, [candidate.id]);
 
   function stageLabel(stage?: PipelineStage): string {
     if (!stage) return '—';
     return PIPELINE_STAGE_LABELS[stage] ?? stage;
+  }
+
+  // ── Stage editing from the profile (only for active opening + pipeline) ─────
+  // opening status by id/code, so we can require the opening to be "open".
+  const [openingStatusMap, setOpeningStatusMap] = useState<Record<string, string>>({});
+  const [stageSaving, setStageSaving] = useState(false);
+  const [dropModal, setDropModal] = useState<{ open: boolean; pipeline: Pipeline | null; entry: PipelineCandidate | null }>({ open: false, pipeline: null, entry: null });
+  const [dropReason, setDropReason] = useState<DropOffReason>('mia');
+  const [dropNote, setDropNote] = useState('');
+
+  useEffect(() => {
+    getDocs(collection(db, 'openings'))
+      .then((snap) => {
+        const m: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const o = d.data() as { code?: string; status?: string };
+          m[d.id] = o.status ?? '';
+          if (o.code) m[o.code] = o.status ?? '';
+        });
+        setOpeningStatusMap(m);
+      })
+      .catch(() => {});
+  }, []);
+
+  // The opening is treated as "open" unless we can positively resolve it to a
+  // non-open status (so a missing openingId doesn't hide the control).
+  function openingIsOpen(p: Pipeline): boolean {
+    const st = p.openingId ? openingStatusMap[p.openingId] : undefined;
+    return st === undefined ? true : st === 'open';
+  }
+
+  const PROGRESS_KEYS = PIPELINE_STAGES.filter((s) => s.key !== 'not-selected').map((s) => s.key);
+  const rankOf = (s?: string) => PROGRESS_KEYS.indexOf((s ?? '') as (typeof PROGRESS_KEYS)[number]);
+
+  async function applyStageChange(
+    pipeline: Pipeline,
+    entry: PipelineCandidate,
+    toStage: PipelineStage,
+    dropOff?: { reason: DropOffReason; note: string },
+  ) {
+    if (stageSaving) return;
+    setStageSaving(true);
+    try {
+      const considered = toStage === 'not-selected' ? entry.stage : toStage;
+      const prevFurthest = entry.furthestStage ?? entry.stage;
+      const furthestStage = rankOf(considered) >= rankOf(prevFurthest) ? considered : prevFurthest;
+      const newCandidates = (pipeline.candidates ?? []).map((c) =>
+        c.candidateId !== candidate.id
+          ? c
+          : {
+              ...c,
+              stage: toStage,
+              furthestStage,
+              ...(dropOff ? { dropOffReason: dropOff.reason, dropOffNote: dropOff.note } : {}),
+            },
+      );
+      await updateDoc(doc(db, 'pipelines', pipeline.id), { candidates: newCandidates, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'candidates', candidate.id), {
+        activePipelineCode: pipeline.code,
+        activePipelineStage: toStage,
+        updatedAt: serverTimestamp(),
+      }).catch(() => null);
+      notifyStageEmail({
+        action: 'stage-moved',
+        pipelineCode: pipeline.code,
+        candidateId: candidate.id,
+        fromStage: entry.stage,
+        toStage,
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        roleTitle: pipeline.title,
+        orgName: pipeline.orgName,
+        dropOffReason: dropOff?.reason,
+      });
+      showToast(`Moved to ${stageLabel(toStage)}`, 'success');
+    } catch {
+      showToast('Failed to update stage', 'error');
+    } finally {
+      setStageSaving(false);
+    }
+  }
+
+  // Full purge of this candidate (Firebase account + all collections + files).
+  const [deletingCandidate, setDeletingCandidate] = useState(false);
+  async function deleteCandidate() {
+    setDeletingCandidate(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Your session expired — please sign in again.');
+      const res = await fetch('/api/delete-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ candidateId: candidate.id, code: candidate.code ?? null, email: candidate.email ?? null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete candidate');
+      showToast('Candidate fully deleted', 'success');
+      window.location.href = '/candidates';
+    } catch (e) {
+      showToast((e as Error)?.message || 'Failed to delete candidate', 'error');
+      setDeletingCandidate(false);
+    }
+  }
+
+  // Called from the stage dropdown. Not Selected opens the reason modal first.
+  function onStageSelect(pipeline: Pipeline, entry: PipelineCandidate, toStage: PipelineStage) {
+    if (toStage === entry.stage) return;
+    if (toStage === 'not-selected') {
+      setDropReason('mia');
+      setDropNote('');
+      setDropModal({ open: true, pipeline, entry });
+      return;
+    }
+    applyStageChange(pipeline, entry, toStage);
   }
 
   // ── Every application this candidate has submitted, including ones still
@@ -511,6 +639,12 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       ? `${fmtCurrency(candidate.expectedSalary, 'USD')}/mo`
       : (typeof candidate.expectedSalary === 'string' && candidate.expectedSalary.trim()) ? candidate.expectedSalary : null;
   const activePipe = pipelineEntries.find(({ entry }) => entry.stage !== 'not-selected');
+  // Where the candidate was dropped, so we can show the last stage they reached.
+  const rejectedPipe = pipelineEntries.find(({ entry }) => entry.stage === 'not-selected');
+  // Stage is editable from the profile ONLY when the candidate sits in an
+  // active pipeline whose opening is still open.
+  const stageEditable =
+    !!activePipe && activePipe.pipeline.status === 'active' && openingIsOpen(activePipe.pipeline);
   const appsCount = pipelineEntries.length + applicationEntries.length;
   const pastApps = applicationEntries;
 
@@ -761,21 +895,63 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           {detailTab === 'applications' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={card}>
-                {cardHead(<GitBranch className="h-4 w-4" />, 'Current application', activePipe ? undefined : 'Not in an active pipeline')}
+                {cardHead(<GitBranch className="h-4 w-4" />, 'Current application', activePipe ? undefined : rejectedPipe ? 'Not selected' : 'Not in an active pipeline')}
                 {pipelinesLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><Spinner size="sm" /></div>
                 ) : activePipe ? (
-                  <a href={`/pipeline?focus=${encodeURIComponent(activePipe.pipeline.code)}`} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 12, border: `1px solid ${NW.gray100}`, background: NW.offWhite, textDecoration: 'none' }}>
-                    <span style={{ width: 42, height: 42, borderRadius: 11, background: NW.teal500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.teal600 }}><Briefcase className="h-5 w-5" /></span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{activePipe.pipeline.title}</div>
-                      <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 1 }}>{activePipe.pipeline.orgName ?? '—'} · {activePipe.pipeline.code}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 12, border: `1px solid ${NW.gray100}`, background: NW.offWhite }}>
+                    <a href={`/pipeline?focus=${encodeURIComponent(activePipe.pipeline.code)}`} style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, textDecoration: 'none' }}>
+                      <span style={{ width: 42, height: 42, borderRadius: 11, background: NW.teal500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.teal600 }}><Briefcase className="h-5 w-5" /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{activePipe.pipeline.title}</div>
+                        <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 1 }}>{activePipe.pipeline.orgName ?? '—'} · {activePipe.pipeline.code}</div>
+                      </div>
+                    </a>
+                    {stageEditable ? (
+                      <select
+                        value={activePipe.entry.stage}
+                        disabled={stageSaving}
+                        onChange={(e) => onStageSelect(activePipe.pipeline, activePipe.entry, e.target.value as PipelineStage)}
+                        title="Change stage"
+                        style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '7px 10px', cursor: stageSaving ? 'wait' : 'pointer', flexShrink: 0 }}
+                      >
+                        {PIPELINE_STAGES.map((s) => (
+                          <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <a href={`/pipeline?focus=${encodeURIComponent(activePipe.pipeline.code)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 500, color: NW.gray700, textDecoration: 'none', flexShrink: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: NW.teal500 }} />{stageLabel(activePipe.entry.stage)}
+                        <ChevronRight className="h-4 w-4" style={{ color: NW.gray400 }} />
+                      </a>
+                    )}
+                  </div>
+                ) : rejectedPipe ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 12, border: `1px solid ${NW.rose500}22`, background: NW.rose50 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ width: 42, height: 42, borderRadius: 11, background: NW.rose500 + '18', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.rose600 }}><GitBranch className="h-5 w-5" /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{rejectedPipe.pipeline.title}</div>
+                        <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 1 }}>{rejectedPipe.pipeline.orgName ?? '—'} · {rejectedPipe.pipeline.code}</div>
+                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: NW.rose600, background: NW.white, borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: NW.rose500 }} />Not selected
+                      </span>
                     </div>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 500, color: NW.gray700 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: NW.teal500 }} />{stageLabel(activePipe.entry.stage)}
-                    </span>
-                    <ChevronRight className="h-4 w-4" style={{ color: NW.gray400 }} />
-                  </a>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ fontSize: 12.5, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 8, padding: '5px 10px' }}>
+                        Last stage reached: <strong style={{ color: NW.black }}>{stageLabel(rejectedPipe.entry.furthestStage)}</strong>
+                      </span>
+                      {rejectedPipe.entry.dropOffReason && (
+                        <span style={{ fontSize: 12.5, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 8, padding: '5px 10px' }}>
+                          Reason: <strong style={{ color: NW.black }}>{DROP_OFF_REASON_LABELS[rejectedPipe.entry.dropOffReason] ?? rejectedPipe.entry.dropOffReason}</strong>
+                        </span>
+                      )}
+                    </div>
+                    {rejectedPipe.entry.dropOffNote && (
+                      <div style={{ fontSize: 12.5, color: NW.gray600, fontStyle: 'italic' }}>&ldquo;{rejectedPipe.entry.dropOffNote}&rdquo;</div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ fontSize: 13, color: NW.gray500, background: NW.gray50, borderRadius: 12, padding: 16 }}>This candidate isn&apos;t in any active pipeline right now.</div>
                 )}
@@ -817,6 +993,15 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
         {/* Right — rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Danger zone — full delete */}
+          <div style={{ ...card, borderColor: `${NW.rose500}44` }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: NW.rose600, marginBottom: 4 }}>Danger zone</div>
+            <div style={{ fontSize: 12, color: NW.gray500, marginBottom: 12, lineHeight: 1.5 }}>
+              Permanently removes this candidate everywhere — profile, login account, applications, assessments, notes and uploaded files. Cannot be undone. Hired/payroll records are kept.
+            </div>
+            <HoldToDelete onConfirm={deleteCandidate} busy={deletingCandidate} label="Hold to delete candidate" fullWidth />
+          </div>
+
           {/* Hired banner */}
           {placement && (
             <a href={`/hired/${placement.id}`} style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderColor: NW.teal500, background: 'rgba(22,160,133,0.06)', textDecoration: 'none', padding: 16 }}>
@@ -980,6 +1165,51 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             <button type="button" onClick={() => setEngModalOpen(false)} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)]">Cancel</button>
             <button type="button" onClick={saveEnglishAssessment} disabled={engSaving || !engFeedback.trim()} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60" style={{ background: 'var(--green)' }}>
               {engSaving && <Spinner size="sm" />} Save
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Drop-off reason — required when moving a candidate to Not Selected */}
+      <Modal open={dropModal.open} onClose={() => !stageSaving && setDropModal({ open: false, pipeline: null, entry: null })} title="Move to Not Selected" size="md">
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--mid)]">Pick a reason. The candidate sees a warm, generic message — your internal note is never sent to them.</p>
+          <div>
+            <label className="mb-2 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Reason *</label>
+            <select
+              value={dropReason}
+              onChange={(e) => setDropReason(e.target.value as DropOffReason)}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            >
+              {(Object.keys(DROP_OFF_REASON_LABELS) as DropOffReason[]).map((r) => (
+                <option key={r} value={r}>{DROP_OFF_REASON_LABELS[r]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Internal note (optional)</label>
+            <textarea
+              value={dropNote}
+              onChange={(e) => setDropNote(e.target.value)}
+              rows={3}
+              placeholder="Context for the team — not shown to the candidate."
+              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setDropModal({ open: false, pipeline: null, entry: null })} disabled={stageSaving} className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-500 text-[var(--mid)] disabled:opacity-50">Cancel</button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!dropModal.pipeline || !dropModal.entry) return;
+                await applyStageChange(dropModal.pipeline, dropModal.entry, 'not-selected', { reason: dropReason, note: dropNote.trim() });
+                setDropModal({ open: false, pipeline: null, entry: null });
+              }}
+              disabled={stageSaving}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-600 text-white disabled:opacity-60"
+              style={{ background: 'var(--rose)' }}
+            >
+              {stageSaving && <Spinner size="sm" />} Move to Not Selected
             </button>
           </div>
         </div>

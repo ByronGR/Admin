@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,32 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.5.0',
+    date: '2026-07-01',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate profile now updates in real time — if another recruiter moves the candidate’s stage while you have their profile open, you’ll see it change without refreshing.',
+          'Candidate profile now shows the last stage a candidate reached before being moved to Not Selected, along with the drop-off reason and note.',
+          'You can now change a candidate’s stage directly from their profile — but only when they’re in an active opening and an active pipeline. Moving to Not Selected asks for the reason first. It behaves exactly like the board (updates everywhere in real time, and sends the same stage email after the 5-minute grace window).',
+          'Approving an applicant into the pipeline (or adding a candidate straight into a stage) now emails the candidate — previously these paths sent nothing. Entering the “Applied” stage uses the “you’ve moved to the next stage” template.',
+          'You can now fully delete a candidate from their own profile (Danger zone) — same complete purge as the list: Firebase account, all collections, and uploaded files; hired/payroll kept.',
+          'Pause / Cancel a pipeline from the pipeline view. A paused or cancelled pipeline is frozen — moving a candidate on the board is blocked (an error asks you to contact an Account Manager) and no stage email is sent.',
+          'The top search bar now finds candidates by their Nearwork ID (the short code like K7M2PX), not just name/email/role.',
+          'Stage-change emails — on for every pipeline: moving a candidate forward — or to Not Selected — sends that stage’s email to the candidate after a 5-minute grace window; moving them again within the window cancels it, so accidental moves never email anyone (that delay is the safety net). The 7 branded stage templates are loaded (Background Check → Not Selected); the “Applied” stage sends nothing because the apply-time email already welcomes them. The rejection email uses a candidate-safe line chosen from the reason you pick when dropping someone; the assessment email links to talent.nearwork.co/assessment.',
+          'The apply-time “Application received” email was refreshed to the new branded design.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New route POST /api/stage-email (staff-only). Uses Resend scheduled_at (+5 min) and cancel-on-move instead of a cron. Eligibility: forward move or rejection; backward moves cancel; same-stage drops are ignored. Queue/audit in stageEmailQueue; kill switch at appSettings/stageEmails.enabled (default off → “simulated” records only). Placeholder templates per stage in /api/stage-email/templates.ts await Byron’s HTML.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.4.0',
     date: '2026-07-01',

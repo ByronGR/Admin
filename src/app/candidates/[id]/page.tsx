@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { db, doc, getDoc } from '@/lib/firebase';
+import { db, doc, onSnapshot } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { CandidateDetail } from '@/components/candidates/candidate-detail';
@@ -19,21 +19,25 @@ export default function CandidateDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    (async () => {
-      setLoading(true);
-      try {
-        const snap = await getDoc(doc(db, 'candidates', id));
+    setLoading(true);
+    // Live subscription so a recruiter's change shows here in real time.
+    const unsub = onSnapshot(
+      doc(db, 'candidates', id),
+      (snap) => {
         if (snap.exists()) {
           setCandidate({ id: snap.id, ...snap.data() } as Candidate);
+          setNotFound(false);
         } else {
           setNotFound(true);
         }
-      } catch {
-        setNotFound(true);
-      } finally {
         setLoading(false);
-      }
-    })();
+      },
+      () => {
+        setNotFound(true);
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, [id]);
 
   return (

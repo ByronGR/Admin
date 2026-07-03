@@ -4,8 +4,12 @@
 //               talent.nearwork.co (applyToJob in firebase.js)
 //
 // Required data: { firstName, roleTitle }
+// The candidate-facing HTML is Byron's "Application received" design
+// (application_submitted), shared from the stage-email templates so there's one
+// source of truth. The legacy inline HTML below is retained but unused.
 
 import { fill } from './_base';
+import { STAGE_HTML } from '../../stage-email/html';
 
 const HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -176,6 +180,6 @@ export function build(data: Record<string, string>): { subject: string; html: st
   };
   return {
     subject: `We received your application — ${d.roleTitle}`,
-    html: fill(HTML, d),
+    html: fill(STAGE_HTML.application_submitted ?? HTML, d),
   };
 }

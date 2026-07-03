@@ -34,6 +34,7 @@ import {
   onSnapshot,
   arrayUnion,
 } from '@/lib/firebase';
+import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { MainLayout } from '@/components/layout/main-layout';
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader } from '@/components/nw/shell-ui';
@@ -379,6 +380,8 @@ export default function PipelinePage() {
   ) {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
+    const movedEntry = (pipeline.candidates ?? []).find((c) => c.candidateId === candidateCode);
+    const fromStage = movedEntry?.stage;
     const newCandidates = (pipeline.candidates ?? []).map((c) => {
       if (c.candidateId !== candidateCode) return c;
       // Track the furthest (most advanced) stage reached. A drop to Not Selected
@@ -411,6 +414,19 @@ export default function PipelinePage() {
       activePipelineStage: toStage,
       updatedAt: serverTimestamp(),
     }).catch(() => null);
+    // Debounced stage email (fire-and-forget; kill-switched server-side)
+    notifyStageEmail({
+      action: 'stage-moved',
+      pipelineCode,
+      candidateId: candidateCode,
+      fromStage,
+      toStage,
+      candidateName: movedEntry?.name,
+      candidateEmail: movedEntry?.email,
+      roleTitle: pipeline.title,
+      orgName: pipeline.orgName,
+      dropOffReason: opts?.dropOff?.reason,
+    });
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }
 
@@ -424,6 +440,12 @@ export default function PipelinePage() {
 
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
+
+    // A paused/cancelled pipeline is frozen — no moves, no emails.
+    if (pipeline.status === 'paused' || pipeline.status === 'cancelled') {
+      showToast(`This pipeline is ${pipeline.status} — contact an Account Manager to move candidates.`, 'error');
+      return;
+    }
 
     const candIndex = pipeline.candidates?.findIndex((c) => c.candidateId === candidateCode) ?? -1;
     if (candIndex === -1) return;
@@ -520,6 +542,8 @@ export default function PipelinePage() {
         candidates: newCandidates,
         updatedAt: serverTimestamp(),
       });
+      // A removed candidate must not receive a pending stage email.
+      notifyStageEmail({ action: 'cancel', pipelineCode, candidateId: candidateCode });
       showToast('Candidate removed from pipeline', 'success');
     } catch {
       showToast('Failed to remove candidate', 'error');
@@ -598,6 +622,18 @@ export default function PipelinePage() {
         candidates: [...(pipeline.candidates ?? []), newEntry],
         updatedAt: serverTimestamp(),
       });
+      // Adding a candidate straight into a stage emails them too (debounced).
+      notifyStageEmail({
+        action: 'stage-moved',
+        pipelineCode: pipeline.code,
+        candidateId: candidate.id,
+        fromStage: '',
+        toStage: normalizeStage(addModal.stage),
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        roleTitle: pipeline.title,
+        orgName: pipeline.orgName,
+      });
       showToast(`${candidate.name} added to pipeline`, 'success');
       setAddModal({ open: false, pipelineCode: '', stage: '' });
       setCandidateSearch('');
@@ -611,18 +647,42 @@ export default function PipelinePage() {
       <div className="space-y-5">
         {/* Header */}
         {activePipeline ? (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
-              <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div>
+                <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
+                <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+              </div>
+              {activePipeline.status && activePipeline.status !== 'active' && (
+                <span style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize', color: activePipeline.status === 'cancelled' ? NW.rose600 : '#A16207', background: activePipeline.status === 'cancelled' ? NW.rose50 : NW.yellow50, border: `1px solid ${activePipeline.status === 'cancelled' ? NW.rose600 : '#A16207'}22`, borderRadius: 999, padding: '3px 10px' }}>
+                  {activePipeline.status}
+                </span>
+              )}
             </div>
-            <button
-              onClick={() => closePipeline()}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <X className="h-3.5 w-3.5" />
-              Back to list
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {activePipeline.status !== 'cancelled' && (
+                <button
+                  onClick={() => updatePipelineStatus(activePipeline.id, activePipeline.status === 'paused' ? 'active' : 'paused')}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+                >
+                  {activePipeline.status === 'paused' ? 'Resume pipeline' : 'Pause pipeline'}
+                </button>
+              )}
+              <button
+                onClick={() => updatePipelineStatus(activePipeline.id, activePipeline.status === 'cancelled' ? 'active' : 'cancelled')}
+                className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-500"
+                style={{ borderColor: `${NW.rose500}55`, color: NW.rose600 }}
+              >
+                {activePipeline.status === 'cancelled' ? 'Reopen pipeline' : 'Cancel pipeline'}
+              </button>
+              <button
+                onClick={() => closePipeline()}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+              >
+                <X className="h-3.5 w-3.5" />
+                Back to list
+              </button>
+            </div>
           </div>
         ) : (
           <PageHeader
@@ -1754,6 +1814,18 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
           updatedAt: serverTimestamp(),
         }).catch(() => null),
       ]);
+      // Entering the pipeline emails the candidate (debounced, like any move).
+      notifyStageEmail({
+        action: 'stage-moved',
+        pipelineCode: pipeline.code,
+        candidateId: candId,
+        fromStage: '',
+        toStage: 'applied',
+        candidateName: app.candidateName,
+        candidateEmail: app.candidateEmail,
+        roleTitle: pipeline.title,
+        orgName: pipeline.orgName,
+      });
       showToast(`${app.candidateName || 'Applicant'} approved — added to Applied stage`, 'success');
     } catch (e) {
       showToast('Approve failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');

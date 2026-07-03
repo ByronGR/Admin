@@ -90,8 +90,12 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
         const name = (data.name ?? '') as string;
         const email = (data.email ?? '') as string;
         const role = (data.currentRole ?? data.role ?? '') as string;
-        if (name.toLowerCase().includes(term) || email.toLowerCase().includes(term) || role.toLowerCase().includes(term)) {
-          res.push({ id: d.id, label: name || email, sub: role || email, type: 'Candidate', href: `/candidates/${d.id}`, init: initials(name || email), bg: colorFor(d.id), round: true });
+        // Nearwork candidate ID — the short code (e.g. K7M2PX), which is the doc
+        // id for Admin-created candidates, or a `code` field for others.
+        const code = ((data.code as string) ?? d.id ?? '').toString();
+        const matchesId = code.toLowerCase().includes(term) || d.id.toLowerCase().includes(term);
+        if (matchesId || name.toLowerCase().includes(term) || email.toLowerCase().includes(term) || role.toLowerCase().includes(term)) {
+          res.push({ id: d.id, label: name || email || code, sub: matchesId ? `ID ${code}` : (role || email), type: 'Candidate', href: `/candidates/${d.id}`, init: initials(name || email), bg: colorFor(d.id), round: true });
         }
       });
       oDocs.forEach((d) => {

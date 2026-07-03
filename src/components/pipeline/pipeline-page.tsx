@@ -441,6 +441,12 @@ export default function PipelinePage() {
     const pipeline = pipelines.find((p) => p.code === pipelineCode);
     if (!pipeline) return;
 
+    // A paused/cancelled pipeline is frozen — no moves, no emails.
+    if (pipeline.status === 'paused' || pipeline.status === 'cancelled') {
+      showToast(`This pipeline is ${pipeline.status} — contact an Account Manager to move candidates.`, 'error');
+      return;
+    }
+
     const candIndex = pipeline.candidates?.findIndex((c) => c.candidateId === candidateCode) ?? -1;
     if (candIndex === -1) return;
 
@@ -641,18 +647,42 @@ export default function PipelinePage() {
       <div className="space-y-5">
         {/* Header */}
         {activePipeline ? (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
-              <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div>
+                <h1 className="text-xl font-700 tracking-tight text-[var(--black)]">Pipeline</h1>
+                <p className="mt-0.5 text-xs text-[var(--light)]">Viewing {activePipeline.code}</p>
+              </div>
+              {activePipeline.status && activePipeline.status !== 'active' && (
+                <span style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize', color: activePipeline.status === 'cancelled' ? NW.rose600 : '#A16207', background: activePipeline.status === 'cancelled' ? NW.rose50 : NW.yellow50, border: `1px solid ${activePipeline.status === 'cancelled' ? NW.rose600 : '#A16207'}22`, borderRadius: 999, padding: '3px 10px' }}>
+                  {activePipeline.status}
+                </span>
+              )}
             </div>
-            <button
-              onClick={() => closePipeline()}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
-            >
-              <X className="h-3.5 w-3.5" />
-              Back to list
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {activePipeline.status !== 'cancelled' && (
+                <button
+                  onClick={() => updatePipelineStatus(activePipeline.id, activePipeline.status === 'paused' ? 'active' : 'paused')}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+                >
+                  {activePipeline.status === 'paused' ? 'Resume pipeline' : 'Pause pipeline'}
+                </button>
+              )}
+              <button
+                onClick={() => updatePipelineStatus(activePipeline.id, activePipeline.status === 'cancelled' ? 'active' : 'cancelled')}
+                className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-500"
+                style={{ borderColor: `${NW.rose500}55`, color: NW.rose600 }}
+              >
+                {activePipeline.status === 'cancelled' ? 'Reopen pipeline' : 'Cancel pipeline'}
+              </button>
+              <button
+                onClick={() => closePipeline()}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]"
+              >
+                <X className="h-3.5 w-3.5" />
+                Back to list
+              </button>
+            </div>
           </div>
         ) : (
           <PageHeader

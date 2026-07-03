@@ -616,6 +616,18 @@ export default function PipelinePage() {
         candidates: [...(pipeline.candidates ?? []), newEntry],
         updatedAt: serverTimestamp(),
       });
+      // Adding a candidate straight into a stage emails them too (debounced).
+      notifyStageEmail({
+        action: 'stage-moved',
+        pipelineCode: pipeline.code,
+        candidateId: candidate.id,
+        fromStage: '',
+        toStage: normalizeStage(addModal.stage),
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        roleTitle: pipeline.title,
+        orgName: pipeline.orgName,
+      });
       showToast(`${candidate.name} added to pipeline`, 'success');
       setAddModal({ open: false, pipelineCode: '', stage: '' });
       setCandidateSearch('');
@@ -1772,6 +1784,18 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
           updatedAt: serverTimestamp(),
         }).catch(() => null),
       ]);
+      // Entering the pipeline emails the candidate (debounced, like any move).
+      notifyStageEmail({
+        action: 'stage-moved',
+        pipelineCode: pipeline.code,
+        candidateId: candId,
+        fromStage: '',
+        toStage: 'applied',
+        candidateName: app.candidateName,
+        candidateEmail: app.candidateEmail,
+        roleTitle: pipeline.title,
+        orgName: pipeline.orgName,
+      });
       showToast(`${app.candidateName || 'Applicant'} approved — added to Applied stage`, 'success');
     } catch (e) {
       showToast('Approve failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');

@@ -18,6 +18,7 @@ import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
@@ -389,6 +390,28 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       showToast('Failed to update stage', 'error');
     } finally {
       setStageSaving(false);
+    }
+  }
+
+  // Full purge of this candidate (Firebase account + all collections + files).
+  const [deletingCandidate, setDeletingCandidate] = useState(false);
+  async function deleteCandidate() {
+    setDeletingCandidate(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Your session expired — please sign in again.');
+      const res = await fetch('/api/delete-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ candidateId: candidate.id, code: candidate.code ?? null, email: candidate.email ?? null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete candidate');
+      showToast('Candidate fully deleted', 'success');
+      window.location.href = '/candidates';
+    } catch (e) {
+      showToast((e as Error)?.message || 'Failed to delete candidate', 'error');
+      setDeletingCandidate(false);
     }
   }
 
@@ -970,6 +993,15 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
         {/* Right — rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Danger zone — full delete */}
+          <div style={{ ...card, borderColor: `${NW.rose500}44` }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: NW.rose600, marginBottom: 4 }}>Danger zone</div>
+            <div style={{ fontSize: 12, color: NW.gray500, marginBottom: 12, lineHeight: 1.5 }}>
+              Permanently removes this candidate everywhere — profile, login account, applications, assessments, notes and uploaded files. Cannot be undone. Hired/payroll records are kept.
+            </div>
+            <HoldToDelete onConfirm={deleteCandidate} busy={deletingCandidate} label="Hold to delete candidate" fullWidth />
+          </div>
+
           {/* Hired banner */}
           {placement && (
             <a href={`/hired/${placement.id}`} style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderColor: NW.teal500, background: 'rgba(22,160,133,0.06)', textDecoration: 'none', padding: 16 }}>

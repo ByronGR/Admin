@@ -30,6 +30,10 @@ function tmpl(subject: string, htmlKey: keyof typeof STAGE_HTML | string): Stage
 
 // Keyed by the Admin stage the candidate was just moved TO.
 export const STAGE_TEMPLATES: Record<string, StageTemplate> = {
+  // Sent when a candidate is APPROVED from the applicant list into the pipeline
+  // (i.e. enters the "Applied" stage). The apply-time "Application received"
+  // email is a separate, earlier moment.
+  'applied':           tmpl("You've moved to the next stage — {roleTitle}", 'application_moved'),
   'background-check':  tmpl('Your profile is under review — {roleTitle}', 'profile_review'),
   'interview':         tmpl('Time to meet the team — {roleTitle}', 'interview'),
   'assessment':        tmpl('Your assessment is ready — {roleTitle}', 'assessment'),
@@ -37,5 +41,4 @@ export const STAGE_TEMPLATES: Record<string, StageTemplate> = {
   'partner-interview': tmpl('Your partner interview is scheduled — {roleTitle}', 'partner_interview'),
   'hired':             tmpl('You got the job! — {roleTitle}', 'hired'),
   'not-selected':      tmpl('An update on your application — {roleTitle}', 'denied'),
-  // 'applied' intentionally omitted — covered by the apply-time email.
 };

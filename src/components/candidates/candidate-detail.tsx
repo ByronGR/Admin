@@ -876,34 +876,6 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 }}
               />
 
-              {/* Assessment + radar (folded in) */}
-              {assessmentLoading ? (
-                <div style={{ ...card, display: 'flex', justifyContent: 'center', padding: 28 }}><Spinner size="sm" /></div>
-              ) : assessment ? (
-                <div style={card}>
-                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>Technical</div>
-                      <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.technicalScore != null ? `${assessment.technicalScore}/50 · ${Math.round((assessment.technicalScore / 50) * 100)}%` : '—'}</div>
-                    </div>
-                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>DISC style</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.discStyle ? `${assessment.discStyle} — ${DISC_LABELS[assessment.discStyle].name}` : '—'}</div>
-                    </div>
-                  </div>
-                  {hasRadarData && (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
-                      <RadarChart data={radarData} />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={card}>
-                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
-                  <div style={{ fontSize: 13, color: NW.gray400 }}>No assessment on file yet.</div>
-                </div>
-              )}
             </div>
           )}
 

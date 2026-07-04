@@ -3,10 +3,11 @@
 // Per-role assessments on the candidate profile. One row per pipeline the
 // candidate is in, showing the role, pipeline code, Nearwork Score and upload
 // date. Staff upload two PDFs per role (Assessment & English, DISC) which POST
-// to /api/assessment-upload for parsing. "View report" opens a modal with the
-// full parsed report — the same information the client sees.
+// to /api/assessment-upload for parsing. "View report" links to the full-page
+// report at /candidates/{id}/assessment/{pipeline} — the same view the client sees.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { auth, db, collection, query, where, getDocs } from '@/lib/firebase';
 import { useToast } from '@/components/ui/toast';
 
@@ -235,7 +236,7 @@ function UploadButton({
   );
 }
 
-// ─── Report modal ──────────────────────────────────────────────────────────────
+// ─── Row label ──────────────────────────────────────────────────────────────
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -245,255 +246,23 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-xl border border-gray-200 bg-white p-4 ${className}`}>{children}</div>
-  );
-}
-
-function DiscBars({ band }: { band: DiscBand }) {
-  const rows: Array<{ key: keyof DiscBand; color: string }> = [
-    { key: 'D', color: 'bg-rose-500' },
-    { key: 'I', color: 'bg-amber-500' },
-    { key: 'S', color: 'bg-emerald-500' },
-    { key: 'C', color: 'bg-sky-500' },
-  ];
-  return (
-    <div className="space-y-2">
-      {rows.map(({ key, color }) => {
-        const v = band[key];
-        const pct = typeof v === 'number' ? Math.max(0, Math.min(100, v)) : 0;
-        return (
-          <div key={key} className="flex items-center gap-2">
-            <span className="w-4 text-xs font-semibold text-gray-700">{key}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
-              <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-            </div>
-            <span className="w-9 text-right text-xs tabular-nums text-gray-600">
-              {typeof v === 'number' ? `${Math.round(v)}` : '—'}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ReportModal({ a, onClose }: { a: Assessment; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const passed = a.result === 'PASSED';
-  const natural = a.disc?.profiles?.natural ?? {};
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-[820px] rounded-2xl border border-gray-200 bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-6">
-          <div className="min-w-0">
-            <div className="text-lg font-semibold text-gray-900">
-              {a.role ?? a.pipelineTitle ?? 'Assessment'}
-            </div>
-            <div className="mt-2 flex items-center gap-3">
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  a.result
-                    ? passed
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-red-100 text-red-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {a.result ?? 'Pending'}
-              </span>
-              {(typeof a.overallScore === 'number' || typeof a.passingScore === 'number') && (
-                <span className="text-xs text-gray-500">
-                  Overall {typeof a.overallScore === 'number' ? `${a.overallScore}%` : '—'} · pass
-                  line {typeof a.passingScore === 'number' ? `${a.passingScore}%` : '—'}
-                </span>
-              )}
-            </div>
-            {a.gradedBy && (
-              <div className="mt-1 text-xs text-gray-400">Graded by {a.gradedBy}</div>
-            )}
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="text-right">
-              <Label>Nearwork Score</Label>
-              <div className="text-3xl font-bold leading-none tabular-nums text-gray-900">
-                {typeof a.nearworkScore === 'number' ? a.nearworkScore : '—'}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              aria-label="Close"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto p-6">
-          {/* English + Integrity */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card>
-              <Label>English</Label>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-gray-900">
-                  {a.english?.level ?? '—'}
-                </span>
-                {typeof a.english?.score === 'number' && (
-                  <span className="text-sm tabular-nums text-gray-500">{a.english.score}%</span>
-                )}
-              </div>
-              {a.english?.summary && (
-                <p className="mt-2 text-sm leading-relaxed text-gray-600">{a.english.summary}</p>
-              )}
-            </Card>
-
-            <Card>
-              <Label>Integrity</Label>
-              <div className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">
-                {typeof a.integrity?.risk === 'number' ? `${a.integrity.risk}%` : '—'}
-                <span className="ml-1 text-xs font-medium text-gray-400">risk</span>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                {(
-                  [
-                    ['Tab switches', a.integrity?.tabSwitches],
-                    ['Copy-paste', a.integrity?.copyPaste],
-                    ['Focus losses', a.integrity?.focusLosses],
-                  ] as const
-                ).map(([lbl, val]) => (
-                  <div key={lbl}>
-                    <div className="text-sm font-semibold tabular-nums text-gray-900">
-                      {typeof val === 'number' ? val : '—'}
-                    </div>
-                    <div className="text-[10px] leading-tight text-gray-500">{lbl}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* DISC */}
-          {(a.disc?.type || a.disc?.headline || natural) && (
-            <Card>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <Label>DISC profile</Label>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-gray-900">{a.disc?.type ?? '—'}</span>
-                    {a.disc?.classification && (
-                      <span className="text-sm text-gray-500">{a.disc.classification}</span>
-                    )}
-                  </div>
-                  {a.disc?.headline && (
-                    <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-600">
-                      {a.disc.headline}
-                    </p>
-                  )}
-                </div>
-                <div className="w-44 shrink-0">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                    Natural
-                  </div>
-                  <DiscBars band={natural} />
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Questions */}
-          {a.questions && a.questions.length > 0 && (
-            <div className="space-y-3">
-              <Label>Questions</Label>
-              {a.questions.map((q, i) => (
-                <Card key={q.n ?? i}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="text-sm font-medium text-gray-900">
-                      {q.prompt ?? `Question ${q.n ?? i + 1}`}
-                    </div>
-                    {typeof q.score === 'number' && (
-                      <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-gray-700">
-                        {q.score}/5
-                      </span>
-                    )}
-                  </div>
-                  {q.answer && (
-                    <div className="mt-3">
-                      <Label>Answer</Label>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-700">{q.answer}</p>
-                    </div>
-                  )}
-                  {q.feedback && (
-                    <div className="mt-3">
-                      <Label>Feedback</Label>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-600">{q.feedback}</p>
-                    </div>
-                  )}
-                  {q.followUp && (q.followUp.q || q.followUp.a) && (
-                    <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                      <Label>Follow-up</Label>
-                      {q.followUp.q && (
-                        <p className="mt-1 text-sm font-medium text-gray-800">{q.followUp.q}</p>
-                      )}
-                      {q.followUp.a && (
-                        <p className="mt-1 text-sm leading-relaxed text-gray-600">{q.followUp.a}</p>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {/* Overall summary */}
-          {a.summary && (
-            <Card>
-              <Label>Overall summary</Label>
-              <p className="mt-2 text-sm leading-relaxed text-gray-700">{a.summary}</p>
-            </Card>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Row ────────────────────────────────────────────────────────────────────────
 
 function AssessmentRow({
+  candidateId,
   pipeline,
   entry,
   assessment,
   busyKind,
   onFile,
-  onView,
 }: {
+  candidateId: string;
   pipeline: PipelineEntry['pipeline'];
   entry: PipelineEntry['entry'];
   assessment?: Assessment;
   busyKind: UploadKind | null;
   onFile: (code: string, orgId: string | undefined, kind: UploadKind, file: File) => void;
-  onView: (a: Assessment) => void;
 }) {
   const roleTitle = pipeline.title ?? pipeline.openingTitle ?? assessment?.role ?? pipeline.code;
   const assessed = isAssessed(assessment);
@@ -540,13 +309,12 @@ function AssessmentRow({
             onFile={(kind, file) => onFile(pipeline.code, pipeline.orgId, kind, file)}
           />
           {assessed && assessment && (
-            <button
-              type="button"
-              onClick={() => onView(assessment)}
+            <Link
+              href={`/candidates/${candidateId}/assessment/${pipeline.code}`}
               className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
             >
               View report
-            </button>
+            </Link>
           )}
         </div>
       </div>
@@ -578,7 +346,6 @@ export function AssessmentsSection({
   const { showToast } = useToast();
   const [byCode, setByCode] = useState<Record<string, Assessment>>({});
   const [busy, setBusy] = useState<Record<string, UploadKind | null>>({});
-  const [viewing, setViewing] = useState<Assessment | null>(null);
 
   const loadAssessments = useCallback(async () => {
     if (!candidateId) return;
@@ -655,18 +422,16 @@ export function AssessmentsSection({
           {pipelines.map(({ pipeline, entry }) => (
             <AssessmentRow
               key={pipeline.code}
+              candidateId={candidateId}
               pipeline={pipeline}
               entry={entry}
               assessment={byCode[pipeline.code]}
               busyKind={busy[pipeline.code] ?? null}
               onFile={handleFile}
-              onView={setViewing}
             />
           ))}
         </div>
       )}
-
-      {viewing && <ReportModal a={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }

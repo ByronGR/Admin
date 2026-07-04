@@ -28,7 +28,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       {
         title: 'Added',
         items: [
-          'Assessment PDF import on the candidate profile (Skills tab): two upload slots — one for the Proba Assessment & English report, one for the DISC report. The PDF is read on the server, the structured result (overall score, pass/fail, English CEFR, integrity check, every question with the answer + feedback + score, and the DISC profile) is saved to the candidate, and the file is discarded — nothing is stored. The Nearwork Score is recomputed automatically (50% assessment, 30% English, 20% DISC). Grading is always attributed to the Nearwork talent team, never the AI vendor.',
+'Assessment PDF import on the candidate profile (Skills tab). Assessments are kept per role — a candidate can carry a different score for each pipeline they applied to, shown as a list (role · pipeline · score · upload date). Each row has two upload slots (Assessment & English, DISC); the PDF is read on the server and discarded (nothing stored). It extracts the overall score, pass/fail, English CEFR, integrity check, every question with the answer + feedback + score, and the DISC profile, recomputes the Nearwork Score (50% assessment, 30% English, 20% DISC), and updates the candidate’s English level automatically. "View report" opens the same report the client sees — so staff can review it in Admin. Clients only ever see their own role’s result. Grading is always attributed to the Nearwork talent team, never the AI vendor.',
         ],
       },
       {

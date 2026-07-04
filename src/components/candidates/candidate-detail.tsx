@@ -6,6 +6,7 @@ import {
   db,
   collection,
   getDocs,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   query,
@@ -20,7 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
-import { AssessmentUploader } from './assessment-uploader';
+import { AssessmentsSection } from './assessments-section';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
@@ -862,10 +863,17 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <div style={{ fontSize: 12, color: NW.gray400, marginTop: 16 }}>Match score reflects the candidate&apos;s Nearwork Score. Skills are drawn from CV, assessments and recruiter tags.</div>
               </div>
 
-              <AssessmentUploader
+              <AssessmentsSection
                 candidateId={candidate.id}
-                orgId={activePipe?.pipeline.orgId ?? null}
-                onComplete={() => setAssessmentRefresh((k) => k + 1)}
+                pipelines={pipelineEntries}
+                onEnglishUpdated={async () => {
+                  try {
+                    const snap = await getDoc(doc(db, 'candidates', candidate.id));
+                    const es = snap.data()?.englishScore;
+                    if (es) setEnglishScore(es as EnglishScore);
+                  } catch { /* keep current */ }
+                  setAssessmentRefresh((k) => k + 1);
+                }}
               />
 
               {/* Assessment + radar (folded in) */}

@@ -61,9 +61,11 @@ export async function POST(req: Request) {
   const file = form.get('file');
   const kind = String(form.get('kind') || '');
   const candidateId = String(form.get('candidateId') || '').trim();
+  const pipelineCode = String(form.get('pipelineCode') || '').trim();
   if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   if (kind !== 'assessment' && kind !== 'disc') return NextResponse.json({ error: 'Invalid kind' }, { status: 400 });
   if (!candidateId) return NextResponse.json({ error: 'Missing candidateId' }, { status: 400 });
+  if (!pipelineCode) return NextResponse.json({ error: 'Missing pipelineCode — pick which role this is for' }, { status: 400 });
 
   // Parse the PDF in memory. The buffer is never persisted.
   let text: string;
@@ -78,26 +80,28 @@ export async function POST(req: Request) {
 
   const db = adminDb();
 
-  // Resolve the candidate's org so the client portal (scoped by org) can read it.
+  // Resolve the org + role from the pipeline this assessment is for, so the client
+  // portal (scoped by org + pipeline) reads only their own role's result.
   let orgId = String(form.get('orgId') || '').trim() || null;
-  if (!orgId) {
-    try {
-      const cand = await db.collection('candidates').doc(candidateId).get();
-      const code = cand.get('activePipelineCode');
-      if (code) {
-        const pipe = await db.collection('pipelines').doc(String(code)).get();
-        orgId = (pipe.get('orgId') as string) || (pipe.get('organizationId') as string) || null;
-      }
-    } catch { /* best effort — org can be backfilled */ }
-  }
+  let pipelineTitle: string | null = null;
+  try {
+    const pipe = await db.collection('pipelines').doc(pipelineCode).get();
+    if (!orgId) orgId = (pipe.get('orgId') as string) || (pipe.get('organizationId') as string) || null;
+    pipelineTitle = (pipe.get('openingTitle') as string) || (pipe.get('title') as string) || null;
+  } catch { /* best effort */ }
 
-  const ref = db.collection('assessments').doc(candidateId);
-  const base: Record<string, unknown> = { candidateId, orgId, gradedBy: 'Nearwork talent team', updatedAt: FieldValue.serverTimestamp() };
+  // One assessment per (candidate, role/pipeline) — a candidate can be assessed
+  // for several roles and carry a different score in each.
+  const ref = db.collection('assessments').doc(`${candidateId}__${pipelineCode}`);
+  const base: Record<string, unknown> = {
+    candidateId, pipelineCode, pipelineTitle, orgId,
+    gradedBy: 'Nearwork talent team', updatedAt: FieldValue.serverTimestamp(),
+  };
 
   if (kind === 'assessment') {
     const p = parseAssessment(text);
     Object.assign(base, {
-      role: p.role,
+      role: p.role || pipelineTitle,
       result: p.result,
       overallScore: p.overallScore,
       passingScore: p.passingScore,
@@ -107,6 +111,20 @@ export async function POST(req: Request) {
       questions: p.questions,
       assessmentUploadedAt: FieldValue.serverTimestamp(),
     });
+    // Also record the candidate's English on their profile (Languages tab).
+    if (p.english?.level) {
+      try {
+        await db.collection('candidates').doc(candidateId).set({
+          englishScore: {
+            level: p.english.level,
+            feedback: p.english.summary || '',
+            assessedBy: 'Assessment import',
+            assessedAt: new Date().toISOString(),
+          },
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (e) { console.error('[assessment-upload] english update failed:', e); }
+    }
   } else {
     const p = parseDisc(text);
     Object.assign(base, { disc: p, discUploadedAt: FieldValue.serverTimestamp() });

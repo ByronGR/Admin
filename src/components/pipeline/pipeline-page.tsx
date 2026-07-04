@@ -161,6 +161,9 @@ export default function PipelinePage() {
   // candidateId → Nearwork Score, loaded from the assessments collection so the
   // board cards can surface each candidate's score at a glance (spec 4d).
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
+  // `${candidateId}__${pipelineCode}` for candidates who have a completed
+  // assessment — used to gate advancing past the assessment stage.
+  const [assessedSet, setAssessedSet] = useState<Set<string>>(new Set());
   // Pending-applicant count per pipeline (openingCode → count), so each list row
   // can show total candidates INCLUDING applicants not yet pulled into a stage.
   const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
@@ -248,15 +251,20 @@ export default function PipelinePage() {
       try {
         const snap = await getDocs(collection(db, 'assessments'));
         const map: Record<string, number> = {};
+        const set = new Set<string>();
         snap.docs.forEach((d) => {
-          const a = d.data() as { candidateId?: string; nearworkScore?: number };
+          const a = d.data() as { candidateId?: string; pipelineCode?: string; nearworkScore?: number; overallScore?: number; status?: string };
           if (a.candidateId && typeof a.nearworkScore === 'number') {
             if (map[a.candidateId] === undefined || a.nearworkScore > map[a.candidateId]) {
               map[a.candidateId] = a.nearworkScore;
             }
           }
+          if (a.candidateId && a.pipelineCode && (typeof a.overallScore === 'number' || a.status === 'completed')) {
+            set.add(`${a.candidateId}__${a.pipelineCode}`);
+          }
         });
         setScoreMap(map);
+        setAssessedSet(set);
       } catch (e) {
         console.error('Pipeline: failed to load assessment scores', e);
       }
@@ -460,6 +468,18 @@ export default function PipelinePage() {
       setDropReason(cand.dropOffReason ?? 'mia');
       setDropNote(cand.dropOffNote ?? '');
       return;
+    }
+
+    // Assessment gate: a completed assessment is required to reach Partner Review
+    // and any stage beyond it (rejection is always allowed).
+    const ASSESS_REQUIRED: StageKey[] = ['partner-review', 'partner-interview', 'hired'];
+    if (ASSESS_REQUIRED.includes(toStage)) {
+      const cand = pipeline.candidates![candIndex];
+      if (!assessedSet.has(`${cand.candidateId}__${pipelineCode}`)) {
+        const label = PIPELINE_STAGES.find((s) => s.key === toStage)?.label ?? toStage;
+        showToast(`An assessment is required before moving to ${label}. Upload the assessment on the candidate's profile first.`, 'error');
+        return;
+      }
     }
 
     // English score gate: required when advancing from interview stage

@@ -354,6 +354,22 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     dropOff?: { reason: DropOffReason; note: string },
   ) {
     if (stageSaving) return;
+    // Assessment gate: a completed assessment is required to reach Partner Review
+    // and beyond (rejection is always allowed).
+    if ((['partner-review', 'partner-interview', 'hired'] as PipelineStage[]).includes(toStage)) {
+      try {
+        const snap = await getDoc(doc(db, 'assessments', `${candidate.id}__${pipeline.code}`));
+        const d = snap.data() as { overallScore?: number; status?: string } | undefined;
+        const ok = snap.exists() && (typeof d?.overallScore === 'number' || d?.status === 'completed');
+        if (!ok) {
+          showToast(`An assessment is required before moving to ${stageLabel(toStage)}. Upload it in the Skills tab first.`, 'error');
+          return;
+        }
+      } catch {
+        showToast('Could not verify the assessment. Please try again.', 'error');
+        return;
+      }
+    }
     setStageSaving(true);
     try {
       const considered = toStage === 'not-selected' ? entry.stage : toStage;

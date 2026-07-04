@@ -20,6 +20,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
+import { AssessmentUploader } from './assessment-uploader';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
@@ -474,6 +475,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   // ── Assessment & Nearwork Score ────────────────────────────────────────────
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(true);
+  const [assessmentRefresh, setAssessmentRefresh] = useState(0);
 
   useEffect(() => {
     setAssessmentLoading(true);
@@ -494,7 +496,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       })
       .catch(() => setAssessment(null))
       .finally(() => setAssessmentLoading(false));
-  }, [candidate.id]);
+  }, [candidate.id, assessmentRefresh]);
 
   // ── Hired / placement ──────────────────────────────────────────────────────
   const [placement, setPlacement] = useState<Placement | null>(null);
@@ -859,6 +861,12 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 )}
                 <div style={{ fontSize: 12, color: NW.gray400, marginTop: 16 }}>Match score reflects the candidate&apos;s Nearwork Score. Skills are drawn from CV, assessments and recruiter tags.</div>
               </div>
+
+              <AssessmentUploader
+                candidateId={candidate.id}
+                orgId={activePipe?.pipeline.orgId ?? null}
+                onComplete={() => setAssessmentRefresh((k) => k + 1)}
+              />
 
               {/* Assessment + radar (folded in) */}
               {assessmentLoading ? (

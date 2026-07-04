@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.6.0] — 2026-07-04
+
+### Added
+- **Assessment PDF import** on the candidate profile (Skills tab). Two upload slots — **Assessment & English** (the Proba report) and **DISC**. The PDF is parsed **on the server, in memory, then discarded** (nothing is stored). It extracts the overall score, pass/fail, English CEFR level, integrity check, and **every question with the candidate's answer, the feedback, and the score**, plus the DISC profile — and recomputes the **Nearwork Score** (50% assessment · 30% English · 20% DISC). The parsed report then shows on the candidate detail in **both Admin and the client portal**. Grading is always credited to the **Nearwork talent team**, never the AI vendor.
+
+### Technical
+- New route `POST /api/assessment-upload` (staff-only; in-memory parse; no file persistence). Deterministic parsers in `src/lib/assessment-parser.ts` tuned to the current Proba template. `pdf-parse@1.1.1` added as a `serverExternalPackage`. If the vendor's PDF template changes, the parser needs a small update.
+
+---
+
 ## [1.5.1] — 2026-07-03
 
 ### Fixed

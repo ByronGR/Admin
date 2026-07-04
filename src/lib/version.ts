@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.5.1';
+export const APP_VERSION = '1.6.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.6.0',
+    date: '2026-07-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Assessment PDF import on the candidate profile (Skills tab): two upload slots — one for the Proba Assessment & English report, one for the DISC report. The PDF is read on the server, the structured result (overall score, pass/fail, English CEFR, integrity check, every question with the answer + feedback + score, and the DISC profile) is saved to the candidate, and the file is discarded — nothing is stored. The Nearwork Score is recomputed automatically (50% assessment, 30% English, 20% DISC). Grading is always attributed to the Nearwork talent team, never the AI vendor.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New route POST /api/assessment-upload (staff-only, in-memory parse, no file persistence). Parsers in src/lib/assessment-parser.ts (parseAssessment/parseDisc) are deterministic string parsing tuned to the current Proba template. pdf-parse@1.1.1 added as a serverExternalPackage. The parsed report drives the client-portal candidate detail (client + staff).',
+        ],
+      },
+    ],
+  },
   {
     version: '1.5.1',
     date: '2026-07-03',

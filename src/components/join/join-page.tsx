@@ -2,22 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  db,
-  auth,
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  updateDoc,
-  setDoc,
-  serverTimestamp,
-  createUserWithEmailAndPassword,
-} from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { PasswordInput } from '@/components/ui/password-input';
-import type { StaffInvite } from '@/lib/types';
+import type { StaffRole } from '@/lib/types';
 import { STAFF_ROLE_LABELS } from '@/lib/types';
 
 function JoinContent() {
@@ -26,7 +13,7 @@ function JoinContent() {
 
   type Stage = 'loading' | 'valid' | 'accepted' | 'expired' | 'invalid' | 'error';
   const [stage, setStage] = useState<Stage>('loading');
-  const [invite, setInvite] = useState<StaffInvite | null>(null);
+  const [invite, setInvite] = useState<{ email: string; role: StaffRole } | null>(null);
   const [form, setForm] = useState({ name: '', password: '', confirm: '' });
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -38,30 +25,29 @@ function JoinContent() {
 
   async function verifyToken(t: string) {
     try {
-      const snap = await getDocs(
-        query(collection(db, 'staffInvites'), where('token', '==', t), where('status', '==', 'pending'))
-      );
-      if (snap.empty) { setStage('invalid'); return; }
-      const d = snap.docs[0];
-      const data = { id: d.id, ...d.data() } as StaffInvite;
-      // Check expiry
-      if (data.expiresAt) {
-        const exp = (data.expiresAt as { seconds: number }).seconds * 1000;
-        if (Date.now() > exp) {
-          await updateDoc(doc(db, 'staffInvites', d.id), { status: 'expired' });
-          setStage('expired');
-          return;
-        }
+      const res = await fetch('/api/staff-invite/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: t }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.status === 'valid') {
+        setInvite({ email: data.email, role: data.role as StaffRole });
+        setStage('valid');
+      } else if (data.status === 'expired') {
+        setStage('expired');
+      } else if (data.status === 'error') {
+        setStage('error');
+      } else {
+        setStage('invalid');
       }
-      setInvite(data);
-      setStage('valid');
     } catch {
       setStage('error');
     }
   }
 
   async function createAccount() {
-    if (!invite) return;
+    if (!invite || !token) return;
     if (!form.name.trim()) { setErrorMsg('Full name is required'); return; }
     if (form.password.length < 8) { setErrorMsg('Password must be at least 8 characters'); return; }
     if (form.password !== form.confirm) { setErrorMsg('Passwords do not match'); return; }
@@ -69,31 +55,19 @@ function JoinContent() {
     setSaving(true);
     setErrorMsg('');
     try {
-      const cred = await createUserWithEmailAndPassword(auth, invite.email, form.password);
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        email: invite.email,
-        name: form.name.trim(),
-        firstName: form.name.split(' ')[0] ?? '',
-        lastName: form.name.split(' ').slice(1).join(' ') ?? '',
-        role: invite.role,
-        staffRole: invite.role,
-        status: 'active',
-        source: 'admin.nearwork.co',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const res = await fetch('/api/staff-invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, name: form.name.trim(), password: form.password }),
       });
-      await updateDoc(doc(db, 'staffInvites', invite.id), {
-        status: 'accepted',
-        acceptedAt: serverTimestamp(),
-      });
-      setStage('accepted');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      if (msg.includes('email-already-in-use')) {
-        setErrorMsg('An account with this email already exists. Please log in at /login.');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setStage('accepted');
       } else {
-        setErrorMsg(msg);
+        setErrorMsg(data.error || 'Could not create the account. Please try again.');
       }
+    } catch {
+      setErrorMsg('Could not reach the server. Please try again.');
     } finally {
       setSaving(false);
     }

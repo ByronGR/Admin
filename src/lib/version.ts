@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.5.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.5.1',
+    date: '2026-07-03',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Adding members to the Team now works. Inviting a staff member was silently failing — the security rule for staff invites was never created, so the app couldn’t save the invite. Super admins can now create invites again, and invited teammates can accept their link to set up their account.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Added a Firestore rule for staffInvites (read: staff; create/delete: super admins). Invite acceptance moved server-side: new routes POST /api/staff-invite/verify and POST /api/staff-invite/accept use the Admin SDK to create the Auth account + users profile with the role taken from the invite (server-authoritative — no client self-assignment), then mark the invite accepted. /join now calls these routes instead of writing to Firestore directly. NOTE: the staffInvites rule must be deployed by hand in the Firebase console.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.5.0',
     date: '2026-07-01',

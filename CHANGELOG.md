@@ -5,6 +5,17 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.5.1] — 2026-07-03
+
+### Fixed
+- **Adding members to the Team now works.** Inviting a staff member was silently failing ("Failed to create invite") because the Firestore security rule for `staffInvites` was never created — so the database blocked the write. Super admins can now create invites again, and invited teammates can accept their `/join` link to set up their account end-to-end.
+
+### Technical
+- Added a Firestore rule for `staffInvites` (read: staff; create/delete: super admins). **Must be deployed by hand in the Firebase console** (per repo convention).
+- Invite acceptance moved server-side: new routes `POST /api/staff-invite/verify` and `POST /api/staff-invite/accept` use the Admin SDK to create the Auth account + `users/{uid}` profile with the role taken from the invite (server-authoritative — the invitee can't self-assign a role), then mark the invite `accepted`. `/join` now calls these routes instead of writing to Firestore directly, so invite tokens/emails are never exposed to unauthenticated clients.
+
+---
+
 ## [1.5.0] — 2026-07-01
 
 ### Added

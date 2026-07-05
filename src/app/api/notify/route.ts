@@ -161,15 +161,6 @@ export async function POST(req: Request) {
         if (!belongs) return json({ ok: false, error: 'Not authorised for this organization' }, 403, origin);
       }
 
-      // Resolve the AM's uid via organizations/{orgId}.accountManagerEmail → users query.
-      const orgSnap = await db.collection('organizations').doc(orgId).get();
-      const amEmail = String((orgSnap.exists ? orgSnap.data()?.accountManagerEmail : '') ?? '').trim();
-      if (!amEmail) return json({ ok: true, created: 0 }, 200, origin);
-
-      const amQuery = await db.collection('users').where('email', '==', amEmail).limit(1).get();
-      if (amQuery.empty) return json({ ok: true, created: 0 }, 200, origin);
-      const amUid = amQuery.docs[0].id;
-
       // Content.
       let title: string;
       let content: string;
@@ -205,19 +196,48 @@ export async function POST(req: Request) {
         category = 'Note';
       }
 
-      await writeNotification({
-        recipientUid: amUid,
-        recipientEmail: amEmail,
-        category,
-        title,
-        body: content,
-        candidateCode: body.candidateCode,
-        pipelineCode: body.pipelineCode,
-        orgId,
-        actorName,
-      });
+      // Resolve WHO to notify: the org's account manager (account-level) AND the
+      // recruiter on this opening (pipeline-level). Each is stored as an email;
+      // we look up the matching staff user's uid. Dedupe so nobody is pinged twice.
+      const recipients: { uid: string; email: string }[] = [];
 
-      return json({ ok: true, created: 1 }, 200, origin);
+      const orgSnap = await db.collection('organizations').doc(orgId).get();
+      const amEmail = String((orgSnap.exists ? orgSnap.data()?.accountManagerEmail : '') ?? '').trim();
+      if (amEmail) {
+        const amQuery = await db.collection('users').where('email', '==', amEmail).limit(1).get();
+        if (!amQuery.empty) recipients.push({ uid: amQuery.docs[0].id, email: amEmail });
+      }
+
+      const pipelineCode = String(body.pipelineCode ?? '').trim();
+      if (pipelineCode) {
+        const openSnap = await db.collection('openings').where('code', '==', pipelineCode).limit(1).get();
+        const recEmail = openSnap.empty ? '' : String(openSnap.docs[0].data()?.recruiterEmail ?? '').trim();
+        if (recEmail) {
+          const recQuery = await db.collection('users').where('email', '==', recEmail).limit(1).get();
+          if (!recQuery.empty) recipients.push({ uid: recQuery.docs[0].id, email: recEmail });
+        }
+      }
+
+      const seen = new Set<string>();
+      let created = 0;
+      for (const r of recipients) {
+        if (seen.has(r.uid)) continue;
+        seen.add(r.uid);
+        await writeNotification({
+          recipientUid: r.uid,
+          recipientEmail: r.email,
+          category,
+          title,
+          body: content,
+          candidateCode: body.candidateCode,
+          pipelineCode: body.pipelineCode,
+          orgId,
+          actorName,
+        });
+        created++;
+      }
+
+      return json({ ok: true, created }, 200, origin);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -224,6 +224,7 @@ export interface Opening {
   // Team fields
   sourcer?: string;
   recruiter?: string;
+  recruiterEmail?: string;
   hiringManager?: string;
   accountManager?: string;
   assessmentId?: string;

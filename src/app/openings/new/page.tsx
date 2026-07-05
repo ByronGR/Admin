@@ -17,7 +17,7 @@ export default function NewOpeningPage() {
 
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
-  const [form, setForm] = useState({ title: '', orgId: '', recruiter: '', priority: 'medium' });
+  const [form, setForm] = useState({ title: '', orgId: '', recruiter: '', recruiterEmail: '', priority: 'medium' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -42,6 +42,7 @@ export default function NewOpeningPage() {
         orgId: form.orgId,
         orgName: org?.name ?? '',
         recruiter: form.recruiter,
+        recruiterEmail: form.recruiterEmail,
         priority: form.priority,
         status: 'draft',
         approvalStatus: 'draft',
@@ -56,6 +57,7 @@ export default function NewOpeningPage() {
         orgId: form.orgId,
         orgName: org?.name ?? '',
         recruiter: form.recruiter,
+        recruiterEmail: form.recruiterEmail,
         status: 'active',
         candidates: [],
         createdAt: serverTimestamp(),
@@ -134,6 +136,7 @@ export default function NewOpeningPage() {
             <StaffPicker
               value={form.recruiter}
               onChange={(name) => setForm((f) => ({ ...f, recruiter: name }))}
+              onPick={(opt) => setForm((f) => ({ ...f, recruiterEmail: opt?.email ?? '' }))}
               placeholder="Search team…"
             />
           </div>

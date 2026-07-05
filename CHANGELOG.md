@@ -5,6 +5,43 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.9.0] — 2026-07-05
+
+### Added
+- Add `/api/remove-member` — client admins can revoke a teammate's workspace access (reversible).
+
+---
+
+## [1.8.0] — 2026-07-05
+
+### Added
+- **Client requests (advance / hire / reject / interview) now surface on the candidate for staff to action.** When a client raises a request from their portal it appears in a **Client requests** card at the top of the candidate profile, showing the request type, the reason (prominent for rejections), and who asked and when. Staff move the candidate with the **existing stage controls**, then **Mark handled** or **Dismiss** the request — marking handled does not itself move the candidate.
+
+### Technical
+- `candidate-detail.tsx` subscribes live (`onSnapshot`) to the shared `pipelineRequests` collection by **both** `candidateId` and `candidateCode`, merging/deduping by doc id, and shows only `status:"pending"`. **Mark handled** / **Dismiss** write `{ status, handledBy, handledByEmail, handledAt: serverTimestamp() }` to the request doc via the client SDK (staff read/update is already allowed by the Firestore rules). No new server route.
+
+---
+
+## [1.7.0] — 2026-07-04
+
+### Added
+- **Candidate notes are now shared between Admin and the client portal.** When you add a note you pick its visibility — **Internal** (Nearwork only, the default) or **Shared with client**. Notes the client writes now appear here too, and every note carries a badge: **Internal**, **Shared with client**, or **From client**. The client's own team-only notes stay private to them and are never shown to Nearwork staff.
+
+### Technical
+- Admin now writes the unified `candidateNotes` model (`candidateId`, `candidateCode`, `text`+`body`, `scope`/`visibility`, `side:"nearwork"`, `author`/`authorName`/`authorEmail`, `orgId`/`orgName`). **Shared** notes carry the real `orgId` (the client portal fetches shared notes by org id); **internal** notes carry `orgId:""` so they don't break the client's org-scoped query. New staff-only route `GET /api/candidate-notes` reads via the Admin SDK (bypasses rules), matches by both `candidateId` and `candidateCode`, and filters out `client_internal` notes server-side so they never leave the server.
+
+---
+
+## [1.6.0] — 2026-07-04
+
+### Added
+- **Assessment PDF import** on the candidate profile (Skills tab). Two upload slots — **Assessment & English** (the Proba report) and **DISC**. The PDF is parsed **on the server, in memory, then discarded** (nothing is stored). It extracts the overall score, pass/fail, English CEFR level, integrity check, and **every question with the candidate's answer, the feedback, and the score**, plus the DISC profile — and recomputes the **Nearwork Score** (50% assessment · 30% English · 20% DISC). The parsed report then shows on the candidate detail in **both Admin and the client portal**. Grading is always credited to the **Nearwork talent team**, never the AI vendor.
+
+### Technical
+- New route `POST /api/assessment-upload` (staff-only; in-memory parse; no file persistence). Deterministic parsers in `src/lib/assessment-parser.ts` tuned to the current Proba template. `pdf-parse@1.1.1` added as a `serverExternalPackage`. If the vendor's PDF template changes, the parser needs a small update.
+
+---
+
 ## [1.5.1] — 2026-07-03
 
 ### Fixed

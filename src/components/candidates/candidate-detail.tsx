@@ -6,6 +6,7 @@ import {
   db,
   collection,
   getDocs,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   query,
@@ -20,6 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
+import { AssessmentsSection } from './assessments-section';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
@@ -54,6 +56,8 @@ import {
   Inbox,
   Calendar,
   ChevronRight,
+  Check,
+  X,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
 
@@ -128,10 +132,21 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const { showToast } = useToast();
   const { profile } = useAuth();
   const [notes, setNotes] = useState<
-    Array<{ id: string; body: string; authorName?: string; createdAt?: unknown }>
+    Array<{
+      id: string;
+      body: string;
+      text?: string;
+      scope?: string;
+      side?: string;
+      author?: string;
+      authorName?: string;
+      createdAt?: unknown;
+    }>
   >([]);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  // Note visibility: Internal (Nearwork only) by default, or Shared with client.
+  const [noteScope, setNoteScope] = useState<'staff_internal' | 'client_visible'>('staff_internal');
 
   // Profile tabs (redesign) — exact prototype tabs.
   const [detailTab, setDetailTab] = useState<'experience' | 'education' | 'languages' | 'skills' | 'applications'>('experience');
@@ -245,29 +260,30 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     requestAnimationFrame(() => noteRef.current?.focus());
   }
 
+  // Load notes via the privileged server route (Admin SDK): returns the full
+  // staff view of the shared `candidateNotes` collection — our notes plus the
+  // client's shared notes — while hiding the client's team-only notes. Matches
+  // by both candidateId and candidateCode so App-written notes are found too.
+  async function loadNotes() {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const params = new URLSearchParams({ candidateId: candidate.id });
+      if (candidate.code) params.set('candidateCode', candidate.code);
+      const res = await fetch(`/api/candidate-notes?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.notes)) setNotes(data.notes);
+    } catch {
+      /* leave notes as-is on a transient failure */
+    }
+  }
+
   useEffect(() => {
-    getDocs(
-      query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-    ).then((snap) => {
-      setNotes(
-        snap.docs
-          .map(
-            (d) =>
-              ({ id: d.id, ...d.data() } as {
-                id: string;
-                body: string;
-                authorName?: string;
-                createdAt?: unknown;
-              })
-          )
-          .sort((a, b) => {
-            const ta = (a.createdAt as { seconds?: number })?.seconds ?? 0;
-            const tb = (b.createdAt as { seconds?: number })?.seconds ?? 0;
-            return tb - ta;
-          })
-      );
-    });
-  }, [candidate.id]);
+    loadNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate.id, candidate.code]);
 
   // ── Pipelines & openings this candidate is in ──────────────────────────────
   const [pipelineEntries, setPipelineEntries] = useState<
@@ -313,6 +329,105 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     return PIPELINE_STAGE_LABELS[stage] ?? stage;
   }
 
+  // ── Client requests (raised from the client App on this candidate) ──────────
+  // The App writes to the shared `pipelineRequests` collection, keyed by EITHER
+  // candidateId or candidateCode. We subscribe (live) to both and merge/dedupe
+  // by doc id. Staff READ + UPDATE these directly (rules already allow it).
+  type ClientRequest = {
+    id: string;
+    type?: 'advance' | 'hire' | 'reject' | 'interview' | string;
+    fromStage?: string;
+    toStage?: string;
+    reason?: string;
+    status?: 'pending' | 'handled' | 'dismissed' | string;
+    requestedBy?: string;
+    requestedByEmail?: string;
+    orgName?: string;
+    pipelineTitle?: string;
+    pipelineCode?: string;
+    createdAt?: unknown;
+  };
+  const [clientRequests, setClientRequests] = useState<ClientRequest[]>([]);
+  const [resolvingReq, setResolvingReq] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Two live queries — by candidateId AND by candidateCode — merged by doc id,
+    // because the App may key a request by either field.
+    // Keep each source's latest docs separately, then merge by id on every update
+    // (dedupe: a doc matched by both id and code appears once).
+    const bySource: Record<'id' | 'code', ClientRequest[]> = { id: [], code: [] };
+
+    const push = (docs: Array<{ id: string; data: () => Record<string, unknown> }>, source: 'id' | 'code') => {
+      bySource[source] = docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as ClientRequest));
+      const byId = new Map<string, ClientRequest>();
+      [...bySource.id, ...bySource.code].forEach((r) => byId.set(r.id, r));
+      const merged = Array.from(byId.values());
+      // Newest first.
+      merged.sort(
+        (a, b) =>
+          ((b.createdAt as { seconds?: number })?.seconds ?? 0) -
+          ((a.createdAt as { seconds?: number })?.seconds ?? 0),
+      );
+      setClientRequests(merged);
+    };
+
+    const unsubId = onSnapshot(
+      query(collection(db, 'pipelineRequests'), where('candidateId', '==', candidate.id)),
+      (snap) => push(snap.docs, 'id'),
+      () => {},
+    );
+    const unsubCode = candidate.code
+      ? onSnapshot(
+          query(collection(db, 'pipelineRequests'), where('candidateCode', '==', candidate.code)),
+          (snap) => push(snap.docs, 'code'),
+          () => {},
+        )
+      : () => {};
+    return () => { unsubId(); if (candidate.code) unsubCode(); };
+  }, [candidate.id, candidate.code]);
+
+  const pendingRequests = useMemo(
+    () => clientRequests.filter((r) => (r.status ?? 'pending') === 'pending'),
+    [clientRequests],
+  );
+
+  function clientRequestLabel(r: ClientRequest): React.ReactNode {
+    const stage = r.toStage ? (PIPELINE_STAGE_LABELS[r.toStage as PipelineStage] ?? r.toStage) : '';
+    switch (r.type) {
+      case 'advance':
+        return <>Client asked to advance to <strong>{stage || 'the next stage'}</strong></>;
+      case 'hire':
+        return <>Client asked to <strong>hire</strong> this candidate</>;
+      case 'reject':
+        return <>Client asked to <strong>reject</strong> this candidate</>;
+      case 'interview':
+        return <>Client requested an <strong>interview</strong></>;
+      default:
+        return <>Client raised a <strong>{r.type ?? 'request'}</strong></>;
+    }
+  }
+
+  async function resolveClientRequest(req: ClientRequest, status: 'handled' | 'dismissed') {
+    if (resolvingReq) return;
+    setResolvingReq(req.id);
+    try {
+      const handledBy = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
+      const handledByEmail = profile?.email || auth.currentUser?.email || '';
+      await updateDoc(doc(db, 'pipelineRequests', req.id), {
+        status,
+        handledBy,
+        handledByEmail,
+        handledAt: serverTimestamp(),
+      });
+      showToast(status === 'handled' ? 'Request marked handled' : 'Request dismissed', 'success');
+      // The live subscription refreshes the list automatically.
+    } catch {
+      showToast('Failed to update the request', 'error');
+    } finally {
+      setResolvingReq(null);
+    }
+  }
+
   // ── Stage editing from the profile (only for active opening + pipeline) ─────
   // opening status by id/code, so we can require the opening to be "open".
   const [openingStatusMap, setOpeningStatusMap] = useState<Record<string, string>>({});
@@ -352,6 +467,22 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     dropOff?: { reason: DropOffReason; note: string },
   ) {
     if (stageSaving) return;
+    // Assessment gate: a completed assessment is required to reach Partner Review
+    // and beyond (rejection is always allowed).
+    if ((['partner-review', 'partner-interview', 'hired'] as PipelineStage[]).includes(toStage)) {
+      try {
+        const snap = await getDoc(doc(db, 'assessments', `${candidate.id}__${pipeline.code}`));
+        const d = snap.data() as { overallScore?: number; status?: string } | undefined;
+        const ok = snap.exists() && (typeof d?.overallScore === 'number' || d?.status === 'completed');
+        if (!ok) {
+          showToast(`An assessment is required before moving to ${stageLabel(toStage)}. Upload it in the Skills tab first.`, 'error');
+          return;
+        }
+      } catch {
+        showToast('Could not verify the assessment. Please try again.', 'error');
+        return;
+      }
+    }
     setStageSaving(true);
     try {
       const considered = toStage === 'not-selected' ? entry.stage : toStage;
@@ -474,6 +605,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   // ── Assessment & Nearwork Score ────────────────────────────────────────────
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(true);
+  const [assessmentRefresh, setAssessmentRefresh] = useState(0);
 
   useEffect(() => {
     setAssessmentLoading(true);
@@ -494,7 +626,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       })
       .catch(() => setAssessment(null))
       .finally(() => setAssessmentLoading(false));
-  }, [candidate.id]);
+  }, [candidate.id, assessmentRefresh]);
 
   // ── Hired / placement ──────────────────────────────────────────────────────
   const [placement, setPlacement] = useState<Placement | null>(null);
@@ -571,34 +703,40 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     try {
       const handles = Array.from(noteText.matchAll(/@(\w+)/g)).map((m) => m[1].toLowerCase());
       const mentions = staff.filter((u) => handles.includes(u.handle)).map((u) => u.id);
+
+      const shared = noteScope === 'client_visible';
+      // The candidate's org lives on their pipeline entry, not the candidate doc.
+      // Prefer the active pipeline, else any pipeline they're in.
+      const orgPipeline = (activePipe ?? pipelineEntries[0])?.pipeline;
+      // CRITICAL: shared notes MUST carry the real orgId (the client portal fetches
+      // shared notes by org id). Internal notes must NOT carry the client's orgId,
+      // or it would break the client's org-scoped query — they're found by
+      // candidateId only.
+      const orgId = shared ? (orgPipeline?.orgId ?? '') : '';
+      const orgName = orgPipeline?.orgName ?? '';
+      const authorName = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
+      const authorEmail = profile?.email || auth.currentUser?.email || '';
+
       await addDoc(collection(db, 'candidateNotes'), {
         candidateId: candidate.id,
+        candidateCode: candidate.code ?? '',
+        text: noteText,
         body: noteText,
+        scope: noteScope,
+        visibility: noteScope,
+        side: 'nearwork',
+        author: authorName,
+        authorName,
+        authorEmail,
+        orgId,
+        orgName,
         mentions,
         createdAt: serverTimestamp(),
       });
       setNoteText('');
+      setNoteScope('staff_internal');
       showToast('Note added', 'success');
-      const snap = await getDocs(
-        query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-      );
-      setNotes(
-        snap.docs
-          .map(
-            (d) =>
-              ({ id: d.id, ...d.data() } as {
-                id: string;
-                body: string;
-                authorName?: string;
-                createdAt?: unknown;
-              })
-          )
-          .sort((a, b) => {
-            const ta = (a.createdAt as { seconds?: number })?.seconds ?? 0;
-            const tb = (b.createdAt as { seconds?: number })?.seconds ?? 0;
-            return tb - ta;
-          })
-      );
+      await loadNotes();
     } catch {
       showToast('Failed to save note', 'error');
     } finally {
@@ -723,6 +861,98 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
         </div>
       </div>
+
+      {/* Client requests — raised from the client App; staff act on them here.
+          Placed above the main grid so staff see them immediately. */}
+      {pendingRequests.length > 0 && (
+        <div
+          style={{
+            ...card,
+            marginBottom: 16,
+            borderColor: `${NW.yellow500}55`,
+            background: NW.yellow50,
+            padding: 20,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#A16207' }}>
+              <Inbox className="h-4 w-4" />
+            </span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: NW.black }}>Client requests</div>
+              <div style={{ fontSize: 12, color: '#A16207', marginTop: 1 }}>
+                {pendingRequests.length} pending {pendingRequests.length === 1 ? 'request' : 'requests'} from the client to action
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {pendingRequests.map((r) => {
+              const busy = resolvingReq === r.id;
+              const isReject = r.type === 'reject';
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    background: NW.white,
+                    border: `1px solid ${isReject ? `${NW.rose500}33` : NW.gray100}`,
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: NW.black }}>{clientRequestLabel(r)}</div>
+                      {(r.pipelineTitle || r.pipelineCode) && (
+                        <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+                          {r.pipelineTitle ?? ''}{r.pipelineTitle && r.pipelineCode ? ' · ' : ''}{r.pipelineCode ?? ''}
+                        </div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A16207', background: NW.yellow50, border: `1px solid ${NW.yellow500}44`, borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      Pending
+                    </span>
+                  </div>
+
+                  {r.reason && r.reason.trim() && (
+                    <div style={{ fontSize: 13, color: isReject ? NW.rose600 : NW.gray700, background: isReject ? NW.rose50 : NW.gray50, border: `1px solid ${isReject ? `${NW.rose500}22` : NW.gray100}`, borderRadius: 8, padding: '8px 12px', lineHeight: 1.5 }}>
+                      <span style={{ fontWeight: 600 }}>{isReject ? 'Reason: ' : 'Note: '}</span>{r.reason}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 11.5, color: NW.gray500 }}>
+                    {r.requestedBy ?? r.requestedByEmail ?? 'Client'} · {fmtRelative(r.createdAt as Timestamp | string | undefined)}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => resolveClientRequest(r, 'handled')}
+                      disabled={busy}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', fontSize: 12.5, fontWeight: 600, color: NW.white, background: NW.teal500, border: 'none', borderRadius: 999, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1 }}
+                    >
+                      {busy ? <Spinner size="sm" /> : <Check className="h-3.5 w-3.5" />} Mark handled
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveClientRequest(r, 'dismissed')}
+                      disabled={busy}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', fontSize: 12.5, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1 }}
+                    >
+                      <X className="h-3.5 w-3.5" /> Dismiss
+                    </button>
+                    <span style={{ fontSize: 11.5, color: NW.gray500 }}>
+                      Move the candidate with the stage controls, then mark this handled.
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, alignItems: 'start' }} className="nw-cand-grid">
         {/* Left — tabs */}
@@ -860,34 +1090,19 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <div style={{ fontSize: 12, color: NW.gray400, marginTop: 16 }}>Match score reflects the candidate&apos;s Nearwork Score. Skills are drawn from CV, assessments and recruiter tags.</div>
               </div>
 
-              {/* Assessment + radar (folded in) */}
-              {assessmentLoading ? (
-                <div style={{ ...card, display: 'flex', justifyContent: 'center', padding: 28 }}><Spinner size="sm" /></div>
-              ) : assessment ? (
-                <div style={card}>
-                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>Technical</div>
-                      <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.technicalScore != null ? `${assessment.technicalScore}/50 · ${Math.round((assessment.technicalScore / 50) * 100)}%` : '—'}</div>
-                    </div>
-                    <div style={{ borderRadius: 12, border: `1px solid ${NW.gray100}`, padding: 12 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400 }}>DISC style</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, marginTop: 3 }}>{assessment.discStyle ? `${assessment.discStyle} — ${DISC_LABELS[assessment.discStyle].name}` : '—'}</div>
-                    </div>
-                  </div>
-                  {hasRadarData && (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
-                      <RadarChart data={radarData} />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={card}>
-                  {cardHead(<Activity className="h-4 w-4" />, 'Assessment')}
-                  <div style={{ fontSize: 13, color: NW.gray400 }}>No assessment on file yet.</div>
-                </div>
-              )}
+              <AssessmentsSection
+                candidateId={candidate.id}
+                pipelines={pipelineEntries}
+                onEnglishUpdated={async () => {
+                  try {
+                    const snap = await getDoc(doc(db, 'candidates', candidate.id));
+                    const es = snap.data()?.englishScore;
+                    if (es) setEnglishScore(es as EnglishScore);
+                  } catch { /* keep current */ }
+                  setAssessmentRefresh((k) => k + 1);
+                }}
+              />
+
             </div>
           )}
 
@@ -1112,16 +1327,60 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </div>
               )}
             </div>
+            {/* Visibility toggle — Internal (default) vs Shared with client */}
+            <div className="mt-2 flex gap-2">
+              {([
+                { key: 'staff_internal', label: 'Internal' },
+                { key: 'client_visible', label: 'Shared with client' },
+              ] as const).map((opt) => {
+                const on = noteScope === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setNoteScope(opt.key)}
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-600 transition-colors ${
+                      on ? 'text-white' : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                    }`}
+                    style={on ? { background: 'var(--green)' } : {}}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[10px] text-[var(--light)]">
+              {noteScope === 'client_visible'
+                ? 'Visible to the client on the candidate profile.'
+                : 'Nearwork only — not shown to the client.'}
+            </p>
             <button onClick={addNote} disabled={savingNote || !noteText.trim()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-600 text-white disabled:opacity-50" style={{ background: 'var(--green)' }}>
               {savingNote && <Spinner size="sm" />} Add note
             </button>
             <div className="mt-4 space-y-3">
-              {notes.map((n) => (
-                <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
-                  <p className="text-xs text-[var(--black)]">{n.body}</p>
-                  <p className="mt-1.5 text-[10px] text-[var(--light)]">{n.authorName ?? 'Nearwork team'} · {fmtRelative(n.createdAt as Timestamp | string | undefined)}</p>
-                </div>
-              ))}
+              {notes.map((n) => {
+                const scope = n.scope ?? 'staff_internal';
+                const badge =
+                  n.side === 'client'
+                    ? { label: 'From client', color: 'var(--blue, #2563eb)', bg: 'rgba(37,99,235,0.10)' }
+                    : scope === 'client_visible'
+                      ? { label: 'Shared with client', color: 'var(--green)', bg: 'rgba(22,160,133,0.10)' }
+                      : { label: 'Internal', color: 'var(--light)', bg: 'var(--bg)' };
+                return (
+                  <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-600"
+                        style={{ color: badge.color, background: badge.bg }}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--black)]">{n.body || n.text}</p>
+                    <p className="mt-1.5 text-[10px] text-[var(--light)]">{n.authorName ?? n.author ?? 'Nearwork team'} · {fmtRelative(n.createdAt as Timestamp | string | undefined)}</p>
+                  </div>
+                );
+              })}
               {notes.length === 0 && <p className="text-center text-xs text-[var(--light)]">No notes yet.</p>}
             </div>
           </div>

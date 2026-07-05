@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.5.1';
+export const APP_VERSION = '1.9.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,72 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.9.0',
+    date: '2026-07-05',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          "Add /api/remove-member — client admins can revoke a teammate's workspace access (reversible).",
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.8.0',
+    date: '2026-07-05',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Client requests (advance / hire / reject / interview) now surface on the candidate for staff to action. When a client raises a request from their portal it appears in a "Client requests" card at the top of the candidate profile, showing the request type, the reason (prominent for rejections), who asked and when. Staff move the candidate with the existing stage controls, then Mark handled or Dismiss the request.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'candidate-detail.tsx subscribes live (onSnapshot) to the shared pipelineRequests collection by candidateId AND candidateCode, merging/deduping by doc id, and shows only status:"pending". Mark handled / Dismiss write { status, handledBy, handledByEmail, handledAt: serverTimestamp() } to the request doc via the client SDK (staff read/update allowed by existing rules).',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.7.0',
+    date: '2026-07-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate notes are now shared between Admin and the client portal. When adding a note you choose its visibility: Internal (Nearwork only, the default) or Shared with client. Notes the client writes now show here too, with a badge on every note — Internal, Shared with client, or From client. The client\'s own team-only notes stay private to them and are never shown to staff.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Admin now writes the unified candidateNotes model (candidateId, candidateCode, text+body, scope/visibility, side:"nearwork", author fields, orgId/orgName). Shared notes carry the real orgId (the client portal fetches shared notes by org id); internal notes carry orgId:"" so they never break the client\'s org-scoped query. New staff-only route GET /api/candidate-notes reads via the Admin SDK (bypasses rules), matches by candidateId + candidateCode, and filters out client_internal notes server-side.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.6.0',
+    date: '2026-07-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+'Assessment PDF import on the candidate profile (Skills tab). Assessments are kept per role — a candidate can carry a different score for each pipeline they applied to, shown as a list (role · pipeline · score · upload date). Each row has two upload slots (Assessment & English, DISC); the PDF is read on the server and discarded (nothing stored). It extracts the overall score, pass/fail, English CEFR, integrity check, every question with the answer + feedback + score, and the DISC profile, recomputes the Nearwork Score (50% assessment, 30% English, 20% DISC), and updates the candidate’s English level automatically. "View report" opens the same report the client sees — so staff can review it in Admin. Clients only ever see their own role’s result. Grading is always attributed to the Nearwork talent team, never the AI vendor.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New route POST /api/assessment-upload (staff-only, in-memory parse, no file persistence). Parsers in src/lib/assessment-parser.ts (parseAssessment/parseDisc) are deterministic string parsing tuned to the current Proba template. pdf-parse@1.1.1 added as a serverExternalPackage. The parsed report drives the client-portal candidate detail (client + staff).',
+        ],
+      },
+    ],
+  },
   {
     version: '1.5.1',
     date: '2026-07-03',

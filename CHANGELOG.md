@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.9.0] — 2026-07-05
+
+### Added
+- Add `/api/remove-member` — client admins can revoke a teammate's workspace access (reversible).
+
+---
+
 ## [1.8.0] — 2026-07-05
 
 ### Added

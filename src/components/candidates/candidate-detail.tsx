@@ -342,7 +342,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     status?: 'pending' | 'handled' | 'dismissed' | string;
     requestedBy?: string;
     requestedByEmail?: string;
+    requestedByUid?: string;
+    orgId?: string;
     orgName?: string;
+    candidateCode?: string;
+    candidateName?: string;
     pipelineTitle?: string;
     pipelineCode?: string;
     createdAt?: unknown;
@@ -421,6 +425,27 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       });
       showToast(status === 'handled' ? 'Request marked handled' : 'Request dismissed', 'success');
       // The live subscription refreshes the list automatically.
+      // Ping the client who raised it (best-effort — never block the action).
+      if (req.requestedByUid) {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          if (token) {
+            await fetch('/api/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event: 'request_resolved',
+                orgId: req.orgId || '',
+                candidateName: req.candidateName || candidate.name || '',
+                candidateCode: req.candidateCode || candidate.code || '',
+                pipelineCode: req.pipelineCode || '',
+                requestedByUid: req.requestedByUid,
+                resolution: status,
+              }),
+            });
+          }
+        } catch { /* best-effort */ }
+      }
     } catch {
       showToast('Failed to update the request', 'error');
     } finally {

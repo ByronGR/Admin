@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.7.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.7.0',
+    date: '2026-07-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Candidate notes are now shared between Admin and the client portal. When adding a note you choose its visibility: Internal (Nearwork only, the default) or Shared with client. Notes the client writes now show here too, with a badge on every note — Internal, Shared with client, or From client. The client\'s own team-only notes stay private to them and are never shown to staff.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Admin now writes the unified candidateNotes model (candidateId, candidateCode, text+body, scope/visibility, side:"nearwork", author fields, orgId/orgName). Shared notes carry the real orgId (the client portal fetches shared notes by org id); internal notes carry orgId:"" so they never break the client\'s org-scoped query. New staff-only route GET /api/candidate-notes reads via the Admin SDK (bypasses rules), matches by candidateId + candidateCode, and filters out client_internal notes server-side.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.6.0',
     date: '2026-07-04',

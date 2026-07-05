@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.7.0] — 2026-07-04
+
+### Added
+- **Candidate notes are now shared between Admin and the client portal.** When you add a note you pick its visibility — **Internal** (Nearwork only, the default) or **Shared with client**. Notes the client writes now appear here too, and every note carries a badge: **Internal**, **Shared with client**, or **From client**. The client's own team-only notes stay private to them and are never shown to Nearwork staff.
+
+### Technical
+- Admin now writes the unified `candidateNotes` model (`candidateId`, `candidateCode`, `text`+`body`, `scope`/`visibility`, `side:"nearwork"`, `author`/`authorName`/`authorEmail`, `orgId`/`orgName`). **Shared** notes carry the real `orgId` (the client portal fetches shared notes by org id); **internal** notes carry `orgId:""` so they don't break the client's org-scoped query. New staff-only route `GET /api/candidate-notes` reads via the Admin SDK (bypasses rules), matches by both `candidateId` and `candidateCode`, and filters out `client_internal` notes server-side so they never leave the server.
+
+---
+
 ## [1.6.0] — 2026-07-04
 
 ### Added

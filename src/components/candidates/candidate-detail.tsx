@@ -130,10 +130,21 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const { showToast } = useToast();
   const { profile } = useAuth();
   const [notes, setNotes] = useState<
-    Array<{ id: string; body: string; authorName?: string; createdAt?: unknown }>
+    Array<{
+      id: string;
+      body: string;
+      text?: string;
+      scope?: string;
+      side?: string;
+      author?: string;
+      authorName?: string;
+      createdAt?: unknown;
+    }>
   >([]);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  // Note visibility: Internal (Nearwork only) by default, or Shared with client.
+  const [noteScope, setNoteScope] = useState<'staff_internal' | 'client_visible'>('staff_internal');
 
   // Profile tabs (redesign) — exact prototype tabs.
   const [detailTab, setDetailTab] = useState<'experience' | 'education' | 'languages' | 'skills' | 'applications'>('experience');
@@ -247,29 +258,30 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     requestAnimationFrame(() => noteRef.current?.focus());
   }
 
+  // Load notes via the privileged server route (Admin SDK): returns the full
+  // staff view of the shared `candidateNotes` collection — our notes plus the
+  // client's shared notes — while hiding the client's team-only notes. Matches
+  // by both candidateId and candidateCode so App-written notes are found too.
+  async function loadNotes() {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const params = new URLSearchParams({ candidateId: candidate.id });
+      if (candidate.code) params.set('candidateCode', candidate.code);
+      const res = await fetch(`/api/candidate-notes?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.notes)) setNotes(data.notes);
+    } catch {
+      /* leave notes as-is on a transient failure */
+    }
+  }
+
   useEffect(() => {
-    getDocs(
-      query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-    ).then((snap) => {
-      setNotes(
-        snap.docs
-          .map(
-            (d) =>
-              ({ id: d.id, ...d.data() } as {
-                id: string;
-                body: string;
-                authorName?: string;
-                createdAt?: unknown;
-              })
-          )
-          .sort((a, b) => {
-            const ta = (a.createdAt as { seconds?: number })?.seconds ?? 0;
-            const tb = (b.createdAt as { seconds?: number })?.seconds ?? 0;
-            return tb - ta;
-          })
-      );
-    });
-  }, [candidate.id]);
+    loadNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate.id, candidate.code]);
 
   // ── Pipelines & openings this candidate is in ──────────────────────────────
   const [pipelineEntries, setPipelineEntries] = useState<
@@ -590,34 +602,40 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     try {
       const handles = Array.from(noteText.matchAll(/@(\w+)/g)).map((m) => m[1].toLowerCase());
       const mentions = staff.filter((u) => handles.includes(u.handle)).map((u) => u.id);
+
+      const shared = noteScope === 'client_visible';
+      // The candidate's org lives on their pipeline entry, not the candidate doc.
+      // Prefer the active pipeline, else any pipeline they're in.
+      const orgPipeline = (activePipe ?? pipelineEntries[0])?.pipeline;
+      // CRITICAL: shared notes MUST carry the real orgId (the client portal fetches
+      // shared notes by org id). Internal notes must NOT carry the client's orgId,
+      // or it would break the client's org-scoped query — they're found by
+      // candidateId only.
+      const orgId = shared ? (orgPipeline?.orgId ?? '') : '';
+      const orgName = orgPipeline?.orgName ?? '';
+      const authorName = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
+      const authorEmail = profile?.email || auth.currentUser?.email || '';
+
       await addDoc(collection(db, 'candidateNotes'), {
         candidateId: candidate.id,
+        candidateCode: candidate.code ?? '',
+        text: noteText,
         body: noteText,
+        scope: noteScope,
+        visibility: noteScope,
+        side: 'nearwork',
+        author: authorName,
+        authorName,
+        authorEmail,
+        orgId,
+        orgName,
         mentions,
         createdAt: serverTimestamp(),
       });
       setNoteText('');
+      setNoteScope('staff_internal');
       showToast('Note added', 'success');
-      const snap = await getDocs(
-        query(collection(db, 'candidateNotes'), where('candidateId', '==', candidate.id))
-      );
-      setNotes(
-        snap.docs
-          .map(
-            (d) =>
-              ({ id: d.id, ...d.data() } as {
-                id: string;
-                body: string;
-                authorName?: string;
-                createdAt?: unknown;
-              })
-          )
-          .sort((a, b) => {
-            const ta = (a.createdAt as { seconds?: number })?.seconds ?? 0;
-            const tb = (b.createdAt as { seconds?: number })?.seconds ?? 0;
-            return tb - ta;
-          })
-      );
+      await loadNotes();
     } catch {
       showToast('Failed to save note', 'error');
     } finally {
@@ -1116,16 +1134,60 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </div>
               )}
             </div>
+            {/* Visibility toggle — Internal (default) vs Shared with client */}
+            <div className="mt-2 flex gap-2">
+              {([
+                { key: 'staff_internal', label: 'Internal' },
+                { key: 'client_visible', label: 'Shared with client' },
+              ] as const).map((opt) => {
+                const on = noteScope === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setNoteScope(opt.key)}
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-600 transition-colors ${
+                      on ? 'text-white' : 'border border-[var(--border)] text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)]'
+                    }`}
+                    style={on ? { background: 'var(--green)' } : {}}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[10px] text-[var(--light)]">
+              {noteScope === 'client_visible'
+                ? 'Visible to the client on the candidate profile.'
+                : 'Nearwork only — not shown to the client.'}
+            </p>
             <button onClick={addNote} disabled={savingNote || !noteText.trim()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-600 text-white disabled:opacity-50" style={{ background: 'var(--green)' }}>
               {savingNote && <Spinner size="sm" />} Add note
             </button>
             <div className="mt-4 space-y-3">
-              {notes.map((n) => (
-                <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
-                  <p className="text-xs text-[var(--black)]">{n.body}</p>
-                  <p className="mt-1.5 text-[10px] text-[var(--light)]">{n.authorName ?? 'Nearwork team'} · {fmtRelative(n.createdAt as Timestamp | string | undefined)}</p>
-                </div>
-              ))}
+              {notes.map((n) => {
+                const scope = n.scope ?? 'staff_internal';
+                const badge =
+                  n.side === 'client'
+                    ? { label: 'From client', color: 'var(--blue, #2563eb)', bg: 'rgba(37,99,235,0.10)' }
+                    : scope === 'client_visible'
+                      ? { label: 'Shared with client', color: 'var(--green)', bg: 'rgba(22,160,133,0.10)' }
+                      : { label: 'Internal', color: 'var(--light)', bg: 'var(--bg)' };
+                return (
+                  <div key={n.id} className="rounded-lg bg-[var(--bg)] p-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-600"
+                        style={{ color: badge.color, background: badge.bg }}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--black)]">{n.body || n.text}</p>
+                    <p className="mt-1.5 text-[10px] text-[var(--light)]">{n.authorName ?? n.author ?? 'Nearwork team'} · {fmtRelative(n.createdAt as Timestamp | string | undefined)}</p>
+                  </div>
+                );
+              })}
               {notes.length === 0 && <p className="text-center text-xs text-[var(--light)]">No notes yet.</p>}
             </div>
           </div>

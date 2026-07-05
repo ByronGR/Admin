@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.15.0] — 2026-07-05
+
+### Added
+- Broadcast notifications to followers (stage moves, shared notes).
+
+---
+
 ## [1.12.0] — 2026-07-05
 
 ### Added

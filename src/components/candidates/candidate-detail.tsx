@@ -758,6 +758,32 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         mentions,
         createdAt: serverTimestamp(),
       });
+      // Broadcast a shared (client-visible) note to the role's followers.
+      // entityId is the candidate's opening/pipeline code — reuse the same
+      // pipeline we resolved for the note's org above. Best-effort — never
+      // blocks the note.
+      if (shared && orgPipeline?.code) {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          if (token) {
+            await fetch('/api/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event: 'broadcast',
+                broadcastType: 'staff_note',
+                entityType: 'opening',
+                entityId: orgPipeline.code,
+                orgId: orgId || orgPipeline.orgId || '',
+                candidateName: candidate.name || '',
+                candidateCode: candidate.code || '',
+                noteExcerpt: noteText.slice(0, 140),
+              }),
+            });
+          }
+        } catch { /* best-effort */ }
+      }
+
       setNoteText('');
       setNoteScope('staff_internal');
       showToast('Note added', 'success');

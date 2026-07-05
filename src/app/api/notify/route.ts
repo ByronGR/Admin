@@ -79,10 +79,27 @@ async function actorBelongsToOrg(uid: string, orgId: string): Promise<boolean> {
   return orgs.has(orgId);
 }
 
-// A single notification doc, keyed so BOTH surfaces can read it.
+// A recipient's preference for a notification type. Default: in-app on, email off
+// (everyone gets the bell; email is opt-in). "Off" = neither.
+async function prefFor(uid: string, key: string): Promise<{ app: boolean; email: boolean }> {
+  try {
+    const snap = await adminDb().collection('notificationPreferences').doc(uid).get();
+    const prefs = (snap.exists ? (snap.data()?.preferences as Record<string, { app?: boolean; email?: boolean }>) : undefined) || {};
+    const p = prefs[key];
+    if (!p) return { app: true, email: false };
+    return { app: p.app !== false, email: p.email === true };
+  } catch {
+    return { app: true, email: false };
+  }
+}
+
+// Write a notification for one recipient, honoring their preference for `prefKey`.
+// Returns whether it was written (in-app) and whether email was requested (for the
+// digest, wired in the email phase). Keyed so BOTH bells read it.
 async function writeNotification(opts: {
   recipientUid: string;
   recipientEmail?: string;
+  prefKey: string;
   category: string;
   title: string;
   body: string;
@@ -91,7 +108,9 @@ async function writeNotification(opts: {
   pipelineCode?: string;
   orgId?: string;
   actorName?: string;
-}): Promise<void> {
+}): Promise<{ written: boolean; email: boolean }> {
+  const pref = await prefFor(opts.recipientUid, opts.prefKey);
+  if (!pref.app && !pref.email) return { written: false, email: false };
   const db = adminDb();
   await db.collection('notifications').add({
     userId: opts.recipientUid,        // Admin bell reads this
@@ -110,6 +129,9 @@ async function writeNotification(opts: {
     read: false,
     createdAt: FieldValue.serverTimestamp(),
   });
+  // pref.email → the recipient wants this by email too. The digest phase reads
+  // this signal to batch a summary email; in-app is written above regardless.
+  return { written: true, email: pref.email };
 }
 
 export async function POST(req: Request) {
@@ -218,14 +240,16 @@ export async function POST(req: Request) {
         }
       }
 
+      const prefKey = event === 'client_request' ? 'clientRequests' : 'clientNotes';
       const seen = new Set<string>();
       let created = 0;
       for (const r of recipients) {
         if (seen.has(r.uid)) continue;
         seen.add(r.uid);
-        await writeNotification({
+        const res = await writeNotification({
           recipientUid: r.uid,
           recipientEmail: r.email,
+          prefKey,
           category,
           title,
           body: content,
@@ -234,7 +258,7 @@ export async function POST(req: Request) {
           orgId,
           actorName,
         });
-        created++;
+        if (res.written) created++;
       }
 
       return json({ ok: true, created }, 200, origin);
@@ -266,9 +290,10 @@ export async function POST(req: Request) {
         ? 'Marked as not needed for now.'
         : 'The Nearwork team has actioned it.';
 
-      await writeNotification({
+      const res = await writeNotification({
         recipientUid,
         recipientEmail,
+        prefKey: 'requests',
         category: 'Pipeline',
         title,
         body: content,
@@ -278,7 +303,7 @@ export async function POST(req: Request) {
         actorName,
       });
 
-      return json({ ok: true, created: 1 }, 200, origin);
+      return json({ ok: true, created: res.written ? 1 : 0 }, 200, origin);
     }
 
     return json({ ok: false, error: `Unknown event: ${event}` }, 400, origin);

@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.10.0] — 2026-07-05
+
+### Added
+- Add `/api/notify` — unified in-app notification writer.
+
+---
+
 ## [1.9.0] — 2026-07-05
 
 ### Added

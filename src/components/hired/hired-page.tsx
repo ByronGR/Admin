@@ -54,12 +54,13 @@ export default function HiredPage() {
 
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [orgNames, setOrgNames] = useState<Record<string, string>>({});
+  const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<HireTab>('current');
 
   const [newModal, setNewModal] = useState(false);
   const [form, setForm] = useState({
-    candidateId: '', candidateName: '', candidateEmail: '', orgName: '', openingTitle: '',
+    candidateId: '', candidateName: '', candidateEmail: '', orgId: '', orgName: '', openingTitle: '',
     pipelineCode: '', startDate: '', salaryAmount: '', salaryCurrency: 'USD',
     guaranteeDays: '90', referralSource: '', referralFee: '',
     engagementType: 'direct' as EngagementType,
@@ -111,11 +112,13 @@ export default function HiredPage() {
     }
     if (orgRes.status === 'fulfilled') {
       const m: Record<string, string> = {};
+      const list: Array<{ id: string; name: string }> = [];
       orgRes.value.docs.forEach((d) => {
         const data = d.data() as Organization & { shortId?: string };
-        if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; }
+        if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; list.push({ id: d.id, name: data.name }); }
       });
       setOrgNames(m);
+      setOrgs(list.sort((a, b) => a.name.localeCompare(b.name)));
     }
     setLoading(false);
   }
@@ -157,7 +160,7 @@ export default function HiredPage() {
 
   async function savePlacement() {
     if (!form.candidateId || !form.candidateName) { showToast('Pick a candidate from the directory first', 'error'); return; }
-    if (!form.orgName || !form.startDate) { showToast('Org and start date are required', 'error'); return; }
+    if (!form.orgId || !form.startDate) { showToast('Pick a company and a start date', 'error'); return; }
     setSaving(true);
     try {
       const guaranteeEndDate = form.startDate && form.guaranteeDays
@@ -168,7 +171,7 @@ export default function HiredPage() {
       if (existing.exists()) { showToast('This candidate already has a placement record', 'error'); setSaving(false); return; }
       await setDoc(ref, {
         code: form.candidateId, candidateId: form.candidateId, candidateName: form.candidateName,
-        candidateEmail: form.candidateEmail, orgName: form.orgName, orgId: '', openingTitle: form.openingTitle,
+        candidateEmail: form.candidateEmail, orgName: form.orgName, orgId: form.orgId, openingTitle: form.openingTitle,
         pipelineCode: form.pipelineCode, startDate: form.startDate,
         salaryAmount: form.salaryAmount ? Number(form.salaryAmount) : 0, salaryCurrency: form.salaryCurrency,
         engagementType: form.engagementType, guaranteeDays: form.guaranteeDays ? Number(form.guaranteeDays) : 90,
@@ -345,8 +348,15 @@ export default function HiredPage() {
           )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Organization *</label>
+            <select value={form.orgId} onChange={(e) => { const o = orgs.find((x) => x.id === e.target.value); setForm((f) => ({ ...f, orgId: e.target.value, orgName: o?.name ?? '' })); }}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white">
+              <option value="">Select a company…</option>
+              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
           {[
-            { key: 'orgName', label: 'Organization *', placeholder: 'Acme Inc.' },
             { key: 'openingTitle', label: 'Role title', placeholder: 'CSM' },
             { key: 'pipelineCode', label: 'Pipeline code', placeholder: 'PL-1234' },
             { key: 'startDate', label: 'Start date *', type: 'date' },

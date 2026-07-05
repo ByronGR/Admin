@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
+import { enqueueDigestItem } from '@/lib/notification-digest';
 
 // ─── POST /api/notify ─────────────────────────────────────────────────────────
 // The ONE notification writer. Both the client App (app.nearwork.co) and Admin
@@ -129,8 +130,36 @@ async function writeNotification(opts: {
     read: false,
     createdAt: FieldValue.serverTimestamp(),
   });
-  // pref.email → the recipient wants this by email too. The digest phase reads
-  // this signal to batch a summary email; in-app is written above regardless.
+  // pref.email → the recipient wants this by email too. Batch it into the rolling
+  // digest (best-effort — must NOT block or fail the in-app write above).
+  if (pref.email) {
+    const recipientEmail = opts.recipientEmail || '';
+    // Look up the recipient's first name if easy; undefined is fine (the digest
+    // derives from the email local-part).
+    let firstName: string | undefined;
+    try {
+      const uSnap = await db.collection('users').doc(opts.recipientUid).get();
+      if (uSnap.exists) {
+        const u = uSnap.data() as Record<string, unknown>;
+        const fn = String(u.firstName || u.name || '').trim();
+        if (fn) firstName = fn;
+      }
+    } catch {
+      /* non-critical */
+    }
+    await enqueueDigestItem({
+      recipientUid: opts.recipientUid,
+      recipientEmail,
+      firstName,
+      isStaff: recipientEmail.endsWith('@nearwork.co'),
+      item: {
+        category: opts.category,
+        title: opts.title,
+        body: opts.body,
+        link: opts.link,
+      },
+    });
+  }
   return { written: true, email: pref.email };
 }
 

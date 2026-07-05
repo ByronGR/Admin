@@ -19,6 +19,9 @@ import { enqueueDigestItem } from '@/lib/notification-digest';
 //                     → notify the org's Nearwork account manager.
 //   request_resolved — staff handled/dismissed a client request
 //                     → notify the client who raised it.
+//   broadcast       — Nearwork staff acted on a role (stage move, shared note, …)
+//                     → notify every CLIENT user who FOLLOWS that role (the
+//                       `follows` collection maps uid → entityType/entityId).
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,8 +46,16 @@ export function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) });
 }
 
-type NotifyEvent = 'client_request' | 'client_note' | 'request_resolved';
+type NotifyEvent = 'client_request' | 'client_note' | 'request_resolved' | 'broadcast';
 type RequestType = 'advance' | 'hire' | 'reject' | 'interview';
+type BroadcastType =
+  | 'new_candidate'
+  | 'stage_move'
+  | 'assessment_ready'
+  | 'candidate_declined'
+  | 'staff_note'
+  | 'new_hire'
+  | 'brief_revised';
 
 interface Body {
   event?: NotifyEvent;
@@ -59,6 +70,11 @@ interface Body {
   requestedByUid?: string;
   resolution?: 'handled' | 'dismissed';
   actorName?: string;
+  // broadcast fields
+  broadcastType?: BroadcastType;
+  entityType?: string;   // e.g. 'opening'
+  entityId?: string;     // e.g. the opening/pipeline code
+  stage?: string;        // client-facing stage label (for stage_move)
 }
 
 function json(data: unknown, status: number, origin: string | null) {
@@ -333,6 +349,123 @@ export async function POST(req: Request) {
       });
 
       return json({ ok: true, created: res.written ? 1 : 0 }, 200, origin);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3) broadcast — Nearwork staff acted on a role → notify its FOLLOWERS.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (event === 'broadcast') {
+      // Security: only Nearwork staff may broadcast to a role's followers.
+      if (!actor.email.endsWith('@nearwork.co')) {
+        return json({ ok: false, error: 'Only Nearwork staff can broadcast' }, 403, origin);
+      }
+
+      const entityType = String(body.entityType ?? '').trim();
+      const entityId = String(body.entityId ?? '').trim();
+      if (!entityType || !entityId) {
+        return json({ ok: false, error: 'entityType and entityId are required' }, 400, origin);
+      }
+
+      const broadcastType = body.broadcastType;
+      const cName = String(body.candidateName ?? 'A candidate');
+      const stage = String(body.stage ?? '').trim();
+      const noteExcerpt = String(body.noteExcerpt ?? '');
+
+      // prefKey by broadcastType (client-facing pref keys).
+      const prefKeyByType: Record<BroadcastType, string> = {
+        new_candidate: 'candidates',
+        stage_move: 'candidates',
+        assessment_ready: 'candidates',
+        candidate_declined: 'candidates',
+        staff_note: 'notes',
+        new_hire: 'team',
+        brief_revised: 'kickoff',
+      };
+
+      // Content by broadcastType.
+      let title: string;
+      let content: string;
+      let category: string;
+      switch (broadcastType) {
+        case 'stage_move':
+          title = `${cName} moved to ${stage}`;
+          content = '';
+          category = 'Pipeline';
+          break;
+        case 'new_candidate':
+          title = 'New candidate for your role';
+          content = `${cName} was added to the pipeline.`;
+          category = 'Pipeline';
+          break;
+        case 'assessment_ready':
+          title = `Assessment ready — ${cName}`;
+          content = '';
+          category = 'Pipeline';
+          break;
+        case 'candidate_declined':
+          title = `${cName} wasn't moved forward`;
+          content = '';
+          category = 'Pipeline';
+          break;
+        case 'staff_note':
+          title = `New note on ${cName}`;
+          content = noteExcerpt || '';
+          category = 'Note';
+          break;
+        case 'new_hire':
+          title = `${cName} joined the team`;
+          content = '';
+          category = 'Team';
+          break;
+        case 'brief_revised':
+          title = 'Kickoff brief updated';
+          content = "We've made the requested changes.";
+          category = 'Kickoff';
+          break;
+        default:
+          return json({ ok: false, error: `Unknown broadcastType: ${String(broadcastType)}` }, 400, origin);
+      }
+      const prefKey = prefKeyByType[broadcastType];
+
+      // Resolve followers: every uid following this entity (deduped).
+      const followSnap = await db
+        .collection('follows')
+        .where('entityKey', '==', `${entityType}:${entityId}`)
+        .get();
+      const followerUids = Array.from(
+        new Set(
+          followSnap.docs
+            .map((d) => String(d.data()?.uid ?? '').trim())
+            .filter(Boolean),
+        ),
+      );
+
+      let created = 0;
+      for (const uid of followerUids) {
+        // Best-effort email lookup ('' if missing).
+        let recipientEmail = '';
+        try {
+          const uSnap = await db.collection('users').doc(uid).get();
+          if (uSnap.exists) recipientEmail = String(uSnap.data()?.email ?? '');
+        } catch {
+          /* non-critical — fall back to '' */
+        }
+        const res = await writeNotification({
+          recipientUid: uid,
+          recipientEmail,
+          prefKey,
+          category,
+          title,
+          body: content,
+          candidateCode: body.candidateCode,
+          pipelineCode: entityId,
+          orgId,
+          actorName,
+        });
+        if (res.written) created++;
+      }
+
+      return json({ ok: true, created }, 200, origin);
     }
 
     return json({ ok: false, error: `Unknown event: ${event}` }, 400, origin);

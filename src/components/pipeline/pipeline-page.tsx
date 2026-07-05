@@ -20,6 +20,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import {
+  auth,
   db,
   collection,
   getDocs,
@@ -107,6 +108,37 @@ const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
   'hired': NW.green600,
   'not-selected': NW.gray300,
 };
+
+// ─── Client-facing stage labels ───────────────────────────────────────────────
+// The board runs 8 internal stages; clients following a role see a simplified
+// 6-stage view. No shared map existed in the repo, so this collapses the internal
+// keys to the client-facing label used in follower broadcasts. (Flagged in the
+// change notes — if a canonical client-stage map appears later, swap this out.)
+const CLIENT_STAGE_LABEL: Record<StageKey, string> = {
+  'applied': 'Applied',
+  'background-check': 'Screening',
+  'interview': 'Interview',
+  'assessment': 'Assessment',
+  'partner-review': 'Your review',
+  'partner-interview': 'Your interview',
+  'hired': 'Hired',
+  'not-selected': 'Not selected',
+};
+
+// Fire a follower broadcast to /api/notify (best-effort — never blocks the move).
+async function broadcastNotify(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    /* never block the stage change */
+  }
+}
 
 const CEFR_LEVELS: CEFRLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
@@ -435,6 +467,21 @@ export default function PipelinePage() {
       orgName: pipeline.orgName,
       dropOffReason: opts?.dropOff?.reason,
     });
+    // Broadcast to the role's followers (client users). Only on a FORWARD move —
+    // skip backward moves and the drop to Not Selected (that's candidate_declined,
+    // not fired here). Best-effort; never blocks the move.
+    if (toStage !== 'not-selected' && stageRank(toStage) > stageRank(fromStage ?? '')) {
+      broadcastNotify({
+        event: 'broadcast',
+        broadcastType: 'stage_move',
+        entityType: 'opening',
+        entityId: pipeline.code,
+        orgId: pipeline.orgId,
+        candidateName: movedEntry?.name,
+        candidateCode: movedEntry?.candidateCode ?? candidateCode,
+        stage: CLIENT_STAGE_LABEL[toStage],
+      });
+    }
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
   }
 

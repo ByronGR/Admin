@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { NW, Icon, Button, Chip } from '@/components/nw/primitives';
 import { PageHeader, Card, CardHead } from '@/components/nw/shell-ui';
 import { AccountCleanup } from '@/components/settings/account-cleanup';
+import { NotificationPreferences } from '@/components/settings/notification-preferences';
 import { type IconName } from 'lucide-react/dynamic';
 
 function ToggleRow({ title, desc, defaultOn = false }: { title: string; desc: string; defaultOn?: boolean }) {
@@ -114,14 +115,7 @@ export default function SettingsPage() {
                 </Card>
               </>
             ) : section === 'notifications' ? (
-              <Card>
-                <CardHead icon="bell" title="Notifications" sub="In-app only for now — email notifications coming in a future update." />
-                <ToggleRow title="New candidate added to pipeline" desc="When a candidate is added to a pipeline you manage" defaultOn />
-                <ToggleRow title="Stage change" desc="When a candidate advances or moves stage" defaultOn />
-                <ToggleRow title="Assessment completed" desc="When a candidate finishes their assessment" defaultOn />
-                <ToggleRow title="Opening approval required" desc="When an opening is submitted for review" defaultOn />
-                <ToggleRow title="Weekly summary email" desc="Monday digest of pipeline health" />
-              </Card>
+              <NotificationPreferences />
             ) : section === 'team' ? (
               <Card>
                 <CardHead icon="users" title="Team & roles" sub="Admin is invite-only — even @nearwork.co addresses need an invitation." />

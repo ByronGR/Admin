@@ -43,6 +43,7 @@ import {
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/components/nw/shell-ui';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
+import { StaffPicker } from '@/components/ui/staff-picker';
 
 // Engagement-type colours (shared with the Hired module)
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
@@ -959,6 +960,8 @@ function OrgDetail({
     stripeCustomerId: org.stripeCustomerId ?? '',
     status: org.status ?? 'active',
     internal: org.internal ?? false,
+    accountManager: org.accountManager ?? '',
+    accountManagerEmail: org.accountManagerEmail ?? '',
   });
 
   // Users state
@@ -1395,6 +1398,9 @@ function OrgDetail({
         stripeCustomerId: editForm.stripeCustomerId.trim() || null,
         status: editForm.status,
         internal: editForm.internal,
+        accountManager: editForm.accountManager.trim() || null,
+        accountManagerName: editForm.accountManager.trim() || null,
+        accountManagerEmail: editForm.accountManagerEmail.trim() || null,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, 'organizations', org.id), data);
@@ -1797,6 +1803,15 @@ function OrgDetail({
                     <option value="inactive">Inactive</option>
                     <option value="suspended">Suspended</option>
                   </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Account manager</label>
+                  <StaffPicker
+                    value={editForm.accountManager}
+                    onChange={(name) => setEditForm((f) => ({ ...f, accountManager: name }))}
+                    onPick={(opt) => setEditForm((f) => ({ ...f, accountManagerEmail: opt?.email ?? '' }))}
+                    placeholder="Search team"
+                  />
                 </div>
                 <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
                   <input

@@ -67,11 +67,13 @@ export function useStaff(): StaffOption[] {
 export function StaffPicker({
   value,
   onChange,
+  onPick,
   placeholder = 'Search team…',
   compact = false,
 }: {
   value: string;
   onChange: (name: string) => void;
+  onPick?: (opt: StaffOption | null) => void;
   placeholder?: string;
   compact?: boolean;
 }) {
@@ -101,6 +103,7 @@ export function StaffPicker({
 
   function pick(option: StaffOption) {
     onChange(option.name);
+    onPick?.(option);
     setQ('');
     setOpen(false);
   }
@@ -119,7 +122,7 @@ export function StaffPicker({
         {value && (
           <button
             type="button"
-            onClick={() => { onChange(''); setQ(''); setOpen(false); }}
+            onClick={() => { onChange(''); onPick?.(null); setQ(''); setOpen(false); }}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--light)] hover:bg-[var(--border)] hover:text-[var(--black)]"
             aria-label="Clear"
           >

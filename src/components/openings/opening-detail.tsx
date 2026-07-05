@@ -144,6 +144,7 @@ export function OpeningDetail({
     description:    opening.description    ?? '',
     sourcer:        opening.sourcer        ?? '',
     recruiter:      opening.recruiter      ?? '',
+    recruiterEmail: opening.recruiterEmail ?? '',
     hiringManager:  opening.hiringManager  ?? '',
     accountManager: opening.accountManager ?? '',
     status:         opening.status,
@@ -296,6 +297,7 @@ export function OpeningDetail({
         description:    editForm.description,
         sourcer:        editForm.sourcer,
         recruiter:      editForm.recruiter,
+        recruiterEmail: editForm.recruiterEmail,
         hiringManager:  editForm.hiringManager,
         accountManager: editForm.accountManager || null,
         status:         editForm.status,
@@ -936,7 +938,7 @@ export function OpeningDetail({
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
-              <StaffPicker compact value={editForm.recruiter} onChange={(name) => setEditForm((f) => ({ ...f, recruiter: name }))} placeholder="Search team" />
+              <StaffPicker compact value={editForm.recruiter} onChange={(name) => setEditForm((f) => ({ ...f, recruiter: name }))} onPick={(opt) => setEditForm((f) => ({ ...f, recruiterEmail: opt?.email ?? '' }))} placeholder="Search team" />
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Account Manager (optional)</label>

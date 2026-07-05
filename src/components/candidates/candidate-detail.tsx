@@ -56,6 +56,8 @@ import {
   Inbox,
   Calendar,
   ChevronRight,
+  Check,
+  X,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
 
@@ -325,6 +327,105 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   function stageLabel(stage?: PipelineStage): string {
     if (!stage) return '—';
     return PIPELINE_STAGE_LABELS[stage] ?? stage;
+  }
+
+  // ── Client requests (raised from the client App on this candidate) ──────────
+  // The App writes to the shared `pipelineRequests` collection, keyed by EITHER
+  // candidateId or candidateCode. We subscribe (live) to both and merge/dedupe
+  // by doc id. Staff READ + UPDATE these directly (rules already allow it).
+  type ClientRequest = {
+    id: string;
+    type?: 'advance' | 'hire' | 'reject' | 'interview' | string;
+    fromStage?: string;
+    toStage?: string;
+    reason?: string;
+    status?: 'pending' | 'handled' | 'dismissed' | string;
+    requestedBy?: string;
+    requestedByEmail?: string;
+    orgName?: string;
+    pipelineTitle?: string;
+    pipelineCode?: string;
+    createdAt?: unknown;
+  };
+  const [clientRequests, setClientRequests] = useState<ClientRequest[]>([]);
+  const [resolvingReq, setResolvingReq] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Two live queries — by candidateId AND by candidateCode — merged by doc id,
+    // because the App may key a request by either field.
+    // Keep each source's latest docs separately, then merge by id on every update
+    // (dedupe: a doc matched by both id and code appears once).
+    const bySource: Record<'id' | 'code', ClientRequest[]> = { id: [], code: [] };
+
+    const push = (docs: Array<{ id: string; data: () => Record<string, unknown> }>, source: 'id' | 'code') => {
+      bySource[source] = docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as ClientRequest));
+      const byId = new Map<string, ClientRequest>();
+      [...bySource.id, ...bySource.code].forEach((r) => byId.set(r.id, r));
+      const merged = Array.from(byId.values());
+      // Newest first.
+      merged.sort(
+        (a, b) =>
+          ((b.createdAt as { seconds?: number })?.seconds ?? 0) -
+          ((a.createdAt as { seconds?: number })?.seconds ?? 0),
+      );
+      setClientRequests(merged);
+    };
+
+    const unsubId = onSnapshot(
+      query(collection(db, 'pipelineRequests'), where('candidateId', '==', candidate.id)),
+      (snap) => push(snap.docs, 'id'),
+      () => {},
+    );
+    const unsubCode = candidate.code
+      ? onSnapshot(
+          query(collection(db, 'pipelineRequests'), where('candidateCode', '==', candidate.code)),
+          (snap) => push(snap.docs, 'code'),
+          () => {},
+        )
+      : () => {};
+    return () => { unsubId(); if (candidate.code) unsubCode(); };
+  }, [candidate.id, candidate.code]);
+
+  const pendingRequests = useMemo(
+    () => clientRequests.filter((r) => (r.status ?? 'pending') === 'pending'),
+    [clientRequests],
+  );
+
+  function clientRequestLabel(r: ClientRequest): React.ReactNode {
+    const stage = r.toStage ? (PIPELINE_STAGE_LABELS[r.toStage as PipelineStage] ?? r.toStage) : '';
+    switch (r.type) {
+      case 'advance':
+        return <>Client asked to advance to <strong>{stage || 'the next stage'}</strong></>;
+      case 'hire':
+        return <>Client asked to <strong>hire</strong> this candidate</>;
+      case 'reject':
+        return <>Client asked to <strong>reject</strong> this candidate</>;
+      case 'interview':
+        return <>Client requested an <strong>interview</strong></>;
+      default:
+        return <>Client raised a <strong>{r.type ?? 'request'}</strong></>;
+    }
+  }
+
+  async function resolveClientRequest(req: ClientRequest, status: 'handled' | 'dismissed') {
+    if (resolvingReq) return;
+    setResolvingReq(req.id);
+    try {
+      const handledBy = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
+      const handledByEmail = profile?.email || auth.currentUser?.email || '';
+      await updateDoc(doc(db, 'pipelineRequests', req.id), {
+        status,
+        handledBy,
+        handledByEmail,
+        handledAt: serverTimestamp(),
+      });
+      showToast(status === 'handled' ? 'Request marked handled' : 'Request dismissed', 'success');
+      // The live subscription refreshes the list automatically.
+    } catch {
+      showToast('Failed to update the request', 'error');
+    } finally {
+      setResolvingReq(null);
+    }
   }
 
   // ── Stage editing from the profile (only for active opening + pipeline) ─────
@@ -760,6 +861,98 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           )}
         </div>
       </div>
+
+      {/* Client requests — raised from the client App; staff act on them here.
+          Placed above the main grid so staff see them immediately. */}
+      {pendingRequests.length > 0 && (
+        <div
+          style={{
+            ...card,
+            marginBottom: 16,
+            borderColor: `${NW.yellow500}55`,
+            background: NW.yellow50,
+            padding: 20,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#A16207' }}>
+              <Inbox className="h-4 w-4" />
+            </span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: NW.black }}>Client requests</div>
+              <div style={{ fontSize: 12, color: '#A16207', marginTop: 1 }}>
+                {pendingRequests.length} pending {pendingRequests.length === 1 ? 'request' : 'requests'} from the client to action
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {pendingRequests.map((r) => {
+              const busy = resolvingReq === r.id;
+              const isReject = r.type === 'reject';
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    background: NW.white,
+                    border: `1px solid ${isReject ? `${NW.rose500}33` : NW.gray100}`,
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: NW.black }}>{clientRequestLabel(r)}</div>
+                      {(r.pipelineTitle || r.pipelineCode) && (
+                        <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
+                          {r.pipelineTitle ?? ''}{r.pipelineTitle && r.pipelineCode ? ' · ' : ''}{r.pipelineCode ?? ''}
+                        </div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A16207', background: NW.yellow50, border: `1px solid ${NW.yellow500}44`, borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      Pending
+                    </span>
+                  </div>
+
+                  {r.reason && r.reason.trim() && (
+                    <div style={{ fontSize: 13, color: isReject ? NW.rose600 : NW.gray700, background: isReject ? NW.rose50 : NW.gray50, border: `1px solid ${isReject ? `${NW.rose500}22` : NW.gray100}`, borderRadius: 8, padding: '8px 12px', lineHeight: 1.5 }}>
+                      <span style={{ fontWeight: 600 }}>{isReject ? 'Reason: ' : 'Note: '}</span>{r.reason}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 11.5, color: NW.gray500 }}>
+                    {r.requestedBy ?? r.requestedByEmail ?? 'Client'} · {fmtRelative(r.createdAt as Timestamp | string | undefined)}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => resolveClientRequest(r, 'handled')}
+                      disabled={busy}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', fontSize: 12.5, fontWeight: 600, color: NW.white, background: NW.teal500, border: 'none', borderRadius: 999, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1 }}
+                    >
+                      {busy ? <Spinner size="sm" /> : <Check className="h-3.5 w-3.5" />} Mark handled
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resolveClientRequest(r, 'dismissed')}
+                      disabled={busy}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', fontSize: 12.5, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1 }}
+                    >
+                      <X className="h-3.5 w-3.5" /> Dismiss
+                    </button>
+                    <span style={{ fontSize: 11.5, color: NW.gray500 }}>
+                      Move the candidate with the stage controls, then mark this handled.
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, alignItems: 'start' }} className="nw-cand-grid">
         {/* Left — tabs */}

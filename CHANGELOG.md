@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.8.0] — 2026-07-05
+
+### Added
+- **Client requests (advance / hire / reject / interview) now surface on the candidate for staff to action.** When a client raises a request from their portal it appears in a **Client requests** card at the top of the candidate profile, showing the request type, the reason (prominent for rejections), and who asked and when. Staff move the candidate with the **existing stage controls**, then **Mark handled** or **Dismiss** the request — marking handled does not itself move the candidate.
+
+### Technical
+- `candidate-detail.tsx` subscribes live (`onSnapshot`) to the shared `pipelineRequests` collection by **both** `candidateId` and `candidateCode`, merging/deduping by doc id, and shows only `status:"pending"`. **Mark handled** / **Dismiss** write `{ status, handledBy, handledByEmail, handledAt: serverTimestamp() }` to the request doc via the client SDK (staff read/update is already allowed by the Firestore rules). No new server route.
+
+---
+
 ## [1.7.0] — 2026-07-04
 
 ### Added

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.8.0',
+    date: '2026-07-05',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Client requests (advance / hire / reject / interview) now surface on the candidate for staff to action. When a client raises a request from their portal it appears in a "Client requests" card at the top of the candidate profile, showing the request type, the reason (prominent for rejections), who asked and when. Staff move the candidate with the existing stage controls, then Mark handled or Dismiss the request.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'candidate-detail.tsx subscribes live (onSnapshot) to the shared pipelineRequests collection by candidateId AND candidateCode, merging/deduping by doc id, and shows only status:"pending". Mark handled / Dismiss write { status, handledBy, handledByEmail, handledAt: serverTimestamp() } to the request doc via the client SDK (staff read/update allowed by existing rules).',
+        ],
+      },
+    ],
+  },
   {
     version: '1.7.0',
     date: '2026-07-04',

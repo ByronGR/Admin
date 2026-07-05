@@ -152,9 +152,14 @@ export async function POST(req: Request) {
     if (event === 'client_request' || event === 'client_note') {
       if (!orgId) return json({ ok: false, error: 'orgId is required' }, 400, origin);
 
-      // Security: actor must belong to this org.
-      const belongs = await actorBelongsToOrg(actor.uid, orgId);
-      if (!belongs) return json({ ok: false, error: 'Not authorised for this organization' }, 403, origin);
+      // Security: real clients must belong to this org (blocks cross-org spam).
+      // Nearwork staff (@nearwork.co) can act in any workspace — e.g. when a
+      // staffer is working inside a client's portal via the org picker.
+      const isStaffActor = actor.email.endsWith('@nearwork.co');
+      if (!isStaffActor) {
+        const belongs = await actorBelongsToOrg(actor.uid, orgId);
+        if (!belongs) return json({ ok: false, error: 'Not authorised for this organization' }, 403, origin);
+      }
 
       // Resolve the AM's uid via organizations/{orgId}.accountManagerEmail → users query.
       const orgSnap = await db.collection('organizations').doc(orgId).get();

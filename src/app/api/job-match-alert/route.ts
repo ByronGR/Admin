@@ -8,15 +8,32 @@ import { build } from '../send-email/templates/similar_role_alert';
 // scheduled 4 hours out but nudged into Colombia (COT) business hours so the
 // alert lands while the candidate is awake and working.
 //
-// Body: { openingId: string }
+// Body:
+//   • { openingId: string }                       → real send (gated per-role)
+//   • { openingId: string, preview: true }        → preview against that opening
+//   • { skills: string[], preview: true }         → preview against raw skills
+//                                                    (skips loading an opening;
+//                                                    used for the live reach
+//                                                    count in the role form)
 //
 // Idempotent: the opening carries `jobMatchAlertSentAt` once alerted, so a
 // re-publish (or a double-fire from the client) won't re-send.
+//
+// Per-role switch: real sending only happens when the opening's
+// `notifyCandidatesOnPublish === true`. When it's false/unset we still compute
+// the matches (so the publish flow works) but send nothing and do NOT mark the
+// opening as alerted — a future publish once the toggle is on still fires.
+// Preview mode ignores both the switch and the dedup flag and never sends or
+// mutates anything.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const ALLOWED_ORIGINS = ['https://admin.nearwork.co'];
+
+// Cap on how many matches the preview response returns (the true count is
+// always reported separately).
+const PREVIEW_CAP = 50;
 
 // ── Strong-match tuning knobs (easy to adjust) ──
 // A candidate is a "strong" match when they share at least MATCH_MIN_SHARED
@@ -69,6 +86,46 @@ function normalizeSkills(skills: unknown): Set<string> {
     }
   }
   return out;
+}
+
+type Match = { email: string; firstName: string; name: string; sharedSkills: string[] };
+
+// Find available, opted-in candidates who STRONGLY match the given skills set.
+// Same filters (marketingConsent + availability:'open' + valid email) and
+// strong-match rule used by both the real send path and the preview paths.
+async function matchCandidates(
+  db: ReturnType<typeof adminDb>,
+  targetSkills: Set<string>,
+): Promise<Match[]> {
+  const requiredShared = Math.max(MATCH_MIN_SHARED, Math.ceil(MATCH_MIN_RATIO * targetSkills.size));
+
+  // Single-equality query (no composite index needed); filter the rest in memory.
+  const candSnap = await db.collection('candidates').where('marketingConsent', '==', true).get();
+
+  const matches: Match[] = [];
+  candSnap.docs.forEach((d) => {
+    const c = d.data() as Record<string, unknown>;
+    if (String(c.availability || '') !== 'open') return;
+    const email = String(c.email || '').trim();
+    if (!email) return;
+
+    const candSkills = normalizeSkills(c.skills);
+    const sharedSkills: string[] = [];
+    for (const s of candSkills) if (targetSkills.has(s)) sharedSkills.push(s);
+    if (sharedSkills.length < requiredShared) return;
+
+    const firstName =
+      String(c.firstName || '').trim() ||
+      String(c.name || '').trim().split(/\s+/)[0] ||
+      'there';
+    const name =
+      String(c.name || '').trim() ||
+      String(c.firstName || '').trim() ||
+      email;
+    matches.push({ email, firstName, name, sharedSkills });
+  });
+
+  return matches;
 }
 
 // Given a base send time, return the next time that falls inside Colombia
@@ -138,24 +195,56 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = (await req.json().catch(() => ({}))) as { openingId?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      openingId?: string;
+      preview?: boolean;
+      skills?: unknown;
+    };
     const openingId = String(body.openingId || '').trim();
+    const preview = body.preview === true;
+
+    const db = adminDb();
+
+    // ── Skills-only preview (live reach count in the role form). ──
+    // Match directly against the provided skills — no opening is loaded.
+    if (preview && Array.isArray(body.skills)) {
+      const providedSkills = normalizeSkills(body.skills);
+      if (providedSkills.size === 0) {
+        return NextResponse.json({ ok: true, preview: true, count: 0, matches: [] }, { headers: cors });
+      }
+      const matches = await matchCandidates(db, providedSkills);
+      return NextResponse.json({
+        ok: true,
+        preview: true,
+        count: matches.length,
+        matches: matches.slice(0, PREVIEW_CAP).map((m) => ({
+          name: m.name,
+          email: m.email,
+          sharedSkills: m.sharedSkills,
+        })),
+      }, { headers: cors });
+    }
+
     if (!openingId) {
       return NextResponse.json({ ok: false, error: 'openingId is required' }, { status: 400, headers: cors });
     }
 
-    const db = adminDb();
     const openingSnap = await db.collection('openings').doc(openingId).get();
     if (!openingSnap.exists) {
-      return NextResponse.json({ ok: true, sent: 0 }, { headers: cors });
+      return preview
+        ? NextResponse.json({ ok: true, preview: true, count: 0, matches: [] }, { headers: cors })
+        : NextResponse.json({ ok: true, sent: 0 }, { headers: cors });
     }
     const opening = openingSnap.data() as Record<string, unknown>;
     if (opening.published !== true) {
-      return NextResponse.json({ ok: true, sent: 0 }, { headers: cors });
+      return preview
+        ? NextResponse.json({ ok: true, preview: true, count: 0, matches: [] }, { headers: cors })
+        : NextResponse.json({ ok: true, sent: 0 }, { headers: cors });
     }
 
-    // Dedup: never alert twice for the same opening.
-    if (opening.jobMatchAlertSentAt) {
+    // Dedup: never alert twice for the same opening. Preview ignores this so it
+    // still works after a real send has already fired.
+    if (!preview && opening.jobMatchAlertSentAt) {
       return NextResponse.json({ ok: true, sent: 0, skipped: 'already alerted' }, { headers: cors });
     }
 
@@ -163,36 +252,44 @@ export async function POST(req: Request) {
     const title = String(opening.title || 'a new role');
     const code = String(opening.code || openingId);
 
+    // Per-role switch: real sending only when the opening opted in.
+    const notifyEnabled = opening.notifyCandidatesOnPublish === true;
+
     // No skills on the opening → nothing to match against.
     if (openingSkills.size === 0) {
-      await openingSnap.ref.update({ jobMatchAlertSentAt: FieldValue.serverTimestamp() });
-      return NextResponse.json({ ok: true, sent: 0, matched: 0 }, { headers: cors });
+      if (preview) {
+        return NextResponse.json({ ok: true, preview: true, count: 0, matches: [] }, { headers: cors });
+      }
+      // Only mark dedup when the per-role toggle is on.
+      if (notifyEnabled) {
+        await openingSnap.ref.update({ jobMatchAlertSentAt: FieldValue.serverTimestamp() });
+        return NextResponse.json({ ok: true, sent: 0, matched: 0 }, { headers: cors });
+      }
+      return NextResponse.json({ ok: true, sent: 0, matched: 0, disabled: true }, { headers: cors });
     }
 
-    // Single-equality query (no composite index needed); filter the rest in memory.
-    const candSnap = await db.collection('candidates').where('marketingConsent', '==', true).get();
+    const matches = await matchCandidates(db, openingSkills);
 
-    const requiredShared = Math.max(MATCH_MIN_SHARED, Math.ceil(MATCH_MIN_RATIO * openingSkills.size));
+    // ── Preview mode: report matches, send nothing, mutate nothing. ──
+    if (preview) {
+      return NextResponse.json({
+        ok: true,
+        preview: true,
+        count: matches.length,
+        matches: matches.slice(0, PREVIEW_CAP).map((m) => ({
+          name: m.name,
+          email: m.email,
+          sharedSkills: m.sharedSkills,
+        })),
+      }, { headers: cors });
+    }
 
-    type Match = { email: string; firstName: string };
-    const matches: Match[] = [];
-    candSnap.docs.forEach((d) => {
-      const c = d.data() as Record<string, unknown>;
-      if (String(c.availability || '') !== 'open') return;
-      const email = String(c.email || '').trim();
-      if (!email) return;
-
-      const candSkills = normalizeSkills(c.skills);
-      let shared = 0;
-      for (const s of candSkills) if (openingSkills.has(s)) shared++;
-      if (shared < requiredShared) return;
-
-      const firstName =
-        String(c.firstName || '').trim() ||
-        String(c.name || '').trim().split(/\s+/)[0] ||
-        'there';
-      matches.push({ email, firstName });
-    });
+    // ── Per-role switch: matching ran, but this role hasn't opted in. ──
+    // Do NOT send and do NOT mark dedup, so a future publish (once the toggle
+    // is on) still fires for this opening.
+    if (!notifyEnabled) {
+      return NextResponse.json({ ok: true, sent: 0, matched: matches.length, disabled: true }, { headers: cors });
+    }
 
     const sendAt = nextBusinessSendTime(new Date(Date.now() + DELAY_HOURS * 3_600_000));
     const jobUrl = `https://jobs.nearwork.co/apply.html?code=${code}`;

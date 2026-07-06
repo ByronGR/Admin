@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { db, collection, getDocs, doc, setDoc, serverTimestamp } from '@/lib/firebase';
+import { auth, db, collection, getDocs, doc, setDoc, serverTimestamp } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { generateCode } from '@/lib/utils';
 import type { Organization } from '@/lib/types';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Radar } from 'lucide-react';
 
 export default function NewOpeningPage() {
   const router = useRouter();
@@ -17,8 +17,20 @@ export default function NewOpeningPage() {
 
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
-  const [form, setForm] = useState({ title: '', orgId: '', recruiter: '', recruiterEmail: '', priority: 'medium' });
+  const [form, setForm] = useState({
+    title: '',
+    orgId: '',
+    recruiter: '',
+    recruiterEmail: '',
+    priority: 'medium',
+    skills: '',
+    notifyCandidatesOnPublish: false,
+  });
   const [saving, setSaving] = useState(false);
+
+  // ── Live "reach" estimate as skills are typed ──
+  const [reachCount, setReachCount] = useState<number | null>(null);
+  const [reachLoading, setReachLoading] = useState(false);
 
   useEffect(() => {
     getDocs(collection(db, 'organizations'))
@@ -26,6 +38,37 @@ export default function NewOpeningPage() {
       .catch(() => showToast('Failed to load organizations', 'error'))
       .finally(() => setOrgsLoading(false));
   }, []);
+
+  useEffect(() => {
+    const skills = form.skills.split(',').map((s) => s.trim()).filter(Boolean);
+    if (skills.length === 0) {
+      setReachCount(null);
+      setReachLoading(false);
+      return;
+    }
+    // Only apply the latest request's result (guard against out-of-order responses).
+    let cancelled = false;
+    setReachLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error('Not signed in');
+        const res = await fetch('/api/job-match-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ skills, preview: true }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; count?: number };
+        if (cancelled) return;
+        if (res.ok && data.ok && typeof data.count === 'number') setReachCount(data.count);
+      } catch {
+        /* best-effort — never block the form */
+      } finally {
+        if (!cancelled) setReachLoading(false);
+      }
+    }, 700);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.skills]);
 
   async function handleCreate() {
     if (!form.title.trim() || !form.orgId) {
@@ -36,6 +79,7 @@ export default function NewOpeningPage() {
     const org = orgs.find((o) => o.id === form.orgId);
     try {
       const code = generateCode('NW');
+      const skills = form.skills.split(',').map((s) => s.trim()).filter(Boolean);
       await setDoc(doc(db, 'openings', code), {
         title: form.title.trim(),
         code,
@@ -44,6 +88,8 @@ export default function NewOpeningPage() {
         recruiter: form.recruiter,
         recruiterEmail: form.recruiterEmail,
         priority: form.priority,
+        skills,
+        notifyCandidatesOnPublish: form.notifyCandidatesOnPublish,
         status: 'draft',
         approvalStatus: 'draft',
         published: false,
@@ -156,6 +202,45 @@ export default function NewOpeningPage() {
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
+          </div>
+
+          {/* Skills */}
+          <div>
+            <label className="mb-1.5 block text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+              Key skills <span className="normal-case font-400">(comma-separated)</span>
+            </label>
+            <input
+              value={form.skills}
+              onChange={(e) => setForm((f) => ({ ...f, skills: e.target.value }))}
+              placeholder="React, TypeScript, Node.js, GraphQL"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+            />
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--light)]">
+              {reachLoading ? (
+                <><Spinner size="sm" /> counting…</>
+              ) : reachCount === null ? (
+                <>Add skills to preview reach</>
+              ) : (
+                <><Radar className="h-3 w-3" style={{ color: 'var(--green)' }} /> ~{reachCount} candidate{reachCount === 1 ? '' : 's'} match these skills</>
+              )}
+            </div>
+          </div>
+
+          {/* Notify candidates on publish */}
+          <div className="flex items-start gap-2">
+            <input
+              id="notifyCandidatesOnPublish"
+              type="checkbox"
+              checked={form.notifyCandidatesOnPublish}
+              onChange={(e) => setForm((f) => ({ ...f, notifyCandidatesOnPublish: e.target.checked }))}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+            />
+            <label htmlFor="notifyCandidatesOnPublish" className="text-xs text-[var(--mid)]">
+              Notify matching candidates when this role is published
+              <span className="mt-0.5 block text-[11px] text-[var(--light)]">
+                Off until the role is ready. When on, publishing emails candidates whose skills strongly match.
+              </span>
+            </label>
           </div>
         </div>
 

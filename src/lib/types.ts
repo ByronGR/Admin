@@ -254,6 +254,12 @@ export interface Opening {
   timezone?: string;                   // Timezone requirement
   tz?: string;                         // Timezone alias (legacy — Jobs site reads either)
 
+  // Per-role candidate job-match alert switch. When true, publishing this role
+  // emails available, opted-in candidates whose skills strongly match. Off by
+  // default — replaces the old global JOB_ALERT_ENABLED env flag.
+  notifyCandidatesOnPublish?: boolean;
+  jobMatchAlertSentAt?: Timestamp; // set once alerts have fired (dedup)
+
   // ─── Jobs projection (written on publish so jobs.nearwork.co can read it) ───
   published?: boolean;             // jobs.nearwork.co filters on published == true
   publishedAt?: Timestamp;

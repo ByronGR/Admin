@@ -23,6 +23,7 @@ const DELAY_MINUTES = Number(process.env.NOTIF_DIGEST_DELAY_MINUTES || 10);
 const CAP_MINUTES = 30;
 
 export interface DigestItem {
+  notifId: string;
   category: string;
   title: string;
   body?: string;
@@ -122,6 +123,65 @@ function deriveFirstName(firstName: string | undefined, email: string): string {
   return 'there';
 }
 
+// ── Render + schedule a digest email for a given item list. ──────────────────
+// Shared by enqueueDigestItem (append/reschedule) and reconcileDigestOnRead
+// (re-render the trimmed list at the SAME send time). Renders the template with
+// the full `items` list, POSTs a scheduled Resend email at `scheduledForISO`,
+// and returns the new resendId (or null on failure). Assumes RESEND_API_KEY is
+// present (callers guard). Best-effort within: a failed POST logs and returns
+// null so callers can still persist the trimmed items.
+async function scheduleDigestEmail(opts: {
+  key: string;
+  recipientEmail: string;
+  firstName: string;
+  isStaff: boolean;
+  items: DigestItem[];
+  scheduledForISO: string;
+}): Promise<string | null> {
+  const appUrl = opts.isStaff ? 'https://admin.nearwork.co' : 'https://app.nearwork.co';
+  const top = {
+    first_name: opts.firstName,
+    app_url: appUrl,
+    preferences_url: `${appUrl}/settings`,
+  };
+  const itemScopes = opts.items.map((it) => ({
+    item_category: it.category || '',
+    item_title: it.title || '',
+    item_body: it.body || '',
+    item_link: it.link || '',
+    item_time: 'Just now',
+    item_accent: accentFor(it.category || ''),
+  }));
+  const html = renderDigest(top, itemScopes);
+
+  const subject =
+    opts.items.length === 1
+      ? opts.items[0].title
+      : `You have ${opts.items.length} Nearwork updates`;
+
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
+  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.key}` },
+    body: JSON.stringify({
+      from,
+      to: [opts.recipientEmail],
+      subject,
+      html,
+      scheduled_at: opts.scheduledForISO,
+    }),
+  });
+  if (res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { id?: string };
+    return data?.id ?? null;
+  }
+  const err = await res.json().catch(() => ({}));
+  console.error('[notification-digest] Resend schedule failed:', err);
+  return null;
+}
+
 /**
  * Queue one item into the recipient's rolling notification digest. Called
  * (best-effort) whenever an in-app notification is written for a recipient who
@@ -173,9 +233,11 @@ export async function enqueueDigestItem(opts: {
       await cancelResendEmail(existing!.resendId);
     }
 
-    // ── Render the email with the FULL current item list. ──
+    // ── Render + schedule the email with the FULL current item list. ──
+    // (A failed schedule returns null; we still persist the accumulated items so
+    // the next call keeps the batch — without a resendId there's nothing to
+    // cancel next time.)
     const isStaff = opts.isStaff ?? recipientEmail.endsWith('@nearwork.co');
-    const appUrl = isStaff ? 'https://admin.nearwork.co' : 'https://app.nearwork.co';
     const firstName = deriveFirstName(
       // Prefer the firstName saved on the pending cycle if the current call
       // didn't supply one, so the batch stays consistent.
@@ -183,51 +245,14 @@ export async function enqueueDigestItem(opts: {
       recipientEmail,
     );
 
-    const top = {
-      first_name: firstName,
-      app_url: appUrl,
-      preferences_url: `${appUrl}/settings`,
-    };
-    const itemScopes = items.map((it) => ({
-      item_category: it.category || '',
-      item_title: it.title || '',
-      item_body: it.body || '',
-      item_link: it.link || '',
-      item_time: 'Just now',
-      item_accent: accentFor(it.category || ''),
-    }));
-    const html = renderDigest(top, itemScopes);
-
-    const subject =
-      items.length === 1
-        ? items[0].title
-        : `You have ${items.length} Nearwork updates`;
-
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-    const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
-
-    // ── Schedule the new Resend email. ──
-    let resendId: string | null = null;
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        from,
-        to: [recipientEmail],
-        subject,
-        html,
-        scheduled_at: scheduledForISO,
-      }),
+    const resendId = await scheduleDigestEmail({
+      key,
+      recipientEmail,
+      firstName,
+      isStaff,
+      items,
+      scheduledForISO,
     });
-    if (res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { id?: string };
-      resendId = data?.id ?? null;
-    } else {
-      const err = await res.json().catch(() => ({}));
-      console.error('[notification-digest] Resend schedule failed:', err);
-      // Still persist the accumulated items so the next call keeps the batch;
-      // without a resendId there's nothing to cancel next time.
-    }
 
     // ── Persist the new queue state. ──
     const doc: QueueDoc = {
@@ -243,5 +268,74 @@ export async function enqueueDigestItem(opts: {
   } catch (e) {
     // Best-effort: never throw into the notification writer.
     console.error('[notification-digest] enqueue failed:', e);
+  }
+}
+
+/**
+ * When a notification is marked read IN-APP before its digest email has sent,
+ * drop that item from the pending digest — and cancel the email entirely if
+ * nothing's left to send. Matched by the notification's Firestore doc id, which
+ * we carry through the digest queue on each item.
+ *
+ * Best-effort: everything is wrapped so it NEVER throws into the caller. A user
+ * can only reconcile their OWN queue (keyed by recipientUid).
+ */
+export async function reconcileDigestOnRead(
+  recipientUid: string,
+  notifId: string,
+): Promise<void> {
+  try {
+    if (!recipientUid || !notifId) return;
+
+    // Respect the missing-key guard (same as enqueue): nothing was ever
+    // scheduled, so there's nothing to reconcile.
+    const key = process.env.RESEND_API_KEY;
+    if (!key) return;
+
+    const db = adminDb();
+    const ref = db.collection('notificationDigestQueue').doc(recipientUid);
+    const snap = await ref.get();
+    if (!snap.exists) return; // 1) No pending digest.
+    const existing = snap.data() as QueueDoc;
+
+    // 2) Already sent (scheduled time is in the past) → nothing to reconcile.
+    const scheduledMs = Date.parse(existing.scheduledForISO);
+    if (!Number.isFinite(scheduledMs) || scheduledMs <= Date.now()) return;
+
+    // 3) Drop the read item. If nothing was removed, it wasn't pending.
+    const remaining = (existing.items || []).filter((it) => it.notifId !== notifId);
+    if (remaining.length === (existing.items || []).length) return;
+
+    // 4) Cancel the currently-scheduled email (if any).
+    if (existing.resendId) {
+      await cancelResendEmail(existing.resendId);
+    }
+
+    // 6) Nothing left → delete the queue doc so no email goes out.
+    if (remaining.length === 0) {
+      await ref.delete();
+      return;
+    }
+
+    // 5) Items remain → re-render + reschedule at the SAME send time (do NOT
+    // extend the window), then persist the trimmed list + new resendId.
+    const resendId = await scheduleDigestEmail({
+      key,
+      recipientEmail: existing.email,
+      firstName: deriveFirstName(existing.firstName, existing.email),
+      isStaff: existing.isStaff ?? existing.email.endsWith('@nearwork.co'),
+      items: remaining,
+      scheduledForISO: existing.scheduledForISO,
+    });
+
+    const doc: QueueDoc = {
+      ...existing,
+      items: remaining,
+      resendId,
+    };
+    await ref.set(doc);
+  } catch (e) {
+    // Best-effort: never throw into the caller.
+    console.error('[notification-digest] reconcile failed:', e);
   }
 }

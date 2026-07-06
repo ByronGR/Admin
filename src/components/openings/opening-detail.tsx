@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  auth,
   db,
   doc,
   getDoc,
@@ -240,6 +241,18 @@ export function OpeningDetail({
         updatedAt:      serverTimestamp(),
       });
       showToast('Published to jobs.nearwork.co', 'success');
+      // Best-effort: alert available, opted-in candidates whose skills strongly
+      // match. Non-blocking — never affects the publish UX.
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch('/api/job-match-alert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ openingId: opening.id }),
+          });
+        }
+      } catch { /* best-effort */ }
       await onRefresh();
     } catch {
       showToast('Failed to publish', 'error');

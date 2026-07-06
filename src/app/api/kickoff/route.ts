@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
+import { broadcastToFollowers } from '@/lib/notify-broadcast';
 
 // ─── POST /api/kickoff ────────────────────────────────────────────────────────
 // Server-side state machine for the kick-off brief shared between admin.nearwork.co
@@ -303,6 +304,22 @@ export async function POST(req: Request) {
         }
       } catch {
         // Non-critical — notifications can fail silently
+      }
+      // If this submit is a RE-submission after the client asked for changes,
+      // notify the role's followers that the brief was revised. A first-time
+      // submit already notifies via the kickoff notification above, so only
+      // fire on the changes_requested → submitted transition. Best-effort.
+      if (currentStatus === 'changes_requested') {
+        try {
+          await broadcastToFollowers({
+            broadcastType: 'brief_revised',
+            entityType: 'opening',
+            entityId: code,
+            orgId: briefOrgId || undefined,
+          });
+        } catch (e) {
+          console.error('[kickoff API] brief_revised broadcast failed:', e);
+        }
       }
       return json({ ok: true }, 200, origin);
     }

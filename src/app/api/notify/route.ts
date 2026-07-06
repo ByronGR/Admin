@@ -98,17 +98,26 @@ async function actorBelongsToOrg(uid: string, orgId: string): Promise<boolean> {
   return orgs.has(orgId);
 }
 
-// A recipient's preference for a notification type. Default: in-app on, email off
-// (everyone gets the bell; email is opt-in). "Off" = neither.
+// Types that are IN-APP ON by default (the important/actionable ones). Everything
+// else (assessmentReady, declined, newHire, weekly, pipelineActivity…) is OFF
+// until the user opts in. Email is always opt-in.
+const DEFAULT_ON = new Set<string>([
+  'newCandidate', 'stageMove', 'notes', 'requests', 'kickoff',
+  'clientRequests', 'clientNotes', 'kickoffDecisions',
+]);
+
+// A recipient's preference for a notification type. Missing = the type's default
+// (in-app for DEFAULT_ON types, off otherwise); email is always opt-in. "Off" = neither.
 async function prefFor(uid: string, key: string): Promise<{ app: boolean; email: boolean }> {
+  const defaultApp = DEFAULT_ON.has(key);
   try {
     const snap = await adminDb().collection('notificationPreferences').doc(uid).get();
     const prefs = (snap.exists ? (snap.data()?.preferences as Record<string, { app?: boolean; email?: boolean }>) : undefined) || {};
     const p = prefs[key];
-    if (!p) return { app: true, email: false };
-    return { app: p.app !== false, email: p.email === true };
+    if (!p) return { app: defaultApp, email: false };
+    return { app: p.app === true, email: p.email === true };
   } catch {
-    return { app: true, email: false };
+    return { app: defaultApp, email: false };
   }
 }
 
@@ -374,14 +383,15 @@ export async function POST(req: Request) {
       const stage = String(body.stage ?? '').trim();
       const noteExcerpt = String(body.noteExcerpt ?? '');
 
-      // prefKey by broadcastType (client-facing pref keys).
+      // prefKey by broadcastType — one granular client key per event so each can be
+      // toggled independently (some default off, per DEFAULT_ON).
       const prefKeyByType: Record<BroadcastType, string> = {
-        new_candidate: 'candidates',
-        stage_move: 'candidates',
-        assessment_ready: 'candidates',
-        candidate_declined: 'candidates',
+        new_candidate: 'newCandidate',
+        stage_move: 'stageMove',
+        assessment_ready: 'assessmentReady',
+        candidate_declined: 'declined',
         staff_note: 'notes',
-        new_hire: 'team',
+        new_hire: 'newHire',
         brief_revised: 'kickoff',
       };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
-import { enqueueDigestItem } from '@/lib/notification-digest';
+import { enqueueDigestItem, reconcileDigestOnRead } from '@/lib/notification-digest';
 
 // ─── POST /api/notify ─────────────────────────────────────────────────────────
 // The ONE notification writer. Both the client App (app.nearwork.co) and Admin
@@ -46,7 +46,7 @@ export function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) });
 }
 
-type NotifyEvent = 'client_request' | 'client_note' | 'request_resolved' | 'broadcast';
+type NotifyEvent = 'client_request' | 'client_note' | 'request_resolved' | 'broadcast' | 'notification_read';
 type RequestType = 'advance' | 'hire' | 'reject' | 'interview';
 type BroadcastType =
   | 'new_candidate'
@@ -75,6 +75,8 @@ interface Body {
   entityType?: string;   // e.g. 'opening'
   entityId?: string;     // e.g. the opening/pipeline code
   stage?: string;        // client-facing stage label (for stage_move)
+  // notification_read fields
+  notifId?: string;      // the notifications/{id} doc marked read in-app
 }
 
 function json(data: unknown, status: number, origin: string | null) {
@@ -129,7 +131,7 @@ async function writeNotification(opts: {
   const pref = await prefFor(opts.recipientUid, opts.prefKey);
   if (!pref.app && !pref.email) return { written: false, email: false };
   const db = adminDb();
-  await db.collection('notifications').add({
+  const ref = await db.collection('notifications').add({
     userId: opts.recipientUid,        // Admin bell reads this
     recipientUid: opts.recipientUid,  // client portal reads this
     recipientEmail: opts.recipientEmail || '',
@@ -169,6 +171,7 @@ async function writeNotification(opts: {
       firstName,
       isStaff: recipientEmail.endsWith('@nearwork.co'),
       item: {
+        notifId: ref.id,
         category: opts.category,
         title: opts.title,
         body: opts.body,
@@ -466,6 +469,22 @@ export async function POST(req: Request) {
       }
 
       return json({ ok: true, created }, 200, origin);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4) notification_read — a user marked a notification read IN-APP. If its
+    //    digest email hasn't sent yet, drop it from the pending digest (and
+    //    cancel the email entirely if nothing's left).
+    // ─────────────────────────────────────────────────────────────────────────
+    if (event === 'notification_read') {
+      const notifId = String(body.notifId ?? '').trim();
+      if (!notifId) return json({ ok: false, error: 'notifId is required' }, 400, origin);
+
+      // A user can only reconcile their OWN digest, so the recipientUid IS the
+      // authenticated actor. No further authorization needed.
+      await reconcileDigestOnRead(actor.uid, notifId);
+
+      return json({ ok: true }, 200, origin);
     }
 
     return json({ ok: false, error: `Unknown event: ${event}` }, 400, origin);

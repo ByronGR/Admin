@@ -16,6 +16,7 @@ import {
   serverTimestamp,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
+import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
@@ -156,6 +157,7 @@ export function OpeningDetail({
     hideLocation:   opening.hideLocation  ?? false,
     hideBenefits:   opening.hideBenefits  ?? false,
     location:       opening.location      ?? '',
+    notifyCandidatesOnPublish: opening.notifyCandidatesOnPublish ?? false,
   });
 
   // ── Opening sheet state ──
@@ -177,6 +179,78 @@ export function OpeningDetail({
   });
   const [sheetSaving, setSheetSaving] = useState(false);
   const [approvalSaving, setApprovalSaving] = useState(false);
+
+  // ── Job-match preview (see who would be alerted, without sending) ──
+  type PreviewMatch = { name: string; email: string; sharedSkills: string[] };
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewMatches, setPreviewMatches] = useState<PreviewMatch[]>([]);
+  const [previewCount, setPreviewCount] = useState(0);
+
+  // ── Live "reach" estimate as skills are typed in the sheet ──
+  const [reachCount, setReachCount] = useState<number | null>(null);
+  const [reachLoading, setReachLoading] = useState(false);
+  useEffect(() => {
+    const skills = sheet.skills.split(',').map((s) => s.trim()).filter(Boolean);
+    if (skills.length === 0) {
+      setReachCount(null);
+      setReachLoading(false);
+      return;
+    }
+    // Only apply the latest request's result (guard against out-of-order responses).
+    let cancelled = false;
+    setReachLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error('Not signed in');
+        const res = await fetch('/api/job-match-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ skills, preview: true }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; count?: number };
+        if (cancelled) return;
+        if (res.ok && data.ok && typeof data.count === 'number') setReachCount(data.count);
+      } catch {
+        /* best-effort — never block the form */
+      } finally {
+        if (!cancelled) setReachLoading(false);
+      }
+    }, 700);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [sheet.skills]);
+
+  async function previewJobMatches() {
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewMatches([]);
+    setPreviewCount(0);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch('/api/job-match-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ openingId: opening.id, preview: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        count?: number;
+        matches?: PreviewMatch[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Preview failed');
+      setPreviewMatches(Array.isArray(data.matches) ? data.matches : []);
+      setPreviewCount(typeof data.count === 'number' ? data.count : 0);
+    } catch (e) {
+      setPreviewError((e as Error)?.message || 'Could not load matches');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   function buildSheetFields() {
     const skills   = sheet.skills.split(',').map((s) => s.trim()).filter(Boolean);
@@ -320,6 +394,7 @@ export function OpeningDetail({
         hideSalary:     editForm.hideSalary,
         hideLocation:   editForm.hideLocation,
         hideBenefits:   editForm.hideBenefits,
+        notifyCandidatesOnPublish: editForm.notifyCandidatesOnPublish,
         ...(goneFromJobs && opening.published ? { published: false } : {}),
         updatedAt: serverTimestamp(),
       });
@@ -728,6 +803,17 @@ export function OpeningDetail({
 
         {/* Action buttons inline */}
         <div className="ml-auto flex items-center gap-2">
+          {(approvalStatus === 'approved' || approvalStatus === 'published') && (
+            <button
+              onClick={previewJobMatches}
+              disabled={previewLoading}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-500 text-[var(--mid)] hover:border-[var(--green)] hover:text-[var(--green)] disabled:opacity-60"
+              title="See which candidates would be alerted — nothing is sent"
+            >
+              {previewLoading ? <Spinner size="sm" /> : <Radar className="h-3.5 w-3.5" />}
+              Preview job-match candidates
+            </button>
+          )}
           {approvalStatus === 'draft' && briefDone && (
             <button
               onClick={async () => {
@@ -949,6 +1035,21 @@ export function OpeningDetail({
                 Hide benefits &amp; perks section on jobs.nearwork.co
               </label>
             </div>
+            <div className="sm:col-span-2 flex items-start gap-2">
+              <input
+                id="notifyCandidatesOnPublish"
+                type="checkbox"
+                checked={editForm.notifyCandidatesOnPublish}
+                onChange={(e) => setEditForm((f) => ({ ...f, notifyCandidatesOnPublish: e.target.checked }))}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+              />
+              <label htmlFor="notifyCandidatesOnPublish" className="text-xs text-[var(--mid)]">
+                Notify matching candidates when this role is published
+                <span className="mt-0.5 block text-[11px] text-[var(--light)]">
+                  Off until the role is ready. When on, publishing emails candidates whose skills strongly match.
+                </span>
+              </label>
+            </div>
             <div>
               <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Recruiter</label>
               <StaffPicker compact value={editForm.recruiter} onChange={(name) => setEditForm((f) => ({ ...f, recruiter: name }))} onPick={(opt) => setEditForm((f) => ({ ...f, recruiterEmail: opt?.email ?? '' }))} placeholder="Search team" />
@@ -1121,6 +1222,15 @@ export function OpeningDetail({
                   placeholder="React, TypeScript, Node.js, GraphQL"
                   className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
                 />
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--light)]">
+                  {reachLoading ? (
+                    <><Spinner size="sm" /> counting…</>
+                  ) : reachCount === null ? (
+                    <>Add skills to preview reach</>
+                  ) : (
+                    <><Radar className="h-3 w-3" style={{ color: NW.teal600 }} /> ~{reachCount} candidate{reachCount === 1 ? '' : 's'} match these skills</>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">Industry</label>
@@ -1174,6 +1284,67 @@ export function OpeningDetail({
       </div>
     </div>
       )}
+
+      {/* ── Job-match preview modal (who would be alerted; nothing sent) ── */}
+      <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title="Job-match preview" size="lg">
+        {previewLoading ? (
+          <div className="flex items-center gap-2 py-8 text-sm text-[var(--light)]">
+            <Spinner size="sm" /> Finding matching candidates…
+          </div>
+        ) : previewError ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {previewError}
+          </div>
+        ) : previewCount === 0 ? (
+          <div className="py-6 text-center">
+            <Radar className="mx-auto mb-3 h-6 w-6 text-[var(--light)]" />
+            <p className="text-sm font-600 text-[var(--black)]">No candidates match this role&apos;s skills yet.</p>
+            <p className="mt-1 text-xs text-[var(--light)]">
+              Alerts go to available, opted-in candidates who strongly match the opening&apos;s skills.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: NW.teal50, color: NW.teal600 }}>
+                <Mail className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-700 text-[var(--black)]">
+                  {previewCount} candidate{previewCount === 1 ? '' : 's'} would be alerted
+                </p>
+                <p className="text-xs text-[var(--light)]">
+                  Preview only — no emails have been sent.
+                  {previewMatches.length < previewCount && ` Showing the first ${previewMatches.length}.`}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col divide-y divide-[var(--border)]">
+              {previewMatches.map((m, i) => (
+                <div key={`${m.email}-${i}`} className="flex items-start justify-between gap-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-600 text-[var(--black)]">{m.name}</div>
+                    <div className="truncate text-xs text-[var(--light)]">{m.email}</div>
+                    {m.sharedSkills.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {m.sharedSkills.map((s) => (
+                          <span
+                            key={s}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-600"
+                            style={{ background: NW.teal50, color: NW.teal700 }}
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.20.0] — 2026-07-05
+
+### Added
+- Job-match alerts: OFF by default + preview matches before sending.
+
+---
+
 ## [1.15.0] — 2026-07-05
 
 ### Added

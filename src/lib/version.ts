@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.16.0';
+export const APP_VERSION = '1.17.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.17.0',
+    date: '2026-07-05',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Per-type notification defaults (important types on, common/noisy ones off).',
+          'Broadcast declined + new-hire notifications; stage-move wording aligned to the 6 client stages.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.16.0',
     date: '2026-07-05',

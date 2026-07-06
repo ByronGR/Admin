@@ -24,6 +24,15 @@ const TYPES: { key: string; label: string; desc: string }[] = [
 ];
 
 const DEFAULT_PREF: Pref = { app: true, email: false };
+const PREF_OFF: Pref = { app: false, email: false };
+
+// Staff defaults: these keys default to In-app when unset. Everything else
+// (e.g. pipelineActivity / Followed pipelines) defaults to Off.
+const DEFAULT_ON = new Set(['clientRequests', 'clientNotes', 'kickoffDecisions']);
+
+function defaultFor(key: string): Pref {
+  return DEFAULT_ON.has(key) ? { ...DEFAULT_PREF } : { ...PREF_OFF };
+}
 
 function prefToMode(p: Pref): Mode {
   if (!p.app && !p.email) return 'off';
@@ -82,7 +91,7 @@ export function NotificationPreferences() {
   const uid = profile?.id ?? auth.currentUser?.uid ?? null;
 
   const [prefs, setPrefs] = useState<Record<string, Pref>>(() =>
-    Object.fromEntries(TYPES.map((t) => [t.key, { ...DEFAULT_PREF }]))
+    Object.fromEntries(TYPES.map((t) => [t.key, defaultFor(t.key)]))
   );
   const [loading, setLoading] = useState(true);
 
@@ -101,7 +110,7 @@ export function NotificationPreferences() {
           Object.fromEntries(
             TYPES.map((t) => {
               const s = stored[t.key];
-              return [t.key, s && typeof s.app === 'boolean' && typeof s.email === 'boolean' ? { app: s.app, email: s.email } : { ...DEFAULT_PREF }];
+              return [t.key, s && typeof s.app === 'boolean' && typeof s.email === 'boolean' ? { app: s.app, email: s.email } : defaultFor(t.key)];
             })
           )
         );

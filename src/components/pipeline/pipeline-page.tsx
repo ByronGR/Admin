@@ -117,11 +117,11 @@ const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
 const CLIENT_STAGE_LABEL: Record<StageKey, string> = {
   'applied': 'Applied',
   'background-check': 'Screening',
-  'interview': 'Interview',
-  'assessment': 'Assessment',
-  'partner-review': 'Your review',
-  'partner-interview': 'Your interview',
-  'hired': 'Hired',
+  'interview': 'Technical',
+  'assessment': 'Technical',
+  'partner-review': 'Final round',
+  'partner-interview': 'Final round',
+  'hired': 'Offer',
   'not-selected': 'Not selected',
 };
 
@@ -480,6 +480,17 @@ export default function PipelinePage() {
         candidateName: movedEntry?.name,
         candidateCode: movedEntry?.candidateCode ?? candidateCode,
         stage: CLIENT_STAGE_LABEL[toStage],
+      });
+    } else if (toStage === 'not-selected') {
+      // A decline notifies followers too — no stage on the payload.
+      broadcastNotify({
+        event: 'broadcast',
+        broadcastType: 'candidate_declined',
+        entityType: 'opening',
+        entityId: pipeline.code,
+        orgId: pipeline.orgId,
+        candidateName: movedEntry?.name,
+        candidateCode: movedEntry?.candidateCode ?? candidateCode,
       });
     }
     showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');

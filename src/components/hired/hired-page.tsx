@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  auth,
   db,
   collection,
   getDocs,
@@ -21,6 +22,21 @@ import { ENGAGEMENT_LABELS } from '@/lib/types';
 import { Search, X } from 'lucide-react';
 import { NW, MONO, Icon, Avatar, CompanyTile, Button } from '@/components/nw/primitives';
 import { PageHeader, Card, SegTabs, Table, Th, Td, TableRow, StatusBadge } from '@/components/nw/shell-ui';
+
+// Fire a follower broadcast to /api/notify (best-effort — never blocks the save).
+async function broadcastNotify(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    /* never block the placement save */
+  }
+}
 
 const AVA_PALETTE = ['#16A085', '#E74C7C', '#AF7AC5', '#3B82F6', '#12866E', '#EAB308', '#EC5290'];
 function colorFor(seed: string): string {
@@ -179,6 +195,19 @@ export default function HiredPage() {
         status: 'active', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
       showToast(`Placement recorded · ID ${form.candidateId}`, 'success');
+      // Notify the role's followers of the new hire. The opening/pipeline code
+      // lives on form.pipelineCode — skip gracefully if it wasn't entered.
+      if (form.pipelineCode) {
+        broadcastNotify({
+          event: 'broadcast',
+          broadcastType: 'new_hire',
+          entityType: 'opening',
+          entityId: form.pipelineCode,
+          orgId: form.orgId,
+          candidateName: form.candidateName,
+          candidateCode: form.candidateId,
+        });
+      }
       setNewModal(false);
       setForm((f) => ({ ...f, candidateId: '', candidateName: '', candidateEmail: '' }));
       load();

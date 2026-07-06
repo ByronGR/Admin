@@ -11,9 +11,33 @@ import {
   onSnapshot, query, where, orderBy, limit, doc, updateDoc,
 } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { initials, fmtRelative } from '@/lib/utils';
+import { initials, fmtRelative, fmtDate, fmtTime } from '@/lib/utils';
 import type { Notification as AppNotification } from '@/lib/types';
 import { NW, Icon, MONO } from '@/components/nw/primitives';
+
+// ─── Read-suppression ─────────────────────────────────────────────────────────
+// Marking a notification read in-app should also suppress it from the pending
+// email digest. Best-effort, non-blocking: never let this fail the UI.
+async function suppressDigest(notifId: string) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (token) {
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ event: 'notification_read', notifId }),
+      });
+    }
+  } catch { /* best-effort */ }
+}
+
+// Exact date-time, e.g. "Sat, Jul 5, 2026 at 2:34 PM".
+function fmtExact(val: Parameters<typeof fmtDate>[0]): string {
+  if (!val) return '';
+  const date = fmtDate(val, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const time = fmtTime(val);
+  return `${date} at ${time}`;
+}
 
 // ─── Global search ────────────────────────────────────────────────────────────
 
@@ -223,8 +247,10 @@ export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onM
   const [menuOpen, setMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [detail, setDetail] = useState<AppNotification | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const displayName = profile?.name ?? user?.displayName ?? user?.email?.split('@')[0] ?? 'Admin';
 
@@ -255,9 +281,17 @@ export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onM
 
   async function dismissNotification(id: string) {
     try { await updateDoc(doc(db, 'notifications', id), { read: true }); } catch {/* */}
+    suppressDigest(id);
   }
   async function dismissAll() {
     await Promise.allSettled(notifications.map((n) => updateDoc(doc(db, 'notifications', n.id), { read: true })));
+    notifications.forEach((n) => suppressDigest(n.id));
+  }
+  // Open the detail modal + mark read (which also suppresses the digest).
+  function openDetail(n: AppNotification) {
+    setDetail(n);
+    setBellOpen(false);
+    dismissNotification(n.id);
   }
   async function handleSignOut() {
     await signOut(auth);
@@ -317,15 +351,11 @@ export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onM
                 <div style={{ maxHeight: 320, overflowY: 'auto' }}>
                   {notifications.map((n) => (
                     <div key={n.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderBottom: `1px solid ${NW.gray100}` }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {n.link ? (
-                          <a href={n.link} onClick={() => { dismissNotification(n.id); setBellOpen(false); }} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: NW.black, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</a>
-                        ) : (
-                          <p style={{ fontSize: 12, fontWeight: 600, color: NW.black, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</p>
-                        )}
-                        {n.body && <p style={{ marginTop: 2, fontSize: 10.5, color: NW.gray500 }}>{n.body}</p>}
-                        {n.createdAt && <p style={{ marginTop: 2, fontSize: 9.5, color: NW.gray400 }}>{fmtRelative(n.createdAt as Parameters<typeof fmtRelative>[0])}</p>}
-                      </div>
+                      <button onClick={() => openDetail(n)} style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+                        <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: NW.black, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
+                        {n.body && <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: NW.gray500 }}>{n.body}</span>}
+                        {n.createdAt && <span style={{ display: 'block', marginTop: 2, fontSize: 9.5, color: NW.gray400 }}>{fmtRelative(n.createdAt as Parameters<typeof fmtRelative>[0])}</span>}
+                      </button>
                       <button onClick={() => dismissNotification(n.id)} title="Dismiss" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: NW.gray400, padding: 2, display: 'flex' }}>
                         <Icon name="x" size={13} />
                       </button>
@@ -367,6 +397,68 @@ export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onM
           )}
         </div>
       </div>
+
+      {detail && (
+        <NotificationDetailModal
+          n={detail}
+          onClose={() => setDetail(null)}
+          onView={(link) => { setDetail(null); router.push(link); }}
+        />
+      )}
     </header>
+  );
+}
+
+// ─── Notification detail modal ─────────────────────────────────────────────────
+// Lightweight fixed-overlay modal in the NW inline-style system (matches the
+// surrounding top-bar UI rather than the Tailwind-based ui/Modal).
+function NotificationDetailModal({
+  n,
+  onClose,
+  onView,
+}: {
+  n: AppNotification;
+  onClose: () => void;
+  onView: (link: string) => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'relative', width: '100%', maxWidth: 420, background: NW.white, borderRadius: 16, border: `1px solid ${NW.gray100}`, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', overflow: 'hidden' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '18px 20px', borderBottom: `1px solid ${NW.gray100}` }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: NW.black, lineHeight: 1.35 }}>{n.title}</h2>
+          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: NW.gray400, padding: 4, display: 'flex', flexShrink: 0 }}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div style={{ padding: '18px 20px' }}>
+          {n.body && <p style={{ fontSize: 13.5, color: NW.gray700, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{n.body}</p>}
+          {n.createdAt && (
+            <p style={{ marginTop: n.body ? 14 : 0, fontSize: 12, color: NW.gray400 }}>
+              {fmtExact(n.createdAt as Parameters<typeof fmtExact>[0])}
+            </p>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, padding: '14px 20px', borderTop: `1px solid ${NW.gray100}` }}>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '8px 16px', cursor: 'pointer' }}>Close</button>
+          {n.link && (
+            <button onClick={() => onView(n.link!)} style={{ fontSize: 13, fontWeight: 600, color: NW.white, background: NW.teal500, border: '1px solid transparent', borderRadius: 999, padding: '8px 16px', cursor: 'pointer' }}>View</button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

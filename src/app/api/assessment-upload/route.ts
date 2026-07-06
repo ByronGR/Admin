@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
 import { parseAssessment, parseDisc } from '@/lib/assessment-parser';
+import { broadcastToFollowers } from '@/lib/notify-broadcast';
 
 // ── POST /api/assessment-upload ───────────────────────────────────────────────
 // Staff upload a candidate's assessment/English PDF or DISC PDF. The file is
@@ -140,6 +141,29 @@ export async function POST(req: Request) {
     { nearworkScore: nw, status: completed ? 'completed' : 'partial', completedAt: FieldValue.serverTimestamp() },
     { merge: true },
   );
+
+  // Notify the role's followers that an assessment is ready (best-effort — a
+  // failure here must never fail the upload). Only when the assessment is
+  // complete (a score exists), not on a partial DISC-only upload.
+  if (completed) {
+    try {
+      let candidateName = '';
+      try {
+        const candSnap = await db.collection('candidates').doc(candidateId).get();
+        if (candSnap.exists) candidateName = String(candSnap.data()?.name ?? '').trim();
+      } catch { /* best effort */ }
+      await broadcastToFollowers({
+        broadcastType: 'assessment_ready',
+        entityType: 'opening',
+        entityId: pipelineCode,
+        orgId: orgId ?? undefined,
+        candidateName: candidateName || undefined,
+        candidateCode: candidateId,
+      });
+    } catch (e) {
+      console.error('[assessment-upload] assessment_ready broadcast failed:', e);
+    }
+  }
 
   return NextResponse.json({ success: true, kind, nearworkScore: nw, status: completed ? 'completed' : 'partial' });
 }

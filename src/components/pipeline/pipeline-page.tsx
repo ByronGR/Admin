@@ -712,6 +712,19 @@ export default function PipelinePage() {
         roleTitle: pipeline.title,
         orgName: pipeline.orgName,
       });
+      // Notify the role's followers that a new candidate was added (best-effort).
+      try {
+        broadcastNotify({
+          event: 'broadcast',
+          broadcastType: 'new_candidate',
+          entityType: 'opening',
+          entityId: pipeline.code,
+          candidateName: candidate.name,
+          candidateCode: candidate.id,
+        });
+      } catch {
+        /* never block the add */
+      }
       showToast(`${candidate.name} added to pipeline`, 'success');
       setAddModal({ open: false, pipelineCode: '', stage: '' });
       setCandidateSearch('');

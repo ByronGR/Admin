@@ -10,6 +10,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   db,
+  auth,
   collection,
   getDocs,
   query,
@@ -23,7 +24,31 @@ import {
 } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtRelative, initials } from '@/lib/utils';
+import { fmtRelative, fmtDate, fmtTime, initials } from '@/lib/utils';
+
+// ─── Read-suppression ─────────────────────────────────────────────────────────
+// Marking a notification read in-app should also suppress it from the pending
+// email digest. Best-effort, non-blocking.
+async function suppressDigest(notifId: string) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (token) {
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ event: 'notification_read', notifId }),
+      });
+    }
+  } catch { /* best-effort */ }
+}
+
+// Exact date-time, e.g. "Sat, Jul 5, 2026 at 2:34 PM".
+function fmtExact(val: Parameters<typeof fmtDate>[0]): string {
+  if (!val) return '';
+  const date = fmtDate(val, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const time = fmtTime(val);
+  return `${date} at ${time}`;
+}
 import {
   PIPELINE_STAGE_LABELS,
   type PipelineStage,
@@ -110,7 +135,7 @@ const ATT_TONE: Record<string, { fg: string; bg: string; icon: IconName }> = {
   system: { fg: '#1D4ED8', bg: NW.blue50, icon: 'info' },
 };
 
-function AttentionRow({ n, onView }: { n: AppNotification; onView: () => void }) {
+function AttentionRow({ n, onOpen }: { n: AppNotification; onOpen: () => void }) {
   const t = ATT_TONE[n.type] || ATT_TONE.system;
   const [hov, setHov] = useState(false);
   return (
@@ -118,31 +143,84 @@ function AttentionRow({ n, onView }: { n: AppNotification; onView: () => void })
       <span style={{ width: 36, height: 36, borderRadius: 9, background: t.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <Icon name={t.icon} size={17} color={t.fg} />
       </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, color: NW.black, lineHeight: 1.35 }}>{n.title}</div>
-        {n.body && <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>{n.body}</div>}
+      <button
+        onClick={onOpen}
+        style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+      >
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500, color: NW.black, lineHeight: 1.35 }}>{n.title}</span>
+        {n.body && <span style={{ display: 'block', fontSize: 12, color: NW.gray500, marginTop: 2 }}>{n.body}</span>}
+      </button>
+      <button
+        onClick={onOpen}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          fontSize: 12.5,
+          fontWeight: 600,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          color: hov ? NW.white : NW.gray700,
+          background: hov ? NW.teal500 : NW.white,
+          border: `1px solid ${hov ? 'transparent' : NW.gray200}`,
+          borderRadius: 999,
+          padding: '6px 14px',
+          transition: 'all 130ms',
+        }}
+      >
+        View
+      </button>
+    </div>
+  );
+}
+
+// ─── Notification detail modal ─────────────────────────────────────────────────
+function NotificationDetailModal({
+  n,
+  onClose,
+  onView,
+}: {
+  n: AppNotification;
+  onClose: () => void;
+  onView: (link: string) => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'relative', width: '100%', maxWidth: 420, background: NW.white, borderRadius: 16, border: `1px solid ${NW.gray100}`, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', overflow: 'hidden' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '18px 20px', borderBottom: `1px solid ${NW.gray100}` }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: NW.black, lineHeight: 1.35 }}>{n.title}</h2>
+          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: NW.gray400, padding: 4, display: 'flex', flexShrink: 0 }}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div style={{ padding: '18px 20px' }}>
+          {n.body && <p style={{ fontSize: 13.5, color: NW.gray700, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{n.body}</p>}
+          {n.createdAt && (
+            <p style={{ marginTop: n.body ? 14 : 0, fontSize: 12, color: NW.gray400 }}>
+              {fmtExact(n.createdAt as Parameters<typeof fmtExact>[0])}
+            </p>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, padding: '14px 20px', borderTop: `1px solid ${NW.gray100}` }}>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '8px 16px', cursor: 'pointer' }}>Close</button>
+          {n.link && (
+            <button onClick={() => onView(n.link!)} style={{ fontSize: 13, fontWeight: 600, color: NW.white, background: NW.teal500, border: '1px solid transparent', borderRadius: 999, padding: '8px 16px', cursor: 'pointer' }}>View</button>
+          )}
+        </div>
       </div>
-      {n.link && (
-        <button
-          onClick={onView}
-          onMouseEnter={() => setHov(true)}
-          onMouseLeave={() => setHov(false)}
-          style={{
-            fontSize: 12.5,
-            fontWeight: 600,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            color: hov ? NW.white : NW.gray700,
-            background: hov ? NW.teal500 : NW.white,
-            border: `1px solid ${hov ? 'transparent' : NW.gray200}`,
-            borderRadius: 999,
-            padding: '6px 14px',
-            transition: 'all 130ms',
-          }}
-        >
-          View
-        </button>
-      )}
     </div>
   );
 }
@@ -237,6 +315,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [detail, setDetail] = useState<AppNotification | null>(null);
   const [stats, setStats] = useState<DashStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [bandwidth, setBandwidth] = useState<BandwidthItem[]>([]);
@@ -371,9 +450,11 @@ export default function DashboardPage() {
     }
   }
 
-  async function viewNotification(n: AppNotification) {
+  // Mark read (also suppresses the pending digest) and open the detail modal.
+  async function openDetail(n: AppNotification) {
+    setDetail(n);
     try { await updateDoc(doc(db, 'notifications', n.id), { read: true }); } catch {/* */}
-    if (n.link) router.push(n.link);
+    suppressDigest(n.id);
   }
 
   const firstName = profile?.firstName ?? profile?.name?.split(' ')[0] ?? 'there';
@@ -421,7 +502,7 @@ export default function DashboardPage() {
           ) : (
             <div>
               {notifications.map((n) => (
-                <AttentionRow key={n.id} n={n} onView={() => viewNotification(n)} />
+                <AttentionRow key={n.id} n={n} onOpen={() => openDetail(n)} />
               ))}
             </div>
           )}
@@ -504,6 +585,14 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {detail && (
+        <NotificationDetailModal
+          n={detail}
+          onClose={() => setDetail(null)}
+          onView={(link) => { setDetail(null); router.push(link); }}
+        />
+      )}
     </MainLayout>
   );
 }

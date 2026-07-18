@@ -8,6 +8,10 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   isNearworkEmail,
+  signInWithMicrosoft,
+  MicrosoftNeedsLinkError,
+  hasPendingMicrosoftLink,
+  linkPendingMicrosoft,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -24,6 +28,11 @@ function LoginForm() {
   const [resetSent, setResetSent] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [msLoading, setMsLoading] = useState(false);
+  // Password sign-in stays available as a fallback while Microsoft is being
+  // rolled out, so a misconfiguration can't lock the team out. Remove it once
+  // Microsoft is confirmed working for everyone.
+  const [showPassword, setShowPasswordLogin] = useState(false);
 
   // If already authed, redirect
   useEffect(() => {
@@ -45,6 +54,37 @@ function LoginForm() {
     }
   }, [searchParams]);
 
+  async function handleMicrosoft() {
+    setError('');
+    setMsLoading(true);
+    try {
+      await signInWithMicrosoft();
+      router.replace('/dashboard');
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      const msg = (err as { message?: string })?.message;
+      if (err instanceof MicrosoftNeedsLinkError) {
+        // First Microsoft sign-in for an account that already has a password.
+        // Confirm with the password once and we attach Microsoft to it.
+        setEmail(err.emailToLink);
+        setShowPasswordLogin(true);
+        setError('One-time step: enter your current Admin password to connect Microsoft to your account. Next time, the Microsoft button is all you need.');
+      } else if (msg === 'not_nearwork') {
+        setError('That Microsoft account isn’t a @nearwork.co address.');
+      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setError('');
+      } else if (code === 'auth/popup-blocked') {
+        setError('Your browser blocked the sign-in window. Allow pop-ups for this site and try again.');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Microsoft sign-in isn’t switched on yet in Firebase. Ask an admin to enable it.');
+      } else {
+        setError('Microsoft sign-in failed. Please try again.');
+      }
+    } finally {
+      setMsLoading(false);
+    }
+  }
+
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setError('');
@@ -54,7 +94,12 @@ function LoginForm() {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      // If they arrived here from the Microsoft button, attach that identity to
+      // this account now so the password isn't needed again.
+      if (hasPendingMicrosoftLink()) {
+        await linkPendingMicrosoft(cred.user);
+      }
       router.replace('/dashboard');
     } catch (err: unknown) {
       const msg = (err as { code?: string })?.code;
@@ -120,6 +165,47 @@ function LoginForm() {
                 </div>
               )}
 
+              {/* Primary: Microsoft. Uses the Nearwork work account, so there's
+                  no separate Admin password to manage or reset. */}
+              <button
+                type="button"
+                onClick={handleMicrosoft}
+                disabled={msLoading}
+                className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-[var(--border)] bg-white py-2.5 text-sm font-600 text-[var(--black)] transition-colors hover:bg-[var(--bg)] disabled:opacity-60"
+              >
+                {msLoading ? (
+                  <Spinner size="sm" />
+                ) : (
+                  <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
+                    <path fill="#f25022" d="M1 1h10v10H1z" />
+                    <path fill="#7fba00" d="M12 1h10v10H12z" />
+                    <path fill="#00a4ef" d="M1 12h10v10H1z" />
+                    <path fill="#ffb900" d="M12 12h10v10H12z" />
+                  </svg>
+                )}
+                {msLoading ? 'Opening Microsoft…' : 'Sign in with Microsoft'}
+              </button>
+
+              <p className="mt-3 text-center text-[11px] text-[var(--light)]">
+                Use your Nearwork work account
+              </p>
+
+              {!showPassword ? (
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordLogin(true)}
+                  className="mt-5 block w-full text-center text-xs text-[var(--light)] hover:text-[var(--green)]"
+                >
+                  Sign in with a password instead
+                </button>
+              ) : (
+              <>
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-[var(--border)]" />
+                <span className="text-[10px] font-600 uppercase tracking-wider text-[var(--light)]">or</span>
+                <span className="h-px flex-1 bg-[var(--border)]" />
+              </div>
+
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-xs font-500 text-[var(--mid)]">
@@ -168,6 +254,8 @@ function LoginForm() {
               >
                 Forgot password?
               </button>
+              </>
+              )}
             </>
           ) : (
             <>

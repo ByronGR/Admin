@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.21.0';
+export const APP_VERSION = '1.22.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.22.0',
+    date: '2026-07-06',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Sign in with Microsoft — use your Nearwork work account instead of a separate Admin password.',
+          'Sign-in is pinned to the Nearwork Microsoft directory, so only @nearwork.co work accounts can get in.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Microsoft added as a Firebase Auth provider (not a separate auth system) so Firestore rules keep working off the same uid.',
+          'Password sign-in kept behind a link as a temporary fallback; remove once Microsoft is confirmed for everyone.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.21.0',
     date: '2026-07-05',

@@ -30,7 +30,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  OAuthProvider,
+  signInWithPopup,
+  linkWithCredential,
   type User,
+  type UserCredential,
+  type OAuthCredential,
 } from 'firebase/auth';
 import {
   getStorage,
@@ -66,6 +71,90 @@ const STAFF_ROLES: StaffRole[] = [
 // user's Firestore profile — set once via the Firebase console or Admin UI.
 // No email addresses are hardcoded here to keep them out of the source bundle.
 export const HARD_CODED_SUPER_ADMINS: string[] = [];
+
+// ─── Microsoft (Entra) sign-in ────────────────────────────────────────────────
+// Firebase Auth stays the identity system: Firestore rules key off the Firebase
+// uid, so Microsoft is added as a sign-in *provider* rather than replacing auth.
+// The tenant parameter pins the login to the Nearwork directory, so a personal
+// or other-company Microsoft account can't sign in even if it knows the URL.
+
+// Nearwork's Entra directory (tenant) id. Not a secret — it only identifies the
+// organization, and pinning to it is what stops personal or other-company
+// Microsoft accounts from signing in. Overridable by env for other environments.
+const NEARWORK_TENANT_ID = 'dd9750f0-80f2-4b2b-8b65-15219d6e80f1';
+const MS_TENANT_ID = process.env.NEXT_PUBLIC_MS_TENANT_ID || NEARWORK_TENANT_ID;
+
+export function microsoftProvider(): OAuthProvider {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.setCustomParameters({
+    // Restrict to the Nearwork org. Falls back to 'organizations' (any work
+    // account, no personal ones) if the tenant id hasn't been configured yet —
+    // the @nearwork.co check below still applies either way.
+    tenant: MS_TENANT_ID || 'organizations',
+    prompt: 'select_account',
+  });
+  provider.addScope('openid');
+  provider.addScope('email');
+  provider.addScope('profile');
+  return provider;
+}
+
+// Existing Admin accounts sign in with a password, and Firebase allows only one
+// account per email address. So the first Microsoft sign-in for an existing user
+// is rejected with 'account-exists-with-different-credential'. We stash the
+// Microsoft credential, ask them to confirm with their password once, then
+// attach Microsoft to the same account — keeping their uid, and therefore all
+// their data and permissions, intact.
+let pendingMicrosoftCred: OAuthCredential | null = null;
+
+export class MicrosoftNeedsLinkError extends Error {
+  emailToLink: string;
+  constructor(emailToLink: string) {
+    super('needs_password_link');
+    this.name = 'MicrosoftNeedsLinkError';
+    this.emailToLink = emailToLink;
+  }
+}
+
+export async function signInWithMicrosoft(): Promise<UserCredential> {
+  try {
+    const cred = await signInWithPopup(auth, microsoftProvider());
+    // Belt and braces: even with the tenant pinned, never let a non-Nearwork
+    // address hold a session in Admin.
+    if (!isNearworkEmail(cred.user.email ?? '')) {
+      await signOut(auth);
+      throw new Error('not_nearwork');
+    }
+    return cred;
+  } catch (err) {
+    const e = err as { code?: string; customData?: { email?: string } };
+    if (e.code === 'auth/account-exists-with-different-credential') {
+      pendingMicrosoftCred = OAuthProvider.credentialFromError(err as Parameters<typeof OAuthProvider.credentialFromError>[0]);
+      throw new MicrosoftNeedsLinkError(e.customData?.email ?? '');
+    }
+    throw err;
+  }
+}
+
+export function hasPendingMicrosoftLink(): boolean {
+  return pendingMicrosoftCred !== null;
+}
+
+/** Attach a stashed Microsoft identity to the account that just signed in with a
+ *  password. After this they can use the Microsoft button from then on. */
+export async function linkPendingMicrosoft(user: User): Promise<boolean> {
+  if (!pendingMicrosoftCred) return false;
+  try {
+    await linkWithCredential(user, pendingMicrosoftCred);
+    return true;
+  } catch {
+    // Already linked, or the link was refused — not worth blocking the sign-in
+    // they already completed successfully.
+    return false;
+  } finally {
+    pendingMicrosoftCred = null;
+  }
+}
 
 export function isNearworkEmail(email: string): boolean {
   return String(email ?? '')
@@ -148,6 +237,8 @@ export {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  OAuthProvider,
+  signInWithPopup,
   serverTimestamp,
   Timestamp,
   FieldValue,

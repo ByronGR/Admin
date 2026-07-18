@@ -32,8 +32,10 @@ import {
   sendPasswordResetEmail,
   OAuthProvider,
   signInWithPopup,
+  linkWithCredential,
   type User,
   type UserCredential,
+  type OAuthCredential,
 } from 'firebase/auth';
 import {
   getStorage,
@@ -97,15 +99,61 @@ export function microsoftProvider(): OAuthProvider {
   return provider;
 }
 
-export async function signInWithMicrosoft(): Promise<UserCredential> {
-  const cred = await signInWithPopup(auth, microsoftProvider());
-  // Belt and braces: even with the tenant pinned, never let a non-Nearwork
-  // address hold a session in Admin.
-  if (!isNearworkEmail(cred.user.email ?? '')) {
-    await signOut(auth);
-    throw new Error('not_nearwork');
+// Existing Admin accounts sign in with a password, and Firebase allows only one
+// account per email address. So the first Microsoft sign-in for an existing user
+// is rejected with 'account-exists-with-different-credential'. We stash the
+// Microsoft credential, ask them to confirm with their password once, then
+// attach Microsoft to the same account — keeping their uid, and therefore all
+// their data and permissions, intact.
+let pendingMicrosoftCred: OAuthCredential | null = null;
+
+export class MicrosoftNeedsLinkError extends Error {
+  emailToLink: string;
+  constructor(emailToLink: string) {
+    super('needs_password_link');
+    this.name = 'MicrosoftNeedsLinkError';
+    this.emailToLink = emailToLink;
   }
-  return cred;
+}
+
+export async function signInWithMicrosoft(): Promise<UserCredential> {
+  try {
+    const cred = await signInWithPopup(auth, microsoftProvider());
+    // Belt and braces: even with the tenant pinned, never let a non-Nearwork
+    // address hold a session in Admin.
+    if (!isNearworkEmail(cred.user.email ?? '')) {
+      await signOut(auth);
+      throw new Error('not_nearwork');
+    }
+    return cred;
+  } catch (err) {
+    const e = err as { code?: string; customData?: { email?: string } };
+    if (e.code === 'auth/account-exists-with-different-credential') {
+      pendingMicrosoftCred = OAuthProvider.credentialFromError(err as Parameters<typeof OAuthProvider.credentialFromError>[0]);
+      throw new MicrosoftNeedsLinkError(e.customData?.email ?? '');
+    }
+    throw err;
+  }
+}
+
+export function hasPendingMicrosoftLink(): boolean {
+  return pendingMicrosoftCred !== null;
+}
+
+/** Attach a stashed Microsoft identity to the account that just signed in with a
+ *  password. After this they can use the Microsoft button from then on. */
+export async function linkPendingMicrosoft(user: User): Promise<boolean> {
+  if (!pendingMicrosoftCred) return false;
+  try {
+    await linkWithCredential(user, pendingMicrosoftCred);
+    return true;
+  } catch {
+    // Already linked, or the link was refused — not worth blocking the sign-in
+    // they already completed successfully.
+    return false;
+  } finally {
+    pendingMicrosoftCred = null;
+  }
 }
 
 export function isNearworkEmail(email: string): boolean {

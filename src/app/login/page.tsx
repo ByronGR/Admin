@@ -9,6 +9,9 @@ import {
   onAuthStateChanged,
   isNearworkEmail,
   signInWithMicrosoft,
+  MicrosoftNeedsLinkError,
+  hasPendingMicrosoftLink,
+  linkPendingMicrosoft,
 } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -60,7 +63,13 @@ function LoginForm() {
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
       const msg = (err as { message?: string })?.message;
-      if (msg === 'not_nearwork') {
+      if (err instanceof MicrosoftNeedsLinkError) {
+        // First Microsoft sign-in for an account that already has a password.
+        // Confirm with the password once and we attach Microsoft to it.
+        setEmail(err.emailToLink);
+        setShowPasswordLogin(true);
+        setError('One-time step: enter your current Admin password to connect Microsoft to your account. Next time, the Microsoft button is all you need.');
+      } else if (msg === 'not_nearwork') {
         setError('That Microsoft account isn’t a @nearwork.co address.');
       } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         setError('');
@@ -85,7 +94,12 @@ function LoginForm() {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      // If they arrived here from the Microsoft button, attach that identity to
+      // this account now so the password isn't needed again.
+      if (hasPendingMicrosoftLink()) {
+        await linkPendingMicrosoft(cred.user);
+      }
       router.replace('/dashboard');
     } catch (err: unknown) {
       const msg = (err as { code?: string })?.code;

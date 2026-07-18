@@ -77,8 +77,12 @@ function LoginForm() {
         setError('Your browser blocked the sign-in window. Allow pop-ups for this site and try again.');
       } else if (code === 'auth/operation-not-allowed') {
         setError('Microsoft sign-in isn’t switched on yet in Firebase. Ask an admin to enable it.');
+      } else if (code === 'auth/unauthorized-domain') {
+        setError('This site isn’t on Firebase’s authorized domains list yet. Add admin.nearwork.co under Authentication → Settings → Authorized domains.');
       } else {
-        setError('Microsoft sign-in failed. Please try again.');
+        // Surface the real code — a generic message here just hides what's wrong.
+        console.error('Microsoft sign-in error:', err);
+        setError(`Microsoft sign-in failed${code ? ` (${code})` : ''}. ${msg ?? ''}`.trim());
       }
     } finally {
       setMsLoading(false);

@@ -30,7 +30,10 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  OAuthProvider,
+  signInWithPopup,
   type User,
+  type UserCredential,
 } from 'firebase/auth';
 import {
   getStorage,
@@ -66,6 +69,40 @@ const STAFF_ROLES: StaffRole[] = [
 // user's Firestore profile — set once via the Firebase console or Admin UI.
 // No email addresses are hardcoded here to keep them out of the source bundle.
 export const HARD_CODED_SUPER_ADMINS: string[] = [];
+
+// ─── Microsoft (Entra) sign-in ────────────────────────────────────────────────
+// Firebase Auth stays the identity system: Firestore rules key off the Firebase
+// uid, so Microsoft is added as a sign-in *provider* rather than replacing auth.
+// The tenant parameter pins the login to the Nearwork directory, so a personal
+// or other-company Microsoft account can't sign in even if it knows the URL.
+
+const MS_TENANT_ID = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? '';
+
+export function microsoftProvider(): OAuthProvider {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.setCustomParameters({
+    // Restrict to the Nearwork org. Falls back to 'organizations' (any work
+    // account, no personal ones) if the tenant id hasn't been configured yet —
+    // the @nearwork.co check below still applies either way.
+    tenant: MS_TENANT_ID || 'organizations',
+    prompt: 'select_account',
+  });
+  provider.addScope('openid');
+  provider.addScope('email');
+  provider.addScope('profile');
+  return provider;
+}
+
+export async function signInWithMicrosoft(): Promise<UserCredential> {
+  const cred = await signInWithPopup(auth, microsoftProvider());
+  // Belt and braces: even with the tenant pinned, never let a non-Nearwork
+  // address hold a session in Admin.
+  if (!isNearworkEmail(cred.user.email ?? '')) {
+    await signOut(auth);
+    throw new Error('not_nearwork');
+  }
+  return cred;
+}
 
 export function isNearworkEmail(email: string): boolean {
   return String(email ?? '')
@@ -148,6 +185,8 @@ export {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  OAuthProvider,
+  signInWithPopup,
   serverTimestamp,
   Timestamp,
   FieldValue,

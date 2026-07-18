@@ -76,7 +76,11 @@ export const HARD_CODED_SUPER_ADMINS: string[] = [];
 // The tenant parameter pins the login to the Nearwork directory, so a personal
 // or other-company Microsoft account can't sign in even if it knows the URL.
 
-const MS_TENANT_ID = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? '';
+// Nearwork's Entra directory (tenant) id. Not a secret — it only identifies the
+// organization, and pinning to it is what stops personal or other-company
+// Microsoft accounts from signing in. Overridable by env for other environments.
+const NEARWORK_TENANT_ID = 'dd9750f0-80f2-4b2b-8b65-15219d6e80f1';
+const MS_TENANT_ID = process.env.NEXT_PUBLIC_MS_TENANT_ID || NEARWORK_TENANT_ID;
 
 export function microsoftProvider(): OAuthProvider {
   const provider = new OAuthProvider('microsoft.com');

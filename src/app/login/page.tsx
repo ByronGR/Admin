@@ -25,6 +25,10 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState('');
+  // Some messages are instructions, not failures (e.g. the one-time step that
+  // links Microsoft to an existing account). Showing those in red reads as
+  // "something broke" when the sign-in actually succeeded.
+  const [notice, setNotice] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
@@ -56,6 +60,7 @@ function LoginForm() {
 
   async function handleMicrosoft() {
     setError('');
+    setNotice('');
     setMsLoading(true);
     try {
       await signInWithMicrosoft();
@@ -68,7 +73,7 @@ function LoginForm() {
         // Confirm with the password once and we attach Microsoft to it.
         setEmail(err.emailToLink);
         setShowPasswordLogin(true);
-        setError('One-time step: enter your current Admin password to connect Microsoft to your account. Next time, the Microsoft button is all you need.');
+        setNotice('Microsoft verified you. One last step: enter your Admin password to connect Microsoft to your account — after this, the Microsoft button is all you need.');
       } else if (msg === 'not_nearwork') {
         setError('That Microsoft account isn’t a @nearwork.co address.');
       } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
@@ -162,6 +167,15 @@ function LoginForm() {
               <h2 className="mb-6 text-base font-600 text-[var(--black)]">
                 Sign in
               </h2>
+
+              {notice && (
+                <div
+                  className="mb-4 rounded-lg px-3 py-2.5 text-xs font-500"
+                  style={{ background: 'rgba(22,160,133,0.09)', color: '#0E6B59' }}
+                >
+                  {notice}
+                </div>
+              )}
 
               {error && (
                 <div className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-xs font-500 text-red-700">

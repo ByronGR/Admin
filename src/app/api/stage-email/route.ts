@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { STAGE_TEMPLATES } from './templates';
+import { STAGE_TEMPLATES, SOURCING_SUBMITTED } from './templates';
 
 // POST /api/stage-email
 // Debounced stage-change emails for candidates. Called (fire-and-forget) by the
@@ -114,6 +114,7 @@ export async function POST(req: Request) {
     roleTitle?: string;
     orgName?: string;
     dropOffReason?: string;
+    pipelineType?: string;
   };
 
   const action = String(body.action || '');
@@ -155,20 +156,36 @@ export async function POST(req: Request) {
     // Any real move first cancels whatever was pending — the timer resets.
     if (existingResendId && existing?.mode === 'scheduled') await cancelResendEmail(existingResendId);
 
-    // Eligibility: forward move or rejection. Backward = cancel only.
-    const isRejection = toStage === 'not-selected';
-    const isForward = rank(toStage) > rank(fromStage);
-    if (!isRejection && !isForward) {
-      await queueRef.set(
-        { pipelineCode, candidateId, mode: 'cancelled', reason: 'backward-move', fromStage, toStage, updatedAt: now, updatedBy: staff },
-        { merge: true },
-      );
-      return NextResponse.json({ ok: true, scheduled: false, reason: 'backward-move' }, { headers: cors });
-    }
+    const pipelineType = String(body.pipelineType || 'full').toLowerCase();
+    let template;
 
-    const template = STAGE_TEMPLATES[toStage];
-    if (!template) {
-      return NextResponse.json({ ok: true, scheduled: false, reason: 'no-template' }, { headers: cors });
+    if (pipelineType === 'sourcing') {
+      // Sourcing sends exactly one candidate email — on 'submitted' (the hand-off
+      // to the partner). Every other sourcing stage is silent; the partner runs
+      // their own comms. Assessment/interview stage emails never apply here.
+      if (toStage !== 'submitted') {
+        await queueRef.set(
+          { pipelineCode, candidateId, mode: 'skipped', reason: 'sourcing-silent', fromStage, toStage, updatedAt: now, updatedBy: staff },
+          { merge: true },
+        );
+        return NextResponse.json({ ok: true, scheduled: false, reason: 'sourcing-silent' }, { headers: cors });
+      }
+      template = SOURCING_SUBMITTED;
+    } else {
+      // Full recruitment: forward move or rejection. Backward = cancel only.
+      const isRejection = toStage === 'not-selected';
+      const isForward = rank(toStage) > rank(fromStage);
+      if (!isRejection && !isForward) {
+        await queueRef.set(
+          { pipelineCode, candidateId, mode: 'cancelled', reason: 'backward-move', fromStage, toStage, updatedAt: now, updatedBy: staff },
+          { merge: true },
+        );
+        return NextResponse.json({ ok: true, scheduled: false, reason: 'backward-move' }, { headers: cors });
+      }
+      template = STAGE_TEMPLATES[toStage];
+      if (!template) {
+        return NextResponse.json({ ok: true, scheduled: false, reason: 'no-template' }, { headers: cors });
+      }
     }
 
     // Resolve the candidate's email (board rows don't always carry it).

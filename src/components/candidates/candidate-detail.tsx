@@ -16,6 +16,7 @@ import {
   updateDoc,
 } from '@/lib/firebase';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
+import { stagesFor, stageLabel as sourcingStageLabel } from '@/lib/pipeline-stages';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
@@ -326,7 +327,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
 
   function stageLabel(stage?: PipelineStage): string {
     if (!stage) return '—';
-    return PIPELINE_STAGE_LABELS[stage] ?? stage;
+    return PIPELINE_STAGE_LABELS[stage] ?? sourcingStageLabel(activePipe?.pipeline?.pipelineType, stage);
   }
 
   // ── Client requests (raised from the client App on this candidate) ──────────
@@ -540,6 +541,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         roleTitle: pipeline.title,
         orgName: pipeline.orgName,
         dropOffReason: dropOff?.reason,
+        pipelineType: pipeline.pipelineType,
       });
       showToast(`Moved to ${stageLabel(toStage)}`, 'success');
     } catch {
@@ -1181,7 +1183,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                         title="Change stage"
                         style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '7px 10px', cursor: stageSaving ? 'wait' : 'pointer', flexShrink: 0 }}
                       >
-                        {PIPELINE_STAGES.map((s) => (
+                        {stagesFor(activePipe.pipeline.pipelineType).map((s) => (
                           <option key={s.key} value={s.key}>{s.label}</option>
                         ))}
                       </select>

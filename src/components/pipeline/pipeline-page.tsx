@@ -486,6 +486,7 @@ export default function PipelinePage() {
       roleTitle: pipeline.title,
       orgName: pipeline.orgName,
       dropOffReason: opts?.dropOff?.reason,
+      pipelineType: pipeline.pipelineType,
     });
     // Broadcast to the role's followers (client users). Only on a FORWARD move —
     // skip backward moves and the drop to Not Selected (that's candidate_declined,
@@ -731,11 +732,12 @@ export default function PipelinePage() {
         pipelineCode: pipeline.code,
         candidateId: candidate.id,
         fromStage: '',
-        toStage: normalizeStage(addModal.stage),
+        toStage: normFor(pipeline.pipelineType, addModal.stage),
         candidateName: candidate.name,
         candidateEmail: candidate.email,
         roleTitle: pipeline.title,
         orgName: pipeline.orgName,
+        pipelineType: pipeline.pipelineType,
       });
       // Notify the role's followers that a new candidate was added (best-effort).
       try {

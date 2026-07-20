@@ -69,7 +69,6 @@ import {
   Users,
   Move,
 } from 'lucide-react';
-import PipelineChatPanel from '@/components/pipeline/pipeline-chat';
 
 // ─── Pipeline stages (8-stage) ────────────────────────────────────────────────
 
@@ -1393,7 +1392,7 @@ function PipelineWorkspace({
 }) {
   const { showToast } = useToast();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'applicants' | 'kanban' | 'chat'>('applicants');
+  const [activeTab, setActiveTab] = useState<'applicants' | 'kanban'>('applicants');
   const [showEdit, setShowEdit] = useState(false);
 
   // Live count of pending applications (not yet approved/rejected) for badge
@@ -1571,23 +1570,12 @@ function PipelineWorkspace({
           <LayoutGrid className="h-3.5 w-3.5" />
           Pipeline
         </button>
-        <button
-          onClick={() => setActiveTab('chat')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-600 transition-colors ${
-            activeTab === 'chat'
-              ? 'bg-white text-[var(--black)] shadow-sm'
-              : 'text-[var(--light)] hover:text-[var(--mid)]'
-          }`}
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-          Chat
-        </button>
       </div>
 
       {/* Tab content */}
       {activeTab === 'applicants' ? (
         <ApplicantsPanel pipeline={pipeline} />
-      ) : activeTab === 'kanban' ? (
+      ) : (
         <KanbanBoard
           pipeline={pipeline}
           scoreMap={scoreMap}
@@ -1599,8 +1587,6 @@ function PipelineWorkspace({
           onAddCandidate={onAddCandidate}
           onOpenBrief={onOpenBrief}
         />
-      ) : (
-        <PipelineChatPanel pipeline={pipeline} />
       )}
     </div>
   );

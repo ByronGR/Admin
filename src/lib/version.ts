@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.23.0';
+export const APP_VERSION = '1.24.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,20 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.24.0',
+    date: '2026-07-06',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Sourcing-only engagement type per opening: we source, screen and submit; the client runs their own interviews and hiring. Pick it when creating a role or switch an existing one from the opening Admin controls.',
+          'Sourcing pipeline has its own 6 stages (Sourced, Screening, Submitted, In Progress, Hired, Not Selected) with the assessment/English gates turned off.',
+          'On a sourcing role, the candidate gets one email on Submitted ("sent to our partner") and nothing after; the partner moves the candidate (In Progress / Hired / Not Selected) from their portal and Nearwork is notified.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.23.0',
     date: '2026-07-06',

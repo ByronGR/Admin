@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.25.0] — 2026-07-20
+
+### Added
+- Candidate profile: staff can now enter **Availability** and **Timezone** inline in Quick facts (click to add/edit). These feed the sourcing client view.
+
+---
+
 ## [1.20.0] — 2026-07-05
 
 ### Added

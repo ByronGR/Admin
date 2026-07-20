@@ -352,17 +352,36 @@ export async function POST(req: Request) {
     // the client-side decision so the two-party approval stays honest — except for
     // orgs flagged `internal` (e.g. Nearwork's own lead-tracking org), where staff
     // are the only "client" there is.
+    //
+    // `onBehalf` is the deliberate exception: when the client has already approved
+    // the brief OUTSIDE the app (email, call, in person), Nearwork staff record that
+    // approval so the role can go live without a second, redundant click from the
+    // client. It's Nearwork-only, admin-gated on the UI, and stamped in the audit
+    // history as approved-offline so it's never mistaken for a real client action.
+    const onBehalf = action === 'approve' && body.onBehalf === true;
     const orgId = String(existing.orgId ?? '');
     if (isNearwork) {
       const orgSnap = orgId ? await db.collection('organizations').doc(orgId).get() : null;
       const isInternalOrg = !!orgSnap?.exists && orgSnap.data()?.internal === true;
-      if (!isInternalOrg) return json({ ok: false, error: 'Client approval must come from the client' }, 403, origin);
+      if (!isInternalOrg && !onBehalf) {
+        return json({ ok: false, error: 'Client approval must come from the client' }, 403, origin);
+      }
     } else {
+      if (onBehalf) return json({ ok: false, error: 'Only Nearwork staff can record an offline approval' }, 403, origin);
       const allowed = await clientBelongsToOrg(uid, email, orgId);
       if (!allowed) return json({ ok: false, error: 'Not authorised for this brief' }, 403, origin);
     }
 
-    if (String(existing.status ?? 'draft') !== 'submitted') {
+    // A real client review requires the brief to be sent (submitted). An offline
+    // approval can come from any not-yet-approved state — the client already saw it.
+    const currentBriefStatus = String(existing.status ?? 'draft');
+    if (currentBriefStatus === 'approved') {
+      return json({ ok: false, error: 'This brief is already approved.' }, 409, origin);
+    }
+    if (!onBehalf && action === 'approve' && currentBriefStatus !== 'submitted') {
+      return json({ ok: false, error: 'This brief is not awaiting your review.' }, 409, origin);
+    }
+    if (action === 'request_changes' && currentBriefStatus !== 'submitted') {
       return json({ ok: false, error: 'This brief is not awaiting your review.' }, 409, origin);
     }
 
@@ -391,10 +410,19 @@ export async function POST(req: Request) {
     const jobTitle = String(existing.jobTitle ?? code);
 
     if (action === 'approve') {
-      history.push({ action: 'approved', by: actorName, byRole: isNearwork ? 'nearwork' : 'client', timestamp: now });
+      history.push({
+        action: onBehalf ? 'approved_offline' : 'approved',
+        by: actorName,
+        byRole: onBehalf ? 'nearwork' : (isNearwork ? 'nearwork' : 'client'),
+        note: onBehalf ? 'Client approved offline; recorded by Nearwork' : undefined,
+        timestamp: now,
+      });
       await ref.set({
         status: 'approved',
-        clientApprovedBy: actorName,
+        // For an offline approval, record who marked it and that the client's
+        // approval happened outside the app — keeps the audit trail honest.
+        clientApprovedBy: onBehalf ? `Client (offline) — recorded by ${actorName}` : actorName,
+        clientApprovedOffline: onBehalf ? true : FieldValue.delete(),
         approvedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         history,

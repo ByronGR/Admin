@@ -20,6 +20,7 @@ import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
+import { OpeningAdminControls } from './opening-admin-controls';
 import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
 import { WORK_MODE_LABELS, PIPELINE_STAGE_LABELS } from '@/lib/types';
@@ -925,6 +926,17 @@ export function OpeningDetail({
         </div>
         <ChevronRight className="h-3.5 w-3.5 text-[var(--light)]" />
       </div>
+
+      {/* ── Admin controls: reassign org + record offline brief approval ── */}
+      {isAdmin && (
+        <OpeningAdminControls
+          opening={opening}
+          orgs={orgs}
+          briefStatus={briefStatus}
+          onChanged={onRefresh}
+          showToast={showToast}
+        />
+      )}
 
       {/* ── Opening details ────────────────────────────────────────────── */}
       <div className="rounded-[16px] border border-[#EBEBEB] bg-white p-6">

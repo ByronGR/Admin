@@ -285,20 +285,19 @@ function orgStatusVariant(status: string) {
 
 // ─── Org avatar (logo, live favicon, or initials) ────────────────────────────
 
-function faviconUrl(website?: string | null): string | null {
+// Resolve the org's logo through our same-origin proxy (real company logo with a
+// favicon fallback, server-side) so it isn't blocked by the strict img-src CSP.
+function logoUrl(website?: string | null): string | null {
   if (!website) return null;
-  try {
-    const url = website.startsWith('http') ? website : `https://${website}`;
-    return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=128`;
-  } catch {
-    return null;
-  }
+  const w = website.trim();
+  if (!w || !w.includes('.')) return null;
+  return `/api/org-logo?url=${encodeURIComponent(w)}`;
 }
 
 function OrgAvatar({ org, size = 'md' }: { org: Organization; size?: 'sm' | 'md' | 'lg' }) {
   const sizes = { sm: 'h-8 w-8 text-xs', md: 'h-12 w-12 text-sm', lg: 'h-16 w-16 text-base' };
   const [imgError, setImgError] = useState(false);
-  const src = org.logo || (!imgError ? faviconUrl(org.website) : null);
+  const src = org.logo || (!imgError ? logoUrl(org.website) : null);
   if (src) {
     return (
       <img

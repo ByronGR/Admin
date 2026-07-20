@@ -48,6 +48,7 @@ import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
+import { stagesFor, isSourcing, normalizeSourcingStage, stageLabel, type StageDef } from '@/lib/pipeline-stages';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
 import {
   Search,
@@ -107,6 +108,26 @@ const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
   'hired': NW.green600,
   'not-selected': NW.gray300,
 };
+
+// Colours for the sourcing stage set (keys that aren't in the full model above).
+const SOURCING_STAGE_COLOR: Record<string, string> = {
+  'sourced': NW.gray400,
+  'screening': '#6366F1',
+  'submitted': NW.blue500,
+  'in-progress': NW.violet500,
+  'hired': NW.green600,
+  'not-selected': NW.gray300,
+};
+
+// Colour for any stage key across both models, with a safe fallback.
+function stageColor(key: string): string {
+  return (STAGE_SPREAD_COLOR as Record<string, string>)[key] ?? SOURCING_STAGE_COLOR[key] ?? NW.gray400;
+}
+
+// Normalize a stage the right way for the pipeline's type.
+function normFor(pt: string | undefined, stage: string): string {
+  return isSourcing(pt) ? normalizeSourcingStage(stage) : normalizeStage(stage);
+}
 
 // ─── Client-facing stage labels ───────────────────────────────────────────────
 // The board runs 8 internal stages; clients following a role see a simplified
@@ -465,6 +486,7 @@ export default function PipelinePage() {
       roleTitle: pipeline.title,
       orgName: pipeline.orgName,
       dropOffReason: opts?.dropOff?.reason,
+      pipelineType: pipeline.pipelineType,
     });
     // Broadcast to the role's followers (client users). Only on a FORWARD move —
     // skip backward moves and the drop to Not Selected (that's candidate_declined,
@@ -478,7 +500,7 @@ export default function PipelinePage() {
         orgId: pipeline.orgId,
         candidateName: movedEntry?.name,
         candidateCode: movedEntry?.candidateCode ?? candidateCode,
-        stage: CLIENT_STAGE_LABEL[toStage],
+        stage: CLIENT_STAGE_LABEL[toStage] ?? stageLabel(pipeline.pipelineType, toStage),
       });
     } else if (toStage === 'not-selected') {
       // A decline notifies followers too — no stage on the payload.
@@ -492,7 +514,7 @@ export default function PipelinePage() {
         candidateCode: movedEntry?.candidateCode ?? candidateCode,
       });
     }
-    showToast(`Moved to ${PIPELINE_STAGES.find((s) => s.key === toStage)?.label}`, 'success');
+    showToast(`Moved to ${stageLabel(pipeline.pipelineType, toStage)}`, 'success');
   }
 
   async function handleDragEnd(event: DragEndEvent, pipelineCode: string) {
@@ -527,32 +549,36 @@ export default function PipelinePage() {
       return;
     }
 
-    // Assessment gate: a completed assessment is required to reach Partner Review
-    // and any stage beyond it (rejection is always allowed).
-    const ASSESS_REQUIRED: StageKey[] = ['partner-review', 'partner-interview', 'hired'];
-    if (ASSESS_REQUIRED.includes(toStage)) {
-      const cand = pipeline.candidates![candIndex];
-      if (!assessedSet.has(`${cand.candidateId}__${pipelineCode}`)) {
-        const label = PIPELINE_STAGES.find((s) => s.key === toStage)?.label ?? toStage;
-        showToast(`An assessment is required before moving to ${label}. Upload the assessment on the candidate's profile first.`, 'error');
-        return;
+    // Full-recruitment gates only. Sourcing has no Nearwork assessment/interview,
+    // so these don't apply (and 'hired' is a valid sourcing target).
+    if (!isSourcing(pipeline.pipelineType)) {
+      // Assessment gate: a completed assessment is required to reach Partner Review
+      // and any stage beyond it (rejection is always allowed).
+      const ASSESS_REQUIRED: StageKey[] = ['partner-review', 'partner-interview', 'hired'];
+      if (ASSESS_REQUIRED.includes(toStage)) {
+        const cand = pipeline.candidates![candIndex];
+        if (!assessedSet.has(`${cand.candidateId}__${pipelineCode}`)) {
+          const label = PIPELINE_STAGES.find((s) => s.key === toStage)?.label ?? toStage;
+          showToast(`An assessment is required before moving to ${label}. Upload the assessment on the candidate's profile first.`, 'error');
+          return;
+        }
       }
-    }
 
-    // English score gate: required when advancing from interview stage
-    if (fromStage === 'interview' && toStage !== 'applied' && toStage !== 'background-check') {
-      const cand = pipeline.candidates![candIndex];
-      if (!cand.englishScore) {
-        setEngModal({
-          open: true,
-          candidateId: candidateCode,
-          pipelineId: pipeline.id,
-          pipelineCode,
-          pendingStage: toStage,
-        });
-        setEngLevel('B2');
-        setEngFeedback('');
-        return;
+      // English score gate: required when advancing from interview stage
+      if (fromStage === 'interview' && toStage !== 'applied' && toStage !== 'background-check') {
+        const cand = pipeline.candidates![candIndex];
+        if (!cand.englishScore) {
+          setEngModal({
+            open: true,
+            candidateId: candidateCode,
+            pipelineId: pipeline.id,
+            pipelineCode,
+            pendingStage: toStage,
+          });
+          setEngLevel('B2');
+          setEngFeedback('');
+          return;
+        }
       }
     }
 
@@ -691,7 +717,8 @@ export default function PipelinePage() {
       candidateId: candidate.id,
       name: candidate.name,
       email: candidate.email,
-      stage: normalizeStage(addModal.stage),
+      // Sourcing openings drop new candidates into 'sourced', not 'applied'.
+      stage: normFor(pipeline.pipelineType, addModal.stage) as PipelineCandidate['stage'],
     };
 
     try {
@@ -705,11 +732,12 @@ export default function PipelinePage() {
         pipelineCode: pipeline.code,
         candidateId: candidate.id,
         fromStage: '',
-        toStage: normalizeStage(addModal.stage),
+        toStage: normFor(pipeline.pipelineType, addModal.stage),
         candidateName: candidate.name,
         candidateEmail: candidate.email,
         roleTitle: pipeline.title,
         orgName: pipeline.orgName,
+        pipelineType: pipeline.pipelineType,
       });
       // Notify the role's followers that a new candidate was added (best-effort).
       try {
@@ -1216,9 +1244,10 @@ function PipelineRow({
 
   const cands = pipeline.candidates ?? [];
   const pendingApplicants = cands.filter((c) => c.pendingReview).length;
-  const spread = PIPELINE_STAGES.map((st) => ({ st, n: cands.filter((c) => normalizeStage(c.stage) === st.key).length }));
+  const rowStages = stagesFor(pipeline.pipelineType);
+  const spread = rowStages.map((st) => ({ st, n: cands.filter((c) => normFor(pipeline.pipelineType, c.stage) === st.key).length }));
   const atOffer = spread.find((x) => x.st.key === 'hired')?.n ?? 0;
-  const sourced = spread.find((x) => x.st.key === 'applied')?.n ?? 0;
+  const sourced = spread.find((x) => x.st.key === rowStages[0].key)?.n ?? 0;
   const totalWithApplicants = cands.length + applicantCount;
 
   const statusColor =
@@ -1277,7 +1306,7 @@ function PipelineRow({
           onMouseLeave={() => setSpreadOpen(false)}
         >
           <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: NW.gray100 }}>
-            {spread.map(({ st, n }) => (n ? <div key={st.key} style={{ flex: n, background: STAGE_SPREAD_COLOR[st.key] }} /> : null))}
+            {spread.map(({ st, n }) => (n ? <div key={st.key} style={{ flex: n, background: stageColor(st.key) }} /> : null))}
           </div>
           <div style={{ fontSize: 10.5, color: NW.gray400, marginTop: 5 }}>{atOffer} hired · {sourced} applied</div>
           {spreadOpen && (
@@ -1286,7 +1315,7 @@ function PipelineRow({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {spread.map(({ st, n }) => (
                   <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_SPREAD_COLOR[st.key], flexShrink: 0 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: stageColor(st.key), flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: n ? NW.gray700 : NW.gray400, flex: 1 }}>{st.label}</span>
                     <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: n ? NW.black : NW.gray300 }}>{n}</span>
                   </div>
@@ -1607,9 +1636,9 @@ function KanbanBoard({
         </div>
       )}
       <div className="flex gap-3 overflow-x-auto pb-3" style={{ minHeight: compact ? 180 : 320 }}>
-        {PIPELINE_STAGES.map((stage) => {
+        {stagesFor(pipeline.pipelineType).map((stage) => {
           const stageCandidates = candidates.filter(
-            (c) => normalizeStage(c.stage) === stage.key
+            (c) => normFor(pipeline.pipelineType, c.stage) === stage.key
           );
           const columnId = `col-${stage.key}`;
 
@@ -1657,7 +1686,7 @@ function KanbanColumn({
   compact,
 }: {
   id: string;
-  stage: (typeof PIPELINE_STAGES)[number];
+  stage: StageDef;
   candidates: PipelineCandidate[];
   pipelineCode: string;
   scoreMap: Record<string, number>;
@@ -1670,7 +1699,7 @@ function KanbanColumn({
     id,
     data: { type: 'column', stage: stage.key },
   });
-  const color = STAGE_SPREAD_COLOR[stage.key];
+  const color = stageColor(stage.key);
 
   return (
     <div ref={setNodeRef} style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, width: compact ? 184 : 224, minHeight: compact ? 160 : 300 }}>
@@ -1679,8 +1708,8 @@ function KanbanColumn({
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: color }} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: NW.black }}>{stage.label}</span>
-          {'clientAction' in stage && stage.clientAction && (
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.teal600 }} title="Client action stage">· client</span>
+          {stage.clientMovable && (
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.teal600 }} title="The client moves candidates into this stage">· client</span>
           )}
         </span>
         <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray500, background: NW.gray50, borderRadius: 999, padding: '1px 8px' }}>{candidates.length}</span>

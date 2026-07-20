@@ -16,6 +16,7 @@ export interface StageEmailPayload {
   roleTitle?: string;
   orgName?: string;
   dropOffReason?: string;
+  pipelineType?: string;   // 'sourcing' → only the 'submitted' stage emails the candidate
 }
 
 export async function notifyStageEmail(payload: StageEmailPayload): Promise<void> {

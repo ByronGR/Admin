@@ -14,7 +14,7 @@
 //      history as approved-offline.
 
 import { useState } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db, doc, updateDoc, serverTimestamp } from '@/lib/firebase';
 import { NW, Icon, Button } from '@/components/nw/primitives';
 import type { Opening, Organization } from '@/lib/types';
 
@@ -43,10 +43,34 @@ export function OpeningAdminControls({
   const [confirmMove, setConfirmMove] = useState(false);
   const [approving, setApproving] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  const [ptSaving, setPtSaving] = useState(false);
+  const [pipelineType, setPipelineType] = useState<'full' | 'sourcing'>(
+    opening.pipelineType === 'sourcing' ? 'sourcing' : 'full'
+  );
 
   const targetOrg = orgs.find((o) => o.id === targetOrgId);
   const orgChanged = targetOrgId && targetOrgId !== opening.orgId;
+  const ptChanged = pipelineType !== (opening.pipelineType ?? 'full');
   const briefApproved = briefStatus === 'approved';
+
+  // ── Engagement type: full recruitment vs sourcing only ────────────────────
+  // Writes pipelineType to BOTH the opening and its pipeline doc (the board reads
+  // the pipeline doc). Both allow admin writes per the Firestore rules.
+  async function savePipelineType() {
+    setPtSaving(true);
+    try {
+      await Promise.all([
+        updateDoc(doc(db, 'openings', opening.id), { pipelineType, updatedAt: serverTimestamp() }),
+        updateDoc(doc(db, 'pipelines', code), { pipelineType, updatedAt: serverTimestamp() }).catch(() => {}),
+      ]);
+      showToast(`Engagement set to ${pipelineType === 'sourcing' ? 'Sourcing only' : 'Full recruitment'}`, 'success');
+      await onChanged();
+    } catch {
+      showToast('Failed to update engagement type', 'error');
+    } finally {
+      setPtSaving(false);
+    }
+  }
 
   // ── 1. Reassign organization ──────────────────────────────────────────────
   // Goes through the server (Admin SDK): the kick-off brief can't be written from
@@ -109,6 +133,44 @@ export function OpeningAdminControls({
           <div style={{ fontSize: 14, fontWeight: 700, color: NW.black }}>Admin controls</div>
           <div style={{ fontSize: 12, color: NW.gray500 }}>Ownership and approval — internal only, never shown to clients.</div>
         </div>
+      </div>
+
+      {/* ── Engagement type ── */}
+      <div>
+        <span style={label}>Engagement type</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {([
+            { v: 'full', t: 'Full recruitment', d: 'We run the whole pipeline.' },
+            { v: 'sourcing', t: 'Sourcing only', d: 'We source & submit; client runs the rest.' },
+          ] as const).map((opt) => {
+            const on = pipelineType === opt.v;
+            return (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => setPipelineType(opt.v)}
+                style={{
+                  textAlign: 'left', padding: '11px 13px', borderRadius: 10, cursor: 'pointer',
+                  border: `1.5px solid ${on ? NW.teal500 : NW.gray200}`,
+                  background: on ? NW.teal50 : NW.white,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: on ? NW.teal700 : NW.black }}>{opt.t}</div>
+                <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 2, lineHeight: 1.4 }}>{opt.d}</div>
+              </button>
+            );
+          })}
+        </div>
+        {ptChanged && (
+          <div style={{ marginTop: 10 }}>
+            <Button variant="primary" size="md" onClick={savePipelineType} disabled={ptSaving}>
+              {ptSaving ? 'Saving…' : `Switch to ${pipelineType === 'sourcing' ? 'Sourcing only' : 'Full recruitment'}`}
+            </Button>
+            <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 7, lineHeight: 1.45 }}>
+              Changes which stages this role&rsquo;s pipeline uses. Existing candidates keep their stage; move them into the new stages as needed.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Move to organization ── */}

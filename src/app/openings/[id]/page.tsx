@@ -55,6 +55,7 @@ export default function OpeningDetailPage() {
             opening={opening}
             orgs={orgs}
             currentRole={profile?.role}
+            currentEmail={profile?.email}
             onClose={() => router.push('/openings')}
             onRefresh={load}
           />

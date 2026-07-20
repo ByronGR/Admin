@@ -73,12 +73,14 @@ export function OpeningDetail({
   opening,
   orgs,
   currentRole,
+  currentEmail,
   onClose,
   onRefresh,
 }: {
   opening: Opening;
   orgs: Organization[];
   currentRole?: string;
+  currentEmail?: string;
   onClose: () => void;
   onRefresh: () => Promise<void>;
 }) {
@@ -433,7 +435,13 @@ export function OpeningDetail({
 
   const org            = orgs.find((o) => o.id === opening.orgId);
   const approvalStatus = opening.approvalStatus ?? 'draft';
-  const isAdmin        = currentRole === 'super_admin' || currentRole === 'admin';
+  // Owner break-glass mirrors the Firestore rules: byron/stephany are admins by
+  // email even if their stored `role` isn't set to super_admin, so the owners can
+  // never be locked out of admin controls. (The actual writes are still enforced
+  // server-side by the rules, so this only affects what the UI shows.)
+  const OWNER_EMAILS = ['byron.giraldo@nearwork.co', 'stephany.picos@nearwork.co'];
+  const isAdmin        = currentRole === 'super_admin' || currentRole === 'admin'
+                         || OWNER_EMAILS.includes((currentEmail ?? '').toLowerCase());
 
   // ── Unified workflow steps ────────────────────────────────────────────────
   // Step 1: Brief   (briefStatus: null→draft→submitted→changes_requested→approved)

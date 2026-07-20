@@ -14,8 +14,7 @@
 //      history as approved-offline.
 
 import { useState } from 'react';
-import { writeBatch, doc, serverTimestamp, getDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { NW, Icon, Button } from '@/components/nw/primitives';
 import type { Opening, Organization } from '@/lib/types';
 
@@ -50,27 +49,27 @@ export function OpeningAdminControls({
   const briefApproved = briefStatus === 'approved';
 
   // ── 1. Reassign organization ──────────────────────────────────────────────
+  // Goes through the server (Admin SDK): the kick-off brief can't be written from
+  // the client, and its org must move too or the new client can't see the brief.
   async function moveOrg() {
     if (!orgChanged || !targetOrg) return;
+    const user = auth.currentUser;
+    if (!user) { showToast('Please sign in again', 'error'); return; }
     setMoving(true);
     try {
-      // Same doc ids everywhere — only ownership fields change. Update the brief
-      // and pipeline only if they exist, so this works for openings at any stage.
-      const batch = writeBatch(db);
-      const stamp = { orgId: targetOrg.id, orgName: targetOrg.name, updatedAt: serverTimestamp() };
-      batch.update(doc(db, 'openings', opening.id), stamp);
-      const [briefSnap, pipeSnap] = await Promise.all([
-        getDoc(doc(db, 'kickoffBriefs', code)),
-        getDoc(doc(db, 'pipelines', code)),
-      ]);
-      if (briefSnap.exists()) batch.update(doc(db, 'kickoffBriefs', code), stamp);
-      if (pipeSnap.exists()) batch.update(doc(db, 'pipelines', code), stamp);
-      await batch.commit();
+      const token = await user.getIdToken();
+      const res = await fetch('/api/move-opening', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ openingId: opening.id, code, orgId: targetOrg.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
       showToast(`Opening moved to ${targetOrg.name} — link and ID unchanged`, 'success');
       setConfirmMove(false);
       await onChanged();
-    } catch {
-      showToast('Failed to move the opening', 'error');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to move the opening', 'error');
     } finally {
       setMoving(false);
     }

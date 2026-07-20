@@ -217,6 +217,11 @@ export interface Opening {
   responsibilities?: string[];
   status: OpeningStatus;
   approvalStatus?: OpeningApprovalStatus;
+  // Engagement type. 'full' = Nearwork runs the whole pipeline (default).
+  // 'sourcing' = Nearwork sources + screens + submits; the client runs their own
+  // interviews/assessment/hiring. Drives the pipeline stages, emails and who can
+  // move a candidate. See lib/pipeline-stages.ts.
+  pipelineType?: 'full' | 'sourcing';
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   targetDate?: string;
   // Shared opening ID across Admin / Jobs / Talent (mirrors the pipeline NW code)
@@ -485,6 +490,7 @@ export interface Pipeline {
   title: string;
   status: PipelineStatus;
   stage?: string;
+  pipelineType?: 'full' | 'sourcing';   // denormalized from the opening; drives the board's stage set
   recruiter?: string;
   accountManager?: string;
   candidates?: PipelineCandidate[];

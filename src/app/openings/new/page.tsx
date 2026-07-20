@@ -25,6 +25,7 @@ export default function NewOpeningPage() {
     priority: 'medium',
     skills: '',
     notifyCandidatesOnPublish: false,
+    pipelineType: 'full' as 'full' | 'sourcing',
   });
   const [saving, setSaving] = useState(false);
 
@@ -90,6 +91,7 @@ export default function NewOpeningPage() {
         priority: form.priority,
         skills,
         notifyCandidatesOnPublish: form.notifyCandidatesOnPublish,
+        pipelineType: form.pipelineType,
         status: 'draft',
         approvalStatus: 'draft',
         published: false,
@@ -104,6 +106,7 @@ export default function NewOpeningPage() {
         orgName: org?.name ?? '',
         recruiter: form.recruiter,
         recruiterEmail: form.recruiterEmail,
+        pipelineType: form.pipelineType,
         status: 'active',
         candidates: [],
         createdAt: serverTimestamp(),
@@ -223,6 +226,36 @@ export default function NewOpeningPage() {
               ) : (
                 <><Radar className="h-3 w-3" style={{ color: 'var(--green)' }} /> ~{reachCount} candidate{reachCount === 1 ? '' : 's'} match these skills</>
               )}
+            </div>
+          </div>
+
+          {/* Engagement type — full recruitment vs sourcing only */}
+          <div>
+            <label className="mb-1.5 block text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+              Engagement type
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { v: 'full', t: 'Full recruitment', d: 'We run the whole process — source, assess, interview, hand finalists to the client.' },
+                { v: 'sourcing', t: 'Sourcing only', d: 'We source & submit; the client runs their own interviews, assessment and hiring.' },
+              ] as const).map((opt) => {
+                const on = form.pipelineType === opt.v;
+                return (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, pipelineType: opt.v }))}
+                    className="rounded-lg border p-3 text-left transition-colors"
+                    style={{
+                      borderColor: on ? 'var(--green)' : 'var(--border)',
+                      background: on ? 'var(--green-soft)' : 'white',
+                    }}
+                  >
+                    <div className="text-[13px] font-700" style={{ color: on ? 'var(--green)' : 'var(--black)' }}>{opt.t}</div>
+                    <div className="mt-0.5 text-[11px] leading-snug text-[var(--light)]">{opt.d}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

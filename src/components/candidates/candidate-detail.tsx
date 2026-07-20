@@ -192,6 +192,26 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     }
   }
 
+  // ── Inline-editable quick facts (availability / timezone) ──────────────────
+  const [editField, setEditField] = useState<null | 'availability' | 'timezone'>(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [fieldSaving, setFieldSaving] = useState(false);
+  async function saveQuickFact(key: 'availability' | 'timezone') {
+    setFieldSaving(true);
+    try {
+      await updateDoc(doc(db, 'candidates', candidate.id), {
+        [key]: fieldDraft.trim() || null,
+        updatedAt: serverTimestamp(),
+      });
+      setEditField(null);
+      showToast('Saved', 'success');
+    } catch {
+      showToast('Failed to save', 'error');
+    } finally {
+      setFieldSaving(false);
+    }
+  }
+
   // ── @-mentions: Nearwork staff only on the candidate page ──────────────────
   type MentionUser = { id: string; name: string; handle: string; initials: string; role: string };
   const [staff, setStaff] = useState<MentionUser[]>([]);
@@ -866,6 +886,37 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       <span style={{ fontSize: 13, fontWeight: 500, color: NW.black, textAlign: 'right' }}>{value}</span>
     </div>
   );
+  // Click-to-edit quick fact (staff-entered availability / timezone)
+  const editableRow = (key: 'availability' | 'timezone', label: string, placeholder: string, last = false) => {
+    const val = candidate[key];
+    if (editField === key) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: last ? 'none' : `1px solid ${NW.gray100}` }}>
+          <span style={{ fontSize: 12.5, color: NW.gray500, flexShrink: 0 }}>{label}</span>
+          <input
+            autoFocus
+            value={fieldDraft}
+            onChange={(e) => setFieldDraft(e.target.value)}
+            placeholder={placeholder}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveQuickFact(key); if (e.key === 'Escape') setEditField(null); }}
+            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '5px 8px', border: `1px solid ${NW.gray300}`, borderRadius: 8, outline: 'none' }}
+          />
+          <button onClick={() => saveQuickFact(key)} disabled={fieldSaving} style={{ fontSize: 12, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{fieldSaving ? '…' : 'Save'}</button>
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderBottom: last ? 'none' : `1px solid ${NW.gray100}` }}>
+        <span style={{ fontSize: 12.5, color: NW.gray500 }}>{label}</span>
+        <button
+          onClick={() => { setFieldDraft(typeof val === 'string' ? val : ''); setEditField(key); }}
+          style={{ fontSize: 13, fontWeight: 500, color: val ? NW.black : NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'right' }}
+        >
+          {val || '+ Add'}
+        </button>
+      </div>
+    );
+  };
   const cefrPct = (lvl?: CEFRLevel) => (lvl ? CEFR_TO_PCT[lvl] : 0);
 
   return (
@@ -1324,6 +1375,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             {snapRow('Salary expectation', <span style={{ fontFamily: MONO }}>{monthlySalary ?? '—'}</span>)}
             {snapRow('Location', cityLabel || '—')}
             {snapRow('Experience', yearsExp != null ? `${yearsExp}+ years` : '—')}
+            {editableRow('availability', 'Availability', "e.g. 2 weeks' notice")}
+            {editableRow('timezone', 'Timezone', 'e.g. GMT-5 (EST)')}
             {snapRow('Source', candidate.source || '—')}
             {snapRow('Applications', `${appsCount} total`, true)}
           </div>

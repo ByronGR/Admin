@@ -362,6 +362,8 @@ export interface Candidate {
   expectedSalary?: number | string; // number (Admin) or formatted string (Jobs)
   expectedSalaryAmount?: number;
   expectedSalaryCurrency?: string;
+  availability?: string;      // when they can start — e.g. "Immediately", "2 weeks' notice" (staff-entered)
+  timezone?: string;          // candidate's working timezone — e.g. "GMT-5 (EST)" (staff-entered)
   notes?: string;
   rating?: number;
   createdAt?: Timestamp;

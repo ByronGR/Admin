@@ -318,6 +318,31 @@ function OrgAvatar({ org, size = 'md' }: { org: Organization; size?: 'sm' | 'md'
   );
 }
 
+// Detail-header logo: manual upload → auto logo from website → initials. Larger,
+// square, used on the org page header (the upload button is rendered separately).
+function OrgHeaderLogo({ org }: { org: Organization }) {
+  const [err, setErr] = useState(false);
+  const src = org.logo || (!err ? logoUrl(org.website) : null);
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={org.name}
+        onError={() => setErr(true)}
+        className="h-16 w-16 rounded-2xl object-cover bg-white"
+      />
+    );
+  }
+  return (
+    <div
+      className="flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-800 text-white"
+      style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
+    >
+      {initials(org.name)}
+    </div>
+  );
+}
+
 // ─── Redesign list (Sprint 3a) ────────────────────────────────────────────────
 // Reuses the real Tier (getTier) + Account Health (getHealth + healthHistory)
 // models; per-org counts (open roles / pipeline / placements) are computed from
@@ -1677,16 +1702,7 @@ function OrgDetail({
         <div className="flex flex-wrap items-start gap-5">
           {/* Logo with upload button */}
           <div className="relative shrink-0">
-            {org.logo ? (
-              <img src={org.logo} alt={org.name} className="h-16 w-16 rounded-2xl object-cover" />
-            ) : (
-              <div
-                className="flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-800 text-white"
-                style={{ background: 'linear-gradient(135deg, var(--green), var(--gd))' }}
-              >
-                {initials(org.name)}
-              </div>
-            )}
+            <OrgHeaderLogo org={org} />
             <button
               onClick={() => logoInputRef.current?.click()}
               disabled={logoUploading}

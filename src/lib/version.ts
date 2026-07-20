@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.22.0';
+export const APP_VERSION = '1.23.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.23.0',
+    date: '2026-07-06',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Move an opening to another organization from the Opening Sheet — the ID, public link and all content stay the same, so a role already shared on social media just becomes visible to a different client.',
+          'Record an offline brief approval: if the client approved outside the app, mark it approved and publish without waiting on their click. Logged in the brief history as an offline approval.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.22.0',
     date: '2026-07-06',

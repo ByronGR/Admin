@@ -478,6 +478,19 @@ export interface PipelineCandidate {
   cvUrl?: string;                // CV download URL copied from candidate profile
   skills?: string[];             // skills from the application form
   expectedSalary?: string;       // formatted salary expectation string
+  // ── Client-facing snapshot (see client-candidate-snapshot.ts) ──────────────
+  // Copied from the candidate profile so the App portal can render a candidate's
+  // profile (esp. sourcing) without read access to the candidates collection.
+  role?: string;                 // target/current job title
+  location?: string;             // candidate location label
+  experience?: number;           // years of experience
+  expectedSalaryAmount?: number;
+  expectedSalaryCurrency?: string;
+  english?: string;              // CEFR level (e.g. 'C1')
+  availability?: string;         // staff-entered — when they can start
+  timezone?: string;             // staff-entered — candidate working timezone
+  workHistory?: WorkHistoryEntry[];
+  resumeUrl?: string;            // resume/CV URL (alias of cvUrl)
   // true while the applicant is in the pre-screening inbox (Applicants tab).
   // Cleared to false when a recruiter approves them into the Kanban pipeline.
   pendingReview?: boolean;

@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.26.0] — 2026-07-20
+
+### Added
+- Candidate profiles now flow to the client portal: work history, resume, English, salary, location, availability & timezone are copied onto the pipeline entry when a candidate is added/approved, and kept in sync when edited. Powers the sourcing candidate view in the App (assessment/DISC stay Nearwork-only).
+
+---
+
 ## [1.25.0] — 2026-07-20
 
 ### Added

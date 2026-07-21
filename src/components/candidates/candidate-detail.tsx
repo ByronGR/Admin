@@ -17,6 +17,7 @@ import {
 } from '@/lib/firebase';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
 import { stagesFor, stageLabel as sourcingStageLabel } from '@/lib/pipeline-stages';
+import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
@@ -182,6 +183,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         englishScore: next,
         updatedAt: serverTimestamp(),
       });
+      await syncSnapshotToPipelines({ english: next.level });
       setEnglishScore(next);
       setEngModalOpen(false);
       showToast('English assessment saved', 'success');
@@ -192,17 +194,38 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     }
   }
 
+  // Propagate the client-facing profile onto every pipeline entry this candidate
+  // is in, so the App portal (which can't read the candidates collection) shows
+  // fresh data. Also backfills entries added before a field existed. Best-effort.
+  async function syncSnapshotToPipelines(patch: Record<string, unknown>) {
+    const snap = { ...clientCandidateSnapshot(candidate), ...patch };
+    await Promise.all(
+      pipelineEntries.map(async ({ pipeline }) => {
+        const list = pipeline.candidates ?? [];
+        if (!list.some((e) => e.candidateId === candidate.id)) return;
+        const cands = list.map((e) => (e.candidateId === candidate.id ? { ...e, ...snap } : e));
+        try {
+          await updateDoc(doc(db, 'pipelines', pipeline.id), { candidates: cands, updatedAt: serverTimestamp() });
+        } catch {
+          /* best-effort — never block the profile edit */
+        }
+      }),
+    );
+  }
+
   // ── Inline-editable quick facts (availability / timezone) ──────────────────
   const [editField, setEditField] = useState<null | 'availability' | 'timezone'>(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
   async function saveQuickFact(key: 'availability' | 'timezone') {
     setFieldSaving(true);
+    const value = fieldDraft.trim() || null;
     try {
       await updateDoc(doc(db, 'candidates', candidate.id), {
-        [key]: fieldDraft.trim() || null,
+        [key]: value,
         updatedAt: serverTimestamp(),
       });
+      await syncSnapshotToPipelines({ [key]: value });
       setEditField(null);
       showToast('Saved', 'success');
     } catch {

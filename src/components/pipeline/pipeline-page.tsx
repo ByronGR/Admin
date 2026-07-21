@@ -50,6 +50,7 @@ import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
 import { stagesFor, isSourcing, normalizeSourcingStage, stageLabel, type StageDef } from '@/lib/pipeline-stages';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
+import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import {
   Search,
   ChevronDown,
@@ -719,6 +720,8 @@ export default function PipelinePage() {
       email: candidate.email,
       // Sourcing openings drop new candidates into 'sourced', not 'applied'.
       stage: normFor(pipeline.pipelineType, addModal.stage) as PipelineCandidate['stage'],
+      // Copy the client-facing profile so the App portal can render it.
+      ...clientCandidateSnapshot(candidate),
     };
 
     try {
@@ -1891,6 +1894,10 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
     setApprovingId(app.id);
     try {
       const candId = app.candidateCode || app.candidateId;
+      // Pull the full candidate profile so the client portal gets the same
+      // sourcing-safe snapshot as a manual add (work history, resume, etc.).
+      const candSnap = await getDoc(doc(db, 'candidates', candId)).catch(() => null);
+      const cand = candSnap?.exists() ? ({ id: candId, ...candSnap.data() } as Candidate) : undefined;
       const newEntry = {
         candidateId: candId,
         candidateCode: candId,
@@ -1902,6 +1909,7 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
         cvUrl: app.cvUrl ?? null,
         skills: app.skills ?? [],
         expectedSalary: app.expectedSalary ?? '',
+        ...(cand ? clientCandidateSnapshot(cand) : {}),
       };
       await Promise.all([
         updateDoc(doc(db, 'pipelines', pipeline.id), {

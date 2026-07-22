@@ -5,6 +5,11 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.26.1] — 2026-07-22
+
+### Changed
+- SEO: serve `X-Robots-Tag: noindex, nofollow` on admin.nearwork.co (private app, kept out of search).
+
 ## [1.26.0] — 2026-07-20
 
 ### Added

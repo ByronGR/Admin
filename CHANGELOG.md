@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.27.0] — 2026-07-25
+
+### Added
+- New opening form now captures **monthly salary** (min / max), currency, and a "hide on public job board" toggle — written straight to the opening doc so it flows to nearwork.co/jobs and Google for Jobs. Salary was previously only editable after creation (opening detail / kick-off brief).
+
+---
+
 ## [1.26.1] — 2026-07-22
 
 ### Changed

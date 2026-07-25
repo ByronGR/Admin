@@ -1274,7 +1274,7 @@ function PipelineRow({
         onMouseLeave={() => setRowHover(false)}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 2.4fr) 96px minmax(0, 1.7fr) 96px 150px 88px',
+          gridTemplateColumns: 'minmax(0, 2.4fr) 88px minmax(0, 1.5fr) 88px 148px 184px',
           alignItems: 'center',
           gap: 16,
           padding: '14px 20px',
@@ -2051,12 +2051,24 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
 
               {/* Actions */}
               <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  onClick={() => openProfile(app)}
-                  className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-600 text-[var(--mid)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
-                >
-                  View profile
-                </button>
+                {(app.candidateCode || app.candidateId) ? (
+                  <a
+                    href={`/candidates/${app.candidateCode || app.candidateId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-600 text-[var(--mid)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
+                  >
+                    View profile
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => openProfile(app)}
+                    className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-600 text-[var(--mid)] transition-colors hover:border-[var(--green)] hover:text-[var(--green)]"
+                  >
+                    View profile
+                  </button>
+                )}
                 <button
                   onClick={() => handleApprove(app)}
                   disabled={isApproving || isRejecting}

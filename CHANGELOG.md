@@ -5,6 +5,14 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.27.1] — 2026-07-25
+
+### Fixed
+- Pipelines list: widened the actions column so the candidate-count pill and "Hold to delete" button no longer overlap.
+- Pipeline applicants: "View profile" now opens the candidate's real profile page in a new tab instead of an in-page popup (falls back to the popup only when an applicant has no linked candidate record).
+
+---
+
 ## [1.27.0] — 2026-07-25
 
 ### Added

@@ -24,6 +24,10 @@ export default function NewOpeningPage() {
     recruiterEmail: '',
     priority: 'medium',
     skills: '',
+    salaryMin: '',
+    salaryMax: '',
+    currency: 'USD',
+    hideSalary: false,
     notifyCandidatesOnPublish: false,
     pipelineType: 'full' as 'full' | 'sourcing',
   });
@@ -90,6 +94,10 @@ export default function NewOpeningPage() {
         recruiterEmail: form.recruiterEmail,
         priority: form.priority,
         skills,
+        salaryMin: form.salaryMin ? Number(form.salaryMin) : null,
+        salaryMax: form.salaryMax ? Number(form.salaryMax) : null,
+        salaryCurrency: form.currency,
+        hideSalary: form.hideSalary,
         notifyCandidatesOnPublish: form.notifyCandidatesOnPublish,
         pipelineType: form.pipelineType,
         status: 'draft',
@@ -226,6 +234,56 @@ export default function NewOpeningPage() {
               ) : (
                 <><Radar className="h-3 w-3" style={{ color: 'var(--green)' }} /> ~{reachCount} candidate{reachCount === 1 ? '' : 's'} match these skills</>
               )}
+            </div>
+          </div>
+
+          {/* Compensation — flows to the public job board (nearwork.co/jobs) */}
+          <div>
+            <label className="mb-1.5 block text-[10px] font-700 uppercase tracking-wider text-[var(--light)]">
+              Monthly salary <span className="normal-case font-400">(USD, shown on Jobs)</span>
+            </label>
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <input
+                type="number"
+                min={0}
+                value={form.salaryMin}
+                onChange={(e) => setForm((f) => ({ ...f, salaryMin: e.target.value }))}
+                placeholder="Min · e.g. 3000"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+              <input
+                type="number"
+                min={0}
+                value={form.salaryMax}
+                onChange={(e) => setForm((f) => ({ ...f, salaryMax: e.target.value }))}
+                placeholder="Max · e.g. 5000"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none focus:border-[var(--green)] focus:bg-white"
+              />
+              <select
+                value={form.currency}
+                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-2.5 text-sm outline-none focus:border-[var(--green)]"
+              >
+                <option value="USD">USD</option>
+                <option value="COP">COP</option>
+                <option value="MXN">MXN</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+            <div className="mt-2 flex items-start gap-2">
+              <input
+                id="hideSalary"
+                type="checkbox"
+                checked={form.hideSalary}
+                onChange={(e) => setForm((f) => ({ ...f, hideSalary: e.target.checked }))}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] accent-[var(--green)]"
+              />
+              <label htmlFor="hideSalary" className="text-xs text-[var(--mid)]">
+                Hide the amount on the public job board
+                <span className="mt-0.5 block text-[11px] text-[var(--light)]">
+                  Off is recommended — a visible salary boosts Google for Jobs ranking and applications. When on, the listing shows &quot;Salary on request.&quot;
+                </span>
+              </label>
             </div>
           </div>
 

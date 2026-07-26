@@ -21,10 +21,16 @@ export function candidateLocationLabel(c: {
   location?: string;
 }): string {
   const country = (c.locationCountry || c.country || '').trim();
-  if (country && country.toLowerCase() !== 'colombia') return country;
-  const city = titleCasePlace((c.city || c.locationCity || '').trim());
-  const dept = (c.department || c.locationDepartment || '').trim();
-  return [city, dept].filter(Boolean).join(', ') || (c.location || '').trim();
+  const loc = (c.location || '').trim();
+  // The onboarding stores a clean "City, Country" in `location`. Prefer the city
+  // from there (keeps accents), and always pair it with the country → "City, Country"
+  // (e.g. "Medellín, Colombia", "Buenos Aires, Argentina"). Falls back gracefully.
+  const cityFromLoc = loc.includes(',') ? loc.split(',')[0].trim() : '';
+  const city = titleCasePlace((cityFromLoc || c.city || c.locationCity || '').trim());
+  if (city && country) return `${city}, ${country}`;
+  if (city) return city;
+  if (country) return country;
+  return loc;
 }
 
 /** Capitalize each word (first letter up, rest down). For places like "cali" → "Cali". */

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.27.2';
+export const APP_VERSION = '1.27.3';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,13 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.27.3',
+    date: '2026-07-26',
+    sections: [
+      { title: 'Fixed', items: ['Candidate Location now shows "City, Country" (e.g. Medellín, Colombia; Buenos Aires, Argentina) instead of country-only or city-only.'] },
+    ],
+  },
   {
     version: '1.27.2',
     date: '2026-07-26',

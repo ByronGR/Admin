@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.27.1';
+export const APP_VERSION = '1.27.2';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.27.2',
+    date: '2026-07-26',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Pipelines list now reflects a paused opening in real time — pausing, resuming, or editing an opening’s status syncs the pipeline, so the badge no longer stays "Active" after a pause.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.24.0',
     date: '2026-07-06',

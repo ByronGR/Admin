@@ -348,7 +348,9 @@ export function OpeningDetail({
         status:    'paused',
         updatedAt: serverTimestamp(),
       });
-      showToast('Opening paused — removed from jobs.nearwork.co', 'success');
+      // Keep the pipeline in sync so its list badge reflects the paused opening.
+      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: 'paused', updatedAt: serverTimestamp() }).catch(() => {});
+      showToast('Opening paused — removed from the job board', 'success');
       await onRefresh();
     } catch {
       showToast('Failed to pause opening', 'error');
@@ -368,7 +370,8 @@ export function OpeningDetail({
         publishedAt: serverTimestamp(),
         updatedAt:   serverTimestamp(),
       });
-      showToast('Opening active again on jobs.nearwork.co', 'success');
+      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: 'active', updatedAt: serverTimestamp() }).catch(() => {});
+      showToast('Opening active again on the job board', 'success');
       await onRefresh();
     } catch {
       showToast('Failed to activate opening', 'error');
@@ -401,9 +404,12 @@ export function OpeningDetail({
         ...(goneFromJobs && opening.published ? { published: false } : {}),
         updatedAt: serverTimestamp(),
       });
+      // Mirror the opening status onto the pipeline so its list badge stays accurate.
+      const pipeStatus = editForm.status === 'paused' ? 'paused' : editForm.status === 'cancelled' ? 'cancelled' : 'active';
+      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: pipeStatus, updatedAt: serverTimestamp() }).catch(() => {});
       showToast(
         goneFromJobs && opening.published
-          ? 'Opening updated · removed from jobs.nearwork.co'
+          ? 'Opening updated · removed from the job board'
           : 'Opening updated',
         'success',
       );

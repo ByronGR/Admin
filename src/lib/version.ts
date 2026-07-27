@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.27.5';
+export const APP_VERSION = '1.27.6';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,13 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.27.6',
+    date: '2026-07-26',
+    sections: [
+      { title: 'Fixed', items: ['Years of experience is now calculated from the candidate's work history (span of roles) instead of always showing "0+ years".'] },
+    ],
+  },
   {
     version: '1.27.5',
     date: '2026-07-26',

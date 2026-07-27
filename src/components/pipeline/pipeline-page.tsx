@@ -425,8 +425,11 @@ export default function PipelinePage() {
           .join(' ')
           .toLowerCase()
           .includes(search.toLowerCase());
+      // Filter on the EFFECTIVE status (opening status wins) so a paused opening
+      // drops out of the "Active" tab, matching its badge.
+      const effStatus = effectivePipelineStatus(p.status, openingStatuses[p.code]);
       const matchStatus =
-        statusFilter === 'all' || p.status === statusFilter;
+        statusFilter === 'all' || effStatus === statusFilter;
       return matchSearch && matchStatus;
     })
     .map((p) => {

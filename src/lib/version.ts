@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.27.4';
+export const APP_VERSION = '1.27.5';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,13 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.27.5',
+    date: '2026-07-26',
+    sections: [
+      { title: 'Fixed', items: ['Paused/cancelled/filled openings no longer appear under the "Active" pipelines filter — the filter now uses the opening status too.'] },
+    ],
+  },
   {
     version: '1.27.4',
     date: '2026-07-26',

@@ -98,6 +98,15 @@ function normalizeStage(stage: string): StageKey {
   return 'applied';
 }
 
+// Derive the status shown on a pipeline row's badge. If the matching opening was
+// paused/cancelled/filled, that wins (pausing an opening never touches
+// pipeline.status); otherwise fall back to the pipeline's own status.
+function effectivePipelineStatus(pipelineStatus: string | undefined, openingStatus: string | undefined): string {
+  const os = String(openingStatus || '').trim().toLowerCase();
+  if (os === 'paused' || os === 'cancelled' || os === 'filled') return os;
+  return pipelineStatus || 'active';
+}
+
 // Stage colours for the redesign stage-spread bar / dots.
 const STAGE_SPREAD_COLOR: Record<StageKey, string> = {
   'applied': NW.gray400,
@@ -223,6 +232,11 @@ export default function PipelinePage() {
   // org id/shortId → name, so rows can show the client org even when the
   // pipeline doc only stored orgId (not a denormalized orgName).
   const [orgNames, setOrgNames] = useState<Record<string, string>>({});
+  // opening code → opening.status, live from the openings collection. Pausing an
+  // opening sets opening.status = 'paused' but does NOT touch pipeline.status, so
+  // we derive the list badge from this map to reflect paused/cancelled/filled
+  // openings in real time — including ones paused before the sync-on-change existed.
+  const [openingStatuses, setOpeningStatuses] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activePipelineCode, setActivePipelineCode] = useState<string | null>(null);
@@ -281,6 +295,24 @@ export default function PipelinePage() {
       setPipelines(data);
       setLoading(false);
     });
+    return unsub;
+  }, []);
+
+  // Real-time listener on openings so the list badge reflects an opening that was
+  // paused/cancelled/filled — the opening doc id === its code === the pipeline code.
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'openings'),
+      (snap) => {
+        const map: Record<string, string> = {};
+        snap.docs.forEach((d) => {
+          const s = (d.data() as { status?: string }).status;
+          if (s) map[d.id] = s;
+        });
+        setOpeningStatuses(map);
+      },
+      () => { /* non-critical — fall back to pipeline.status */ },
+    );
     return unsub;
   }, []);
 
@@ -894,6 +926,7 @@ export default function PipelinePage() {
                 key={p.code}
                 pipeline={p}
                 scoreMap={scoreMap}
+                effectiveStatus={effectivePipelineStatus(p.status, openingStatuses[p.code])}
                 applicantCount={applicantCounts[p.code] ?? 0}
                 orgLabel={p.orgName || orgNames[p.orgId] || ''}
                 expanded={expandedRows.has(p.code)}
@@ -1203,6 +1236,7 @@ export default function PipelinePage() {
 function PipelineRow({
   pipeline,
   scoreMap,
+  effectiveStatus,
   applicantCount = 0,
   orgLabel = '',
   expanded,
@@ -1220,6 +1254,7 @@ function PipelineRow({
 }: {
   pipeline: Pipeline;
   scoreMap: Record<string, number>;
+  effectiveStatus: string;
   applicantCount?: number;
   orgLabel?: string;
   expanded: boolean;
@@ -1254,16 +1289,16 @@ function PipelineRow({
   const totalWithApplicants = cands.length + applicantCount;
 
   const statusColor =
-    pipeline.status === 'active'
+    effectiveStatus === 'active'
       ? 'b-green'
-      : pipeline.status === 'cancelled'
+      : effectiveStatus === 'cancelled'
         ? 'b-red'
         : 'b-amber';
 
   return (
     <div
       className={`rounded-2xl border transition-all ${
-        pipeline.status === 'cancelled'
+        effectiveStatus === 'cancelled'
           ? 'border-red-100 bg-red-50/30'
           : 'border-[var(--border)] bg-white'
       }`}
@@ -1329,7 +1364,7 @@ function PipelineRow({
         </div>
 
         {/* Status */}
-        <div><Badge label={pipeline.status} variant="status" /></div>
+        <div><Badge label={effectiveStatus} variant="status" /></div>
 
         {/* Total candidates incl. applicants — between status and delete */}
         <div

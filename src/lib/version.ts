@@ -25,7 +25,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     version: '1.27.6',
     date: '2026-07-26',
     sections: [
-      { title: 'Fixed', items: ['Years of experience is now calculated from the candidate's work history (span of roles) instead of always showing "0+ years".'] },
+      { title: 'Fixed', items: ['Years of experience is now calculated from work history (span of roles) instead of always showing "0+ years".'] },
     ],
   },
   {

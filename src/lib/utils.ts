@@ -14,6 +14,30 @@ export function cn(...inputs: ClassValue[]) {
  * Colombia → "City, Department"; any other country → just the country name.
  * Falls back to whatever location text exists.
  */
+// Years of experience derived from the candidate's work history — the span from
+// their earliest role start to the latest end (or now for a current role). The
+// stored `experience` field is almost always 0, so compute it from real data.
+export function yearsOfExperience(workHistory?: Array<{ from?: string; to?: string; current?: boolean }>): number | null {
+  const rows = (workHistory || []).filter((w) => w && (w.from || w.to));
+  if (!rows.length) return null;
+  const nowYear = new Date().getFullYear();
+  const yr = (s?: string): number | null => {
+    const m = String(s || '').match(/(19|20)\d{2}/);
+    return m ? Number(m[0]) : null;
+  };
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  for (const w of rows) {
+    const start = yr(w.from);
+    if (start != null) minStart = Math.min(minStart, start);
+    const isCurrent = w.current === true || !w.to || /present|current|actual|ongoing|now/i.test(String(w.to));
+    const end = isCurrent ? nowYear : (yr(w.to) ?? nowYear);
+    maxEnd = Math.max(maxEnd, end);
+  }
+  if (!isFinite(minStart) || !isFinite(maxEnd)) return null;
+  return Math.max(0, maxEnd - minStart);
+}
+
 export function candidateLocationLabel(c: {
   country?: string; locationCountry?: string;
   city?: string; locationCity?: string;

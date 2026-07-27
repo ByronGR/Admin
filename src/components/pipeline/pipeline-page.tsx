@@ -46,7 +46,7 @@ import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
-import { initials, snakeToTitle, fmtCurrency, fmtDate } from '@/lib/utils';
+import { initials, snakeToTitle, fmtCurrency, fmtDate, yearsOfExperience } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
 import { stagesFor, isSourcing, normalizeSourcingStage, stageLabel, type StageDef } from '@/lib/pipeline-stages';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
@@ -2228,10 +2228,10 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
           },
           {
             label: 'Experience',
-            value:
-              typeof profile.experience === 'number'
-                ? `${profile.experience} yr${profile.experience !== 1 ? 's' : ''}`
-                : undefined,
+            value: (() => {
+              const y = yearsOfExperience(profile.workHistory) ?? (typeof profile.experience === 'number' ? profile.experience : null);
+              return y != null ? `${y} yr${y !== 1 ? 's' : ''}` : undefined;
+            })(),
           },
         ]
           .filter((item) => item.value)

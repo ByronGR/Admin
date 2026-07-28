@@ -277,20 +277,30 @@ function UploadDocModal({ engagementId, orgId, openings, onClose, onDone }: { en
   async function save() {
     if (!f.name.trim() || saving) return;
     setSaving(true);
+    // The MSA is an account-level document (one per org, covers every engagement),
+    // so it's stored on organizationDocuments regardless of which engagement you're in.
+    const isMsa = f.type === 'MSA';
     try {
       let url = '', storagePath = '', size = '';
       if (file) {
-        storagePath = `engagements/${engagementId}/${Date.now()}-${file.name}`;
+        storagePath = isMsa ? `organizations/${orgId}/msa/${Date.now()}-${file.name}` : `engagements/${engagementId}/${Date.now()}-${file.name}`;
         const sref = ref(storage, storagePath);
         await uploadBytes(sref, file);
         url = await getDownloadURL(sref);
         size = fileSize(file.size);
       }
-      await addDoc(collection(db, 'engagementDocuments'), {
-        engagementId, orgId, type: f.type, name: f.name.trim(), status: f.status,
-        openingCodes: f.openingCodes, url, storagePath, size,
-        uploadedAt: serverTimestamp(), uploadedBy: uploaderName(),
-      });
+      if (isMsa) {
+        await setDoc(doc(db, 'organizationDocuments', `${orgId}-msa`), {
+          orgId, type: 'MSA', name: f.name.trim(), status: f.status, url, storagePath, size,
+          uploadedAt: serverTimestamp(), uploadedBy: uploaderName(),
+        });
+      } else {
+        await addDoc(collection(db, 'engagementDocuments'), {
+          engagementId, orgId, type: f.type, name: f.name.trim(), status: f.status,
+          openingCodes: f.openingCodes, url, storagePath, size,
+          uploadedAt: serverTimestamp(), uploadedBy: uploaderName(),
+        });
+      }
       onDone();
     } catch (e) { console.error('[engagements] upload failed', e); alert('Could not upload — check permissions.'); setSaving(false); }
   }
@@ -305,7 +315,7 @@ function UploadDocModal({ engagementId, orgId, openings, onClose, onDone }: { en
         </div>
         <div><label style={engLbl}>File name</label><input style={engField} value={f.name} placeholder="SOW — Product Designer.pdf" onChange={e => set('name', e.target.value)} /></div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div><label style={engLbl}>Type</label><select style={engField} value={f.type} onChange={e => set('type', e.target.value)}>{['Service Quote', 'SOW', 'Other'].map(t => <option key={t}>{t}</option>)}</select></div>
+          <div><label style={engLbl}>Type</label><select style={engField} value={f.type} onChange={e => set('type', e.target.value)}>{['MSA', 'Service Quote', 'SOW', 'Other'].map(t => <option key={t}>{t}</option>)}</select></div>
           <div><label style={engLbl}>Status</label><select style={engField} value={f.status} onChange={e => set('status', e.target.value)}>{(['Draft', 'Awaiting signature', 'Signed'] as const).map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div>

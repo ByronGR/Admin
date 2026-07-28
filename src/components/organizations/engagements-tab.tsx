@@ -164,7 +164,7 @@ function DealSearch({ onPick }: { onPick: (deal: HsDeal) => void }) {
       {results.length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 190, overflowY: 'auto' }}>
           {results.map(d => (
-            <button key={d.id} type="button" onClick={() => onPick(d)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 11px', borderRadius: 10, border: `1px solid ${NW.gray100}`, background: NW.white }}
+            <button key={d.id} type="button" onClick={() => onPick(d)} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 11px', borderRadius: 10, border: `1px solid ${NW.gray100}`, background: NW.white }}
               onMouseEnter={e => { e.currentTarget.style.background = NW.gray50; }} onMouseLeave={e => { e.currentTarget.style.background = NW.white; }}>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: NW.black }}>{d.title}</span>
@@ -215,8 +215,8 @@ function EngagementModal({ eng, orgId, orgName, onClose, onDone }: { eng?: Engag
   }
 
   return (
-    <Modal open onClose={onClose} title={isEdit ? 'Edit engagement' : 'New engagement'} size="lg">
-      <div style={{ display: 'grid', gap: 16 }}>
+    <Modal open onClose={onClose} title={isEdit ? 'Edit engagement' : 'New engagement'} size="lg" className="min-w-0">
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16 }}>
         <div><label style={engLbl}>Engagement name</label><input style={engField} value={title} placeholder="Name this engagement — e.g. Marketing team, Q3" onChange={e => setTitle(e.target.value)} autoFocus /></div>
 
         <div>
@@ -224,7 +224,7 @@ function EngagementModal({ eng, orgId, orgName, onClose, onDone }: { eng?: Engag
           {hasDeals && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
               {deals.map(d => (
-                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 10, background: '#FF7A590D', border: '1px solid #FF7A5933' }}>
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, padding: '8px 11px', borderRadius: 10, background: '#FF7A590D', border: '1px solid #FF7A5933' }}>
                   <Icon name="refresh-cw" size={13} color="#B4531E" />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
@@ -245,7 +245,7 @@ function EngagementModal({ eng, orgId, orgName, onClose, onDone }: { eng?: Engag
         )}
 
         {isEdit && !hasDeals && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
             <div><label style={engLbl}>Deal value (USD)</label><input style={engField} value={value} placeholder="84000" onChange={e => setValue(e.target.value)} /></div>
             <div><label style={engLbl}>Close date</label><input style={engField} value={closeDate} placeholder="Aug 01, 2026" onChange={e => setCloseDate(e.target.value)} /></div>
             <div style={{ gridColumn: '1 / -1' }}><label style={engLbl}>Owner</label><input style={engField} value={ownerName} placeholder="Deal owner" onChange={e => setOwnerName(e.target.value)} /></div>
@@ -415,7 +415,7 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
   onBack: () => void; reload: () => void;
 }) {
   const router = useRouter();
-  const [modal, setModal] = useState<null | 'edit' | 'upload' | 'openings'>(null);
+  const [modal, setModal] = useState<null | 'edit' | 'upload' | 'openings' | 'msa'>(null);
   const linked = openings.filter(o => (eng.openingCodes || []).includes(o.id));
   const paid = payments.filter(p => p.status === 'Paid').reduce((s, p) => s + p.amount, 0);
   const pending = payments.filter(p => p.status !== 'Paid').reduce((s, p) => s + p.amount, 0);
@@ -517,9 +517,14 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
                   {!linkedFromOrg && <button title="Remove" onClick={() => removeDoc(d.id)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${NW.gray200}`, background: NW.white, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="trash-2" size={14} color={NW.rose500} /></button>}
                 </div>
               );
-            }) : (
+            }) : g.type === 'MSA' ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', fontSize: 12.5, color: NW.gray500, padding: '11px 12px', border: `1px dashed ${NW.gray200}`, borderRadius: 11, background: NW.offWhite }}>
+                <span>No MSA on file for {org.name} yet — it covers every engagement once added.</span>
+                <Button variant="secondary" size="sm" icon="upload" onClick={() => setModal('msa')}>Upload MSA</Button>
+              </div>
+            ) : (
               <div style={{ fontSize: 12.5, color: NW.gray400, padding: '9px 12px', border: `1px dashed ${NW.gray200}`, borderRadius: 11, background: NW.offWhite }}>
-                {g.type === 'MSA' ? 'No MSA on file for ' + org.name + ' — upload it on the organization, not here.' : `No ${g.type.toLowerCase()} yet.`}
+                {`No ${g.type.toLowerCase()} yet.`}
               </div>
             )}
           </div>
@@ -575,6 +580,7 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
       {modal === 'edit' && <EngagementModal eng={eng} orgId={org.id} orgName={org.name} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === 'upload' && <UploadDocModal engagementId={eng.id} orgId={org.id} openings={linked} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === 'openings' && <LinkOpeningsModal engagement={eng} orgOpenings={openings} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal === 'msa' && <MsaModal org={org} msa={msa} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
     </div>
   );
 }

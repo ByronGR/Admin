@@ -3,12 +3,13 @@
 // ============================================================
 // Engagements — one record per client deal (legal + openings + payments).
 // Renders as a tab on the Organization detail page.
-// Ported from the Claude Design prototype (admin-engagements.jsx) and wired
-// to Firestore (`engagements`, `engagementDocuments`, `organizationDocuments`,
-// `engagementPayments`) + Firebase Storage for uploaded files.
+// An engagement has a staff-chosen name and can bundle one or more HubSpot
+// deals; stages reflect the deals' REAL HubSpot pipeline stage (won/lost too).
+// Firestore: engagements / engagementDocuments / organizationDocuments /
+// engagementPayments; files in Firebase Storage.
 // ============================================================
 
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   db, auth, storage, collection, getDocs, doc, addDoc, updateDoc, deleteDoc, setDoc,
@@ -19,17 +20,24 @@ import { Card, CardHead } from '@/components/nw/shell-ui';
 import { Modal } from '@/components/ui/modal';
 import { fmtDate } from '@/lib/utils';
 import {
-  ENG_STAGES, ENG_DOC_TYPES,
+  ENG_STAGES,
   type Organization, type Opening,
   type Engagement, type EngagementDocument, type OrgDocument, type EngagementPayment,
-  type EngagementStage, type DealDocStatus,
+  type EngagementStage, type DealDocStatus, type LinkedDeal, type DealStageType, type DealPipelineStage,
 } from '@/lib/types';
 
 const fmtMoney = (n?: number) => '$' + Number(n || 0).toLocaleString('en-US');
 const uploaderName = () => auth.currentUser?.displayName || auth.currentUser?.email || 'Staff';
 const fileSize = (bytes: number) => (bytes >= 1024 * 1024 ? (bytes / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB');
+const manualStageType = (label?: string): DealStageType => {
+  const s = (label || '').toLowerCase();
+  return s.includes('won') ? 'won' : s.includes('lost') ? 'lost' : 'open';
+};
 
-// ── Small presentational bits ─────────────────────────────────────────────────
+// Deal shape returned by /api/hubspot-deals.
+type HsDeal = { id: string; title: string; value: number; ownerName: string; closeDate: string; stageLabel: string; stageType: DealStageType; stages: DealPipelineStage[] };
+
+// ── Presentational bits ───────────────────────────────────────────────────────
 const DOC_STATUS: Record<string, { fg: string; bg: string; dot: string }> = {
   Signed: { fg: NW.teal700, bg: NW.teal50, dot: NW.teal500 },
   'Awaiting signature': { fg: '#A16207', bg: NW.yellow50, dot: NW.yellow500 },
@@ -49,7 +57,7 @@ function TypeBadge({ type }: { type: string }) {
   const c = type === 'MSA' ? NW.violet500 : type === 'Service Quote' ? NW.blue500 : type === 'SOW' ? NW.teal600 : NW.gray500;
   return <span style={{ fontSize: 10.5, fontWeight: 600, color: c, background: c + '18', borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap' }}>{type}</span>;
 }
-function HubspotBadge({ children = 'Synced from HubSpot' }: { children?: React.ReactNode }) {
+function HubspotBadge({ children = 'Synced from HubSpot' }: { children?: ReactNode }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: '#B4531E', background: '#FF7A5919', border: '1px solid #FF7A5933', borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
       <Icon name="refresh-cw" size={10} color="#B4531E" />{children}
@@ -57,25 +65,41 @@ function HubspotBadge({ children = 'Synced from HubSpot' }: { children?: React.R
   );
 }
 
-// Compact stage strip — reads left to right, current stage filled.
-function StageTracker({ stage, compact }: { stage: EngagementStage; compact?: boolean }) {
-  const i = Math.max(0, ENG_STAGES.indexOf(stage));
+const STAGE_TYPE_STYLE: Record<DealStageType, { fg: string; bg: string; fill: string }> = {
+  won: { fg: NW.green600, bg: NW.green50, fill: NW.green600 },
+  lost: { fg: '#C0392B', bg: '#FEF0F0', fill: '#C0392B' },
+  open: { fg: NW.teal700, bg: NW.teal50, fill: NW.teal600 },
+};
+
+// A single stage as a coloured pill — the real HubSpot label.
+function StagePill({ label, type }: { label?: string; type: DealStageType }) {
+  const s = STAGE_TYPE_STYLE[type] || STAGE_TYPE_STYLE.open;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 6, flexWrap: 'wrap' }}>
-      {ENG_STAGES.map((s, n) => {
-        const done = n < i, on = n === i;
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: s.fg, background: s.bg, border: `1px solid ${s.fg}22`, borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.fill }} />{label || '—'}
+    </span>
+  );
+}
+
+// Full tracker from a deal's REAL ordered pipeline stages — current filled
+// (green if won, red if lost), earlier stages ticked.
+function StageTracker({ stages }: { stages: DealPipelineStage[] }) {
+  if (!stages?.length) return null;
+  const curIdx = stages.findIndex(s => s.current);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      {stages.map((s, n) => {
+        const done = curIdx >= 0 && n < curIdx;
+        const on = s.current;
+        const fill = on ? STAGE_TYPE_STYLE[s.type].fill : done ? NW.teal50 : NW.gray50;
+        const color = on ? NW.white : done ? NW.teal700 : NW.gray400;
+        const border = on ? fill : done ? NW.teal500 + '33' : NW.gray100;
         return (
-          <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999,
-              padding: compact ? '3px 9px' : '5px 12px', fontSize: compact ? 10.5 : 12, fontWeight: on ? 600 : 500,
-              color: on ? NW.white : done ? NW.teal700 : NW.gray400,
-              background: on ? NW.teal600 : done ? NW.teal50 : NW.gray50,
-              border: `1px solid ${on ? NW.teal600 : done ? NW.teal500 + '33' : NW.gray100}`,
-            }}>
-              {done && <Icon name="check" size={compact ? 10 : 12} color={NW.teal600} />}{s}
+          <span key={s.label + n} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: on ? 600 : 500, color, background: fill, border: `1px solid ${border}` }}>
+              {done && <Icon name="check" size={12} color={NW.teal600} />}{s.label}
             </span>
-            {n < ENG_STAGES.length - 1 && <span style={{ width: compact ? 8 : 14, height: 1, background: n < i ? NW.teal500 + '55' : NW.gray200 }} />}
+            {n < stages.length - 1 && <span style={{ width: 12, height: 1, background: n < curIdx ? NW.teal500 + '55' : NW.gray200 }} />}
           </span>
         );
       })}
@@ -83,7 +107,7 @@ function StageTracker({ stage, compact }: { stage: EngagementStage; compact?: bo
   );
 }
 
-function EngEmpty({ icon, title, sub, action }: { icon: string; title: string; sub: string; action?: React.ReactNode }) {
+function EngEmpty({ icon, title, sub, action }: { icon: string; title: string; sub: string; action?: ReactNode }) {
   return (
     <div style={{ textAlign: 'center', padding: '28px 20px', border: `1px dashed ${NW.gray200}`, borderRadius: 12, background: NW.offWhite }}>
       <Icon name={icon as never} size={20} color={NW.gray300} />
@@ -97,16 +121,13 @@ function EngEmpty({ icon, title, sub, action }: { icon: string; title: string; s
 const engField: CSSProperties = { width: '100%', boxSizing: 'border-box', border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '9px 11px', font: 'inherit', fontSize: 13.5, color: NW.black, outline: 'none', background: NW.white };
 const engLbl: CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray500, marginBottom: 6, display: 'block' };
 
-function ModalFooter({ children }: { children: React.ReactNode }) {
+function ModalFooter({ children }: { children: ReactNode }) {
   return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${NW.gray100}` }}>{children}</div>;
 }
 
-// ── Create / edit engagement ──────────────────────────────────────────────────
-type HsDeal = { id: string; title: string; value: number; ownerName: string; stage: EngagementStage; stageLabel: string; closeDate: string };
-
-// Search HubSpot deals by name and pick one to auto-fill the form.
-function DealSearch({ initialQuery, onPick }: { initialQuery?: string; onPick: (deal: HsDeal) => void }) {
-  const [q, setQ] = useState(initialQuery || '');
+// Search HubSpot deals by name; each result can be added to the engagement.
+function DealSearch({ onPick }: { onPick: (deal: HsDeal) => void }) {
+  const [q, setQ] = useState('');
   const [results, setResults] = useState<HsDeal[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error' | 'unconfigured'>('idle');
   const [msg, setMsg] = useState('');
@@ -115,11 +136,12 @@ function DealSearch({ initialQuery, onPick }: { initialQuery?: string; onPick: (
     setState('loading');
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/hubspot-deals?q=${encodeURIComponent(q.trim())}`);
+        const idToken = await auth.currentUser?.getIdToken();
+        const r = await fetch(`/api/hubspot-deals?q=${encodeURIComponent(q.trim())}`, { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} });
         const d = await r.json();
         if (!d.ok) {
           setState(d.reason === 'not_configured' ? 'unconfigured' : 'error');
-          setMsg(d.reason === 'missing_scope' ? 'the token is missing the deals scope' : d.message || '');
+          setMsg(d.reason === 'missing_scope' ? 'the token is missing the deals scope' : d.reason === 'unauthorized' ? 'please reload and sign in again' : d.message || '');
           setResults([]);
           return;
         }
@@ -131,22 +153,25 @@ function DealSearch({ initialQuery, onPick }: { initialQuery?: string; onPick: (
   const note = (text: string) => <div style={{ fontSize: 12, color: NW.gray400, marginTop: 8 }}>{text}</div>;
   return (
     <div>
-      <label style={engLbl}>Search your HubSpot deals</label>
       <div style={{ position: 'relative' }}>
-        <input style={{ ...engField, paddingLeft: 34 }} value={q} placeholder="Type a deal or client name" onChange={e => setQ(e.target.value)} autoFocus />
+        <input style={{ ...engField, paddingLeft: 34 }} value={q} placeholder="Type a deal name to search HubSpot" onChange={e => setQ(e.target.value)} />
         <span style={{ position: 'absolute', left: 11, top: 10 }}><Icon name="search" size={15} color={NW.gray400} /></span>
       </div>
       {state === 'loading' && note('Searching HubSpot…')}
-      {state === 'unconfigured' && note('HubSpot isn’t connected in this environment — enter the deal manually below.')}
-      {state === 'error' && note(`Couldn’t reach HubSpot${msg ? ' — ' + msg : ''}. Enter manually below.`)}
-      {state === 'done' && results.length === 0 && q.trim().length >= 2 && note('No matching deals — try a different name, or enter manually below.')}
+      {state === 'unconfigured' && note('HubSpot isn’t connected in this environment.')}
+      {state === 'error' && note(`Couldn’t reach HubSpot${msg ? ' — ' + msg : ''}.`)}
+      {state === 'done' && results.length === 0 && q.trim().length >= 2 && note('No matching deals.')}
       {results.length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 190, overflowY: 'auto' }}>
           {results.map(d => (
-            <button key={d.id} type="button" onClick={() => onPick(d)} style={{ display: 'block', textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 11px', borderRadius: 10, border: `1px solid ${NW.gray100}`, background: NW.white }}
+            <button key={d.id} type="button" onClick={() => onPick(d)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', font: 'inherit', cursor: 'pointer', padding: '9px 11px', borderRadius: 10, border: `1px solid ${NW.gray100}`, background: NW.white }}
               onMouseEnter={e => { e.currentTarget.style.background = NW.gray50; }} onMouseLeave={e => { e.currentTarget.style.background = NW.white; }}>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: NW.black }}>{d.title}</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: NW.gray500, marginTop: 2 }}>{fmtMoney(d.value)}{d.stageLabel ? ' · ' + d.stageLabel : ''}{d.ownerName ? ' · ' + d.ownerName : ''}{d.closeDate ? ' · closes ' + d.closeDate : ''}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: NW.black }}>{d.title}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: NW.gray500, marginTop: 2 }}>{fmtMoney(d.value)}{d.ownerName ? ' · ' + d.ownerName : ''}{d.closeDate ? ' · closes ' + d.closeDate : ''}</span>
+              </span>
+              {d.stageLabel && <StagePill label={d.stageLabel} type={d.stageType} />}
+              <Icon name="plus" size={15} color={NW.teal600} />
             </button>
           ))}
         </div>
@@ -155,88 +180,86 @@ function DealSearch({ initialQuery, onPick }: { initialQuery?: string; onPick: (
   );
 }
 
+// ── Create / edit engagement ──────────────────────────────────────────────────
 function EngagementModal({ eng, orgId, orgName, onClose, onDone }: { eng?: Engagement; orgId: string; orgName?: string; onClose: () => void; onDone: () => void }) {
   const isEdit = !!eng;
-  const [f, setF] = useState({
-    title: eng?.title || '', stage: (eng?.stage || 'Qualified') as EngagementStage, value: eng?.value ? String(eng.value) : '',
-    ownerName: eng?.ownerName || '', closeDate: eng?.closeDate || '',
-  });
-  const [hubspotDealId, setHubspotDealId] = useState(eng?.hubspotDealId || '');
-  const [linkedTitle, setLinkedTitle] = useState('');
+  const [title, setTitle] = useState(eng?.title || '');
+  const [stage, setStage] = useState<EngagementStage>((eng?.stage as EngagementStage) || 'Qualified');
+  const [deals, setDeals] = useState<LinkedDeal[]>(eng?.deals || []);
+  const [value, setValue] = useState(eng?.value ? String(eng.value) : '');
+  const [ownerName, setOwnerName] = useState(eng?.ownerName || '');
+  const [closeDate, setCloseDate] = useState(eng?.closeDate || '');
   const [saving, setSaving] = useState(false);
-  const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
 
-  function pickDeal(d: HsDeal) {
-    setF({ title: d.title, stage: d.stage, value: d.value ? String(d.value) : '', ownerName: d.ownerName, closeDate: d.closeDate });
-    setHubspotDealId(d.id);
-    setLinkedTitle(d.title);
-  }
-  function unlink() { setHubspotDealId(''); setLinkedTitle(''); }
+  const addDeal = (d: HsDeal) => setDeals(p => (p.some(x => x.id === d.id) ? p : [...p, { id: d.id, title: d.title, value: d.value, stageLabel: d.stageLabel, stageType: d.stageType, stages: d.stages, ownerName: d.ownerName, closeDate: d.closeDate }]));
+  const removeDeal = (id: string) => setDeals(p => p.filter(x => x.id !== id));
+  const hasDeals = deals.length > 0;
+  const total = deals.reduce((s, d) => s + (d.value || 0), 0);
 
   async function save() {
-    if (!f.title.trim() || saving) return;
+    if (!title.trim() || saving) return;
     setSaving(true);
     const payload: Record<string, unknown> = {
-      title: f.title.trim(), stage: f.stage, value: parseInt(f.value.replace(/[^0-9]/g, ''), 10) || 0,
-      ownerName: f.ownerName.trim(), closeDate: f.closeDate.trim(), hubspotDealId: hubspotDealId || '',
+      title: title.trim(), stage,
+      value: hasDeals ? total : (parseInt(value.replace(/[^0-9]/g, ''), 10) || 0),
+      ownerName: hasDeals ? (deals.length === 1 ? deals[0].ownerName || '' : '') : ownerName.trim(),
+      closeDate: hasDeals ? (deals.length === 1 ? deals[0].closeDate || '' : '') : closeDate.trim(),
+      deals, hubspotDealId: deals[0]?.id || eng?.hubspotDealId || '',
       updatedAt: serverTimestamp(),
     };
     try {
-      if (eng) {
-        await updateDoc(doc(db, 'engagements', eng.id), payload);
-      } else {
-        await addDoc(collection(db, 'engagements'), {
-          ...payload, orgId, orgName: orgName || '', currency: 'USD', openingCodes: [],
-          createdAt: serverTimestamp(), createdBy: uploaderName(),
-        });
-      }
+      if (eng) await updateDoc(doc(db, 'engagements', eng.id), payload);
+      else await addDoc(collection(db, 'engagements'), { ...payload, orgId, orgName: orgName || '', currency: 'USD', openingCodes: [], createdAt: serverTimestamp(), createdBy: uploaderName() });
       onDone();
     } catch (e) { console.error('[engagements] save failed', e); alert('Could not save — check permissions.'); setSaving(false); }
   }
 
   return (
-    <Modal open onClose={onClose} title={isEdit ? 'Edit engagement' : 'New engagement'}>
-      <div style={{ display: 'grid', gap: 14 }}>
-        {!isEdit && (linkedTitle ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: '#FF7A5910', border: '1px solid #FF7A5933' }}>
-            <Icon name="refresh-cw" size={14} color="#B4531E" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: '#B4531E' }}>Linked to HubSpot</div>
-              <div style={{ fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{linkedTitle} — fields filled below</div>
+    <Modal open onClose={onClose} title={isEdit ? 'Edit engagement' : 'New engagement'} size="lg">
+      <div style={{ display: 'grid', gap: 16 }}>
+        <div><label style={engLbl}>Engagement name</label><input style={engField} value={title} placeholder="Name this engagement — e.g. Marketing team, Q3" onChange={e => setTitle(e.target.value)} autoFocus /></div>
+
+        <div>
+          <label style={engLbl}>Linked HubSpot deals {hasDeals ? `(${deals.length})` : '(optional)'}</label>
+          {hasDeals && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {deals.map(d => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 10, background: '#FF7A590D', border: '1px solid #FF7A5933' }}>
+                  <Icon name="refresh-cw" size={13} color="#B4531E" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
+                    <div style={{ fontSize: 11, color: NW.gray500 }}>{fmtMoney(d.value)}{d.ownerName ? ' · ' + d.ownerName : ''}</div>
+                  </div>
+                  {d.stageLabel && <StagePill label={d.stageLabel} type={d.stageType} />}
+                  <button type="button" onClick={() => removeDeal(d.id)} title="Remove" style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex' }}><Icon name="x" size={15} color={NW.gray500} /></button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, fontSize: 12, color: NW.gray600 }}>Total <span style={{ fontWeight: 700, color: NW.black }}>{fmtMoney(total)}</span></div>
             </div>
-            <button type="button" onClick={unlink} title="Unlink" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: NW.gray500 }}><Icon name="x" size={15} color={NW.gray500} /></button>
-          </div>
-        ) : (
-          <DealSearch initialQuery={orgName} onPick={pickDeal} />
-        ))}
+          )}
+          <DealSearch onPick={addDeal} />
+        </div>
 
-        {!isEdit && !linkedTitle && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0' }}>
-            <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
-            <span style={{ fontSize: 11, color: NW.gray400 }}>or enter manually</span>
-            <span style={{ flex: 1, height: 1, background: NW.gray100 }} />
-          </div>
+        {!hasDeals && (
+          <div><label style={engLbl}>Stage (manual)</label><select style={engField} value={stage} onChange={e => setStage(e.target.value as EngagementStage)}>{ENG_STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
         )}
 
-        <div><label style={engLbl}>Engagement title</label><input style={engField} value={f.title} placeholder="e.g. Sales roles, Q3 expansion" onChange={e => set('title', e.target.value)} /></div>
-        <div><label style={engLbl}>Stage</label><select style={engField} value={f.stage} onChange={e => set('stage', e.target.value)}>{ENG_STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
-        {(isEdit || linkedTitle) && (
+        {isEdit && !hasDeals && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <div><label style={engLbl}>Deal value (USD)</label><input style={engField} value={f.value} placeholder="84000" onChange={e => set('value', e.target.value)} /></div>
-            <div><label style={engLbl}>Close date</label><input style={engField} value={f.closeDate} placeholder="Aug 01, 2026" onChange={e => set('closeDate', e.target.value)} /></div>
-            <div style={{ gridColumn: '1 / -1' }}><label style={engLbl}>Owner</label><input style={engField} value={f.ownerName} placeholder="Deal owner" onChange={e => set('ownerName', e.target.value)} /></div>
+            <div><label style={engLbl}>Deal value (USD)</label><input style={engField} value={value} placeholder="84000" onChange={e => setValue(e.target.value)} /></div>
+            <div><label style={engLbl}>Close date</label><input style={engField} value={closeDate} placeholder="Aug 01, 2026" onChange={e => setCloseDate(e.target.value)} /></div>
+            <div style={{ gridColumn: '1 / -1' }}><label style={engLbl}>Owner</label><input style={engField} value={ownerName} placeholder="Deal owner" onChange={e => setOwnerName(e.target.value)} /></div>
           </div>
         )}
-        {!isEdit && !linkedTitle && (
-          <div style={{ fontSize: 11.5, color: NW.gray500, display: 'flex', gap: 7, alignItems: 'flex-start' }}>
-            <Icon name="info" size={13} color={NW.gray400} style={{ marginTop: 1 }} />
-            Pick a HubSpot deal to fill everything automatically, or just type a title to start and add the rest later.
-          </div>
-        )}
+
+        <div style={{ fontSize: 11.5, color: NW.gray500, display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+          <Icon name="info" size={13} color={NW.gray400} style={{ marginTop: 1 }} />
+          Give the engagement your own name, then link one or more HubSpot deals — values and stages come straight from HubSpot.
+        </div>
       </div>
       <ModalFooter>
         <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" disabled={!f.title.trim() || saving} onClick={save}>{saving ? 'Saving…' : isEdit ? 'Save' : 'Create engagement'}</Button>
+        <Button size="sm" disabled={!title.trim() || saving} onClick={save}>{saving ? 'Saving…' : isEdit ? 'Save' : 'Create engagement'}</Button>
       </ModalFooter>
     </Modal>
   );
@@ -250,7 +273,7 @@ function UploadDocModal({ engagementId, orgId, openings, onClose, onDone }: { en
   const inputRef = useRef<HTMLInputElement>(null);
   const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
   const toggle = (c: string) => setF(p => ({ ...p, openingCodes: p.openingCodes.includes(c) ? p.openingCodes.filter(x => x !== c) : [...p.openingCodes, c] }));
-  function pick(file: File | null) { if (!file) return; setFile(file); setF(p => ({ ...p, name: p.name || file.name })); }
+  function pick(picked: File | null) { if (!picked) return; setFile(picked); setF(p => ({ ...p, name: p.name || picked.name })); }
   async function save() {
     if (!f.name.trim() || saving) return;
     setSaving(true);
@@ -282,7 +305,7 @@ function UploadDocModal({ engagementId, orgId, openings, onClose, onDone }: { en
         </div>
         <div><label style={engLbl}>File name</label><input style={engField} value={f.name} placeholder="SOW — Product Designer.pdf" onChange={e => set('name', e.target.value)} /></div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div><label style={engLbl}>Type</label><select style={engField} value={f.type} onChange={e => set('type', e.target.value)}>{ENG_DOC_TYPES.filter(t => t !== 'MSA').map(t => <option key={t}>{t}</option>)}</select></div>
+          <div><label style={engLbl}>Type</label><select style={engField} value={f.type} onChange={e => set('type', e.target.value)}>{['Service Quote', 'SOW', 'Other'].map(t => <option key={t}>{t}</option>)}</select></div>
           <div><label style={engLbl}>Status</label><select style={engField} value={f.status} onChange={e => set('status', e.target.value)}>{(['Draft', 'Awaiting signature', 'Signed'] as const).map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div>
@@ -398,7 +421,13 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
   const pending = payments.filter(p => p.status !== 'Paid').reduce((s, p) => s + p.amount, 0);
   const opTitle = (code: string) => openings.find(o => o.id === code)?.title || code;
 
-  const groups = ENG_DOC_TYPES.map(t => ({
+  const dealsList = eng.deals || [];
+  const totalValue = dealsList.length ? dealsList.reduce((s, d) => s + (d.value || 0), 0) : (eng.value || 0);
+  const headerStats = dealsList.length
+    ? [{ l: 'Deal value', v: fmtMoney(totalValue), icon: 'circle-dollar-sign' }, { l: 'Deals', v: String(dealsList.length), icon: 'refresh-cw' }]
+    : [{ l: 'Deal value', v: fmtMoney(eng.value), icon: 'circle-dollar-sign' }, { l: 'Owner', v: eng.ownerName || '—', icon: 'user-round' }, { l: 'Close date', v: eng.closeDate || '—', icon: 'calendar' }];
+
+  const groups = ['MSA', 'Service Quote', 'SOW', 'Other'].map(t => ({
     type: t,
     rows: t === 'MSA' ? (msa ? [{ ...msa, linkedFromOrg: true }] : []) : docs.filter(d => d.type === t),
   })).filter(g => g.rows.length || g.type !== 'Other');
@@ -412,22 +441,29 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
     <div>
       <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 14, background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: NW.gray500, padding: 0 }}><Icon name="arrow-left" size={14} color={NW.gray500} /> All engagements</button>
 
-      {/* Header — the HubSpot deal, shown visually */}
+      {/* Header — the engagement, with its HubSpot deal(s) shown visually */}
       <Card pad={18} style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>{eng.title}</h2>
-              {eng.hubspotDealId ? <HubspotBadge /> : <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.gray500, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 999, padding: '3px 9px' }}>Entered manually</span>}
+              {dealsList.length ? <HubspotBadge>{dealsList.length === 1 ? 'Synced from HubSpot' : `${dealsList.length} HubSpot deals`}</HubspotBadge> : <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.gray500, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 999, padding: '3px 9px' }}>Entered manually</span>}
             </div>
-            <div style={{ fontSize: 12, color: NW.gray500, marginTop: 5 }}>{org.name}{eng.hubspotDealId ? <> · Deal {eng.hubspotDealId}</> : null} · created {fmtDate(eng.createdAt)}{eng.createdBy ? ` by ${eng.createdBy}` : ''}</div>
+            <div style={{ fontSize: 12, color: NW.gray500, marginTop: 5 }}>{org.name} · created {fmtDate(eng.createdAt)}{eng.createdBy ? ` by ${eng.createdBy}` : ''}</div>
           </div>
           <Button variant="secondary" size="sm" icon="pencil" onClick={() => setModal('edit')}>Edit deal</Button>
         </div>
+
         <div style={{ marginTop: 16, paddingTop: 15, borderTop: `1px solid ${NW.gray100}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-          <StageTracker stage={eng.stage} />
+          {dealsList.length === 1 && dealsList[0].stages?.length ? (
+            <StageTracker stages={dealsList[0].stages} />
+          ) : dealsList.length ? (
+            <span style={{ fontSize: 12.5, color: NW.gray500 }}>{dealsList.length} deals — stages below</span>
+          ) : (
+            <StagePill label={eng.stage} type={manualStageType(eng.stage)} />
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-            {[{ l: 'Deal value', v: fmtMoney(eng.value), icon: 'circle-dollar-sign' }, { l: 'Owner', v: eng.ownerName || '—', icon: 'user-round' }, { l: 'Close date', v: eng.closeDate || '—', icon: 'calendar' }].map(s => (
+            {headerStats.map(s => (
               <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <span style={{ width: 30, height: 30, borderRadius: 9, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={s.icon as never} size={15} color={NW.gray500} /></span>
                 <span>
@@ -438,6 +474,21 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
             ))}
           </div>
         </div>
+
+        {dealsList.length > 0 && (
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {dealsList.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 11, border: `1px solid ${NW.gray100}`, background: NW.white }}>
+                <span style={{ width: 28, height: 28, borderRadius: 8, background: '#FF7A5914', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name="refresh-cw" size={13} color="#B4531E" /></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
+                  <div style={{ fontSize: 11.5, color: NW.gray500 }}>{fmtMoney(d.value)}{d.ownerName ? ' · ' + d.ownerName : ''}{d.closeDate ? ' · closes ' + d.closeDate : ''}</div>
+                </div>
+                <StagePill label={d.stageLabel} type={d.stageType} />
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Legal */}
@@ -591,17 +642,18 @@ export function EngagementsTab({ org, openings }: { org: Organization; openings:
             const unsigned = eDocs.filter(d => d.status !== 'Signed').length;
             const pays = payments.filter(p => p.engagementId === e.id);
             const outstanding = pays.filter(p => p.status !== 'Paid').reduce((s, p) => s + p.amount, 0);
+            const primary = e.deals?.[0];
             return (
               <Card key={e.id} pad={17} hover onClick={() => setOpenId(e.id)}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 15, fontWeight: 700, color: NW.black, letterSpacing: '-0.02em' }}>{e.title}</span>
-                      {e.hubspotDealId && <HubspotBadge>HubSpot</HubspotBadge>}
+                      {e.deals?.length ? <HubspotBadge>{e.deals.length === 1 ? 'HubSpot' : `${e.deals.length} deals`}</HubspotBadge> : null}
                     </div>
-                    <div style={{ fontSize: 12, color: NW.gray500, marginTop: 4 }}>{fmtMoney(e.value)}{e.ownerName ? ' · ' + e.ownerName : ''}{e.closeDate ? ' · closes ' + e.closeDate : ''}</div>
+                    <div style={{ fontSize: 12, color: NW.gray500, marginTop: 4 }}>{fmtMoney(e.value)}{e.deals?.length ? ` · ${e.deals.length} deal${e.deals.length === 1 ? '' : 's'}` : (e.ownerName ? ' · ' + e.ownerName : '')}{!e.deals?.length && e.closeDate ? ' · closes ' + e.closeDate : ''}</div>
                   </div>
-                  <StageTracker stage={e.stage} compact />
+                  {primary ? <StagePill label={primary.stageLabel} type={primary.stageType} /> : <StagePill label={e.stage} type={manualStageType(e.stage)} />}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14, paddingTop: 13, borderTop: `1px solid ${NW.gray100}`, flexWrap: 'wrap' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: NW.gray600 }}><Icon name="file-text" size={13} color={NW.gray400} />{eDocs.length + (msa ? 1 : 0)} docs{unsigned ? <span style={{ color: '#A16207', fontWeight: 600 }}> · {unsigned} unsigned</span> : null}</span>

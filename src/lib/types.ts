@@ -825,8 +825,14 @@ export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
 // a hire's *commercial* model (EOR / Managed / SPP / Direct). Named separately on
 // purpose so the two never get conflated.
 
-export type EngagementStage = 'Qualified' | 'Proposal' | 'Contract sent' | 'Closed won';
-export const ENG_STAGES: EngagementStage[] = ['Qualified', 'Proposal', 'Contract sent', 'Closed won'];
+// Manual stage set — used only for engagements not linked to a HubSpot deal.
+// HubSpot-linked engagements reflect their deal's REAL pipeline stage instead.
+export type EngagementStage = 'Qualified' | 'Proposal' | 'Contract sent' | 'Closed won' | 'Closed lost';
+export const ENG_STAGES: EngagementStage[] = ['Qualified', 'Proposal', 'Contract sent', 'Closed won', 'Closed lost'];
+
+// Real HubSpot stage classification.
+export type DealStageType = 'open' | 'won' | 'lost';
+export interface DealPipelineStage { label: string; type: DealStageType; current: boolean; }
 
 export type EngagementDocType = 'MSA' | 'Service Quote' | 'SOW' | 'Other';
 export const ENG_DOC_TYPES: EngagementDocType[] = ['MSA', 'Service Quote', 'SOW', 'Other'];
@@ -834,14 +840,29 @@ export const ENG_DOC_TYPES: EngagementDocType[] = ['MSA', 'Service Quote', 'SOW'
 export type DealDocStatus = 'Draft' | 'Awaiting signature' | 'Signed';
 export type DealPaymentStatus = 'Paid' | 'Pending';
 
+// A HubSpot deal linked into an engagement. An engagement can bundle several,
+// and its `value` rolls up the sum of these. Stage reflects the deal's REAL
+// HubSpot pipeline stage (won/lost included).
+export interface LinkedDeal {
+  id: string;                      // HubSpot deal id
+  title: string;
+  value: number;
+  stageLabel: string;              // real HubSpot stage label (e.g. "In Progress", "Closed Lost")
+  stageType: DealStageType;        // open | won | lost
+  stages?: DealPipelineStage[];    // ordered pipeline stages, for the tracker
+  ownerName?: string;
+  closeDate?: string;
+}
+
 export interface Engagement {
   id: string;
   orgId: string;
   orgName?: string;
-  hubspotDealId?: string;          // set once linked/synced (Phase 2)
-  title: string;
+  hubspotDealId?: string;          // first linked deal, kept for back-compat
+  deals?: LinkedDeal[];            // one engagement can bundle multiple HubSpot deals
+  title: string;                   // staff-chosen name, independent of the deal names
   stage: EngagementStage;
-  value?: number;
+  value?: number;                  // rolls up the linked deals when present
   currency?: string;               // 'USD'
   ownerName?: string;
   closeDate?: string;              // manual free-text until HubSpot sync (Phase 2)

@@ -819,6 +819,83 @@ export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
   direct: 'Direct Placement',
 };
 
+// ─── Engagements module ───────────────────────────────────────────────────────
+// A per-deal container under an Organization: legal docs + openings + payments,
+// mirroring one HubSpot deal. NOTE: distinct from `EngagementType` above, which is
+// a hire's *commercial* model (EOR / Managed / SPP / Direct). Named separately on
+// purpose so the two never get conflated.
+
+export type EngagementStage = 'Qualified' | 'Proposal' | 'Contract sent' | 'Closed won';
+export const ENG_STAGES: EngagementStage[] = ['Qualified', 'Proposal', 'Contract sent', 'Closed won'];
+
+export type EngagementDocType = 'MSA' | 'Service Quote' | 'SOW' | 'Other';
+export const ENG_DOC_TYPES: EngagementDocType[] = ['MSA', 'Service Quote', 'SOW', 'Other'];
+
+export type DealDocStatus = 'Draft' | 'Awaiting signature' | 'Signed';
+export type DealPaymentStatus = 'Paid' | 'Pending';
+
+export interface Engagement {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  hubspotDealId?: string;          // set once linked/synced (Phase 2)
+  title: string;
+  stage: EngagementStage;
+  value?: number;
+  currency?: string;               // 'USD'
+  ownerName?: string;
+  closeDate?: string;              // manual free-text until HubSpot sync (Phase 2)
+  openingCodes?: string[];         // ids into the `openings` collection this deal covers
+  createdAt?: Timestamp;
+  createdBy?: string;
+  updatedAt?: Timestamp;
+}
+
+// A signed doc that lives inside an engagement (Service Quote / SOW / Other).
+// The MSA is NOT here — it lives at the org level (see OrgDocument).
+export interface EngagementDocument {
+  id: string;
+  engagementId: string;
+  orgId: string;                   // denormalized so all of an org's docs load in one query
+  type: Exclude<EngagementDocType, 'MSA'>;
+  name: string;
+  status: DealDocStatus;
+  openingCodes?: string[];         // optional tags to specific openings
+  url?: string;                    // Firebase Storage download URL
+  storagePath?: string;
+  size?: string;
+  uploadedAt?: Timestamp;
+  uploadedBy?: string;
+}
+
+// The MSA — one per Organization, linked into every engagement.
+export interface OrgDocument {
+  id: string;
+  orgId: string;
+  type: 'MSA';
+  name: string;
+  status: DealDocStatus;
+  url?: string;
+  storagePath?: string;
+  size?: string;
+  uploadedAt?: Timestamp;
+  uploadedBy?: string;
+}
+
+// Read-only mirror of Stripe / Mercury activity (Phase 3 — empty until wired).
+export interface EngagementPayment {
+  id: string;
+  engagementId: string;
+  orgId: string;
+  source: 'stripe' | 'mercury';
+  description: string;
+  amount: number;
+  currency?: string;
+  status: DealPaymentStatus;
+  date?: string;
+  externalId?: string;
+}
+
 // EOR (Employer of Record) compliance / onboarding lifecycle
 export type EORComplianceStatus = 'pending' | 'onboarding' | 'compliant' | 'issue';
 

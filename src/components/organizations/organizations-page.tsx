@@ -44,6 +44,7 @@ import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/components/nw/shell-ui';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { StaffPicker } from '@/components/ui/staff-picker';
+import { EngagementsTab } from './engagements-tab';
 
 // Engagement-type colours (shared with the Hired module)
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
@@ -1016,7 +1017,7 @@ function OrgDetail({
   const [savingAction, setSavingAction] = useState(false);
 
   // Detail tab navigation
-  const [tab, setTab] = useState<'overview' | 'hiring' | 'team' | 'people' | 'billing'>('overview');
+  const [tab, setTab] = useState<'overview' | 'hiring' | 'engagements' | 'team' | 'people' | 'billing'>('overview');
   // Inline status dropdown (redesign header)
   const [statusOpen, setStatusOpen] = useState(false);
 
@@ -2007,7 +2008,7 @@ function OrgDetail({
 
       {/* Tab nav — underline */}
       <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${NW.gray100}`, flexWrap: 'wrap' }}>
-        {([['overview', 'Overview'], ['hiring', 'Active roles'], ['team', 'Managed team'], ['people', 'Access'], ['billing', 'Billing']] as const).map(([key, label]) => {
+        {([['overview', 'Overview'], ['hiring', 'Active roles'], ['engagements', 'Engagements'], ['team', 'Managed team'], ['people', 'Access'], ['billing', 'Billing']] as const).map(([key, label]) => {
           const on = tab === key;
           return (
             <button
@@ -2031,6 +2032,9 @@ function OrgDetail({
           );
         })}
       </div>
+
+      {/* ── Engagements tab ── */}
+      {tab === 'engagements' && <EngagementsTab org={org} openings={openings} />}
 
       {/* ── Overview tab ── */}
       {tab === 'overview' && (

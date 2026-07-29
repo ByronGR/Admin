@@ -104,21 +104,29 @@ export async function googleSearch(apiKey: string, cx: string, query: string, op
   } catch (e) { return { items: [], error: (e as Error).message }; }
 }
 
-// Claude Haiku writes the search phrases from the job post. Cached per opening upstream.
-export async function writePlan(apiKey: string, jd: string): Promise<{ phrases: string[] | null; error?: string }> {
-  const system = `You write short LinkedIn X-ray search phrases to source candidates. Read the JOB POST and output JSON ONLY: {"phrases":[6 short search phrases]}. Each phrase is just role-title and/or skill keywords (mix title-based and skill-based; include a Spanish title variant). Do NOT add site:, country, or location — handled separately. Realistic to how people write LinkedIn profiles.`;
+// Claude Haiku reads the job post and writes the search plan: the role's DOMAIN,
+// real-world equivalent titles (aliases), and 6 domain-anchored X-ray phrases.
+// Domain-anchoring matters because an X-ray only sees a headline + one-line
+// snippet, so a bare generic title ("Account Manager") drags in the wrong field.
+export async function writePlan(apiKey: string, jd: string): Promise<{ phrases: string[] | null; aliases?: string[]; domain?: string; error?: string }> {
+  const system = `You are a technical sourcer building LinkedIn X-ray searches. CRITICAL: an X-ray search only sees a person's HEADLINE + a one-line snippet — never the full profile — so a generic title like "Customer Success Manager", "Account Manager", or "Project Manager" is AMBIGUOUS (could be operations, sales, support, anything) and will drag in the wrong people.
+Do this:
+1) From the JOB POST, identify the role's DOMAIN/field (e.g. marketing, operations, engineering, finance).
+2) Work out the real-world equivalent titles (aliases), reasoning from the RESPONSIBILITIES not the literal title (e.g. an "Account Manager - Marketing" doing account-based marketing is really "ABM Manager" / "Growth Marketing Manager", NOT an operations account manager).
+3) Build 6 search phrases. HARD RULE: if the domain is a specific field like marketing, EVERY phrase MUST be anchored to that domain — it must contain the domain word (e.g. "marketing") OR a domain-specific skill/tool/method (e.g. ABM, growth marketing, demand generation, Klaviyo, campaigns, SEO). NEVER emit a bare generic title with no domain signal. Only if the domain is broad/operational and the titles are already unambiguous may you skip the anchor.
+Output JSON ONLY: {"domain":"<field>", "aliases":[equivalent titles, best first], "phrases":[6 domain-anchored phrases; include one Spanish variant]}. Phrases = role-title and/or skill keywords only; NO site:, country, or location. Realistic to how people write LinkedIn profiles.`;
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, system, messages: [{ role: 'user', content: jd }] }),
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system, messages: [{ role: 'user', content: jd }] }),
     });
     const g = await res.json();
     if (g.error) return { phrases: null, error: g.error.message };
     const text = (g.content || []).map((b: { text?: string }) => b.text || '').join('').replace(/```json|```/g, '').trim();
-    const phrases = JSON.parse(text).phrases;
-    if (!Array.isArray(phrases) || !phrases.length) return { phrases: null, error: 'plan parse failed' };
-    return { phrases };
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed.phrases) || !parsed.phrases.length) return { phrases: null, error: 'plan parse failed' };
+    return { phrases: parsed.phrases, aliases: Array.isArray(parsed.aliases) ? parsed.aliases : [], domain: typeof parsed.domain === 'string' ? parsed.domain : '' };
   } catch (e) { return { phrases: null, error: (e as Error).message }; }
 }
 

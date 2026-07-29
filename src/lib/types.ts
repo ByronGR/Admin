@@ -960,6 +960,8 @@ export interface SourcedCandidate {
 export interface SearchPlan {
   openingId: string;
   phrases?: string[];        // AI-written X-ray phrases (cached; reused with no AI cost)
+  aliases?: string[];        // real-world equivalent titles the AI read the role as
+  domain?: string;           // the role's field (e.g. marketing) every phrase is anchored to
   runs?: number;
   page?: number;             // pagination depth for "find more"
   kept?: number;

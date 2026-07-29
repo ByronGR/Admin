@@ -74,8 +74,10 @@ export async function POST(req: Request) {
   // ── Plan (cached per opening; AI writes it only on mode 'ai' or first run) ──
   const planRef = db.collection('searchPlans').doc(openingId);
   const planSnap = await planRef.get();
-  const plan = (planSnap.exists ? planSnap.data() : {}) as { phrases?: string[]; page?: number; pulled?: string[] };
+  const plan = (planSnap.exists ? planSnap.data() : {}) as { phrases?: string[]; page?: number; pulled?: string[]; aliases?: string[]; domain?: string };
   let phrases = plan.phrases || [];
+  let planAliases = plan.aliases || [];
+  let planDomain = plan.domain || '';
   let aiCost = false;
   if (mode === 'ai' || !phrases.length) {
     const key = process.env.ANTHROPIC_API_KEY;
@@ -83,6 +85,8 @@ export async function POST(req: Request) {
     const written = await writePlan(key, jd || String(op.title || ''));
     if (!written.phrases) return NextResponse.json({ ok: false, reason: 'ai_failed', message: written.error || 'AI plan failed' }, { status: 502 });
     phrases = written.phrases;
+    planAliases = written.aliases || [];
+    planDomain = written.domain || '';
     aiCost = true;
   }
 
@@ -132,10 +136,10 @@ export async function POST(req: Request) {
 
   // ── Save the plan + pagination state ──
   await planRef.set({
-    openingId, phrases, page, pulled: [...pulled],
+    openingId, phrases, aliases: planAliases, domain: planDomain, page, pulled: [...pulled],
     runs: GCFieldValue.increment(1), kept: GCFieldValue.increment(candidates.length),
     lastRun: GCFieldValue.serverTimestamp(), ...(planSnap.exists ? {} : { createdAt: GCFieldValue.serverTimestamp() }),
   }, { merge: true });
 
-  return NextResponse.json({ ok: true, added: candidates.length, phrases, aiCost, stats, notes, page });
+  return NextResponse.json({ ok: true, added: candidates.length, phrases, aliases: planAliases, domain: planDomain, aiCost, stats, notes, page });
 }

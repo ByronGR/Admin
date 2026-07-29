@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getFirestore,
+  initializeFirestore,
   collection,
   query,
   where,
@@ -54,7 +55,16 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Auto-detect long-polling so real-time listeners work on iPadOS/Safari and
+// restrictive networks where Firestore's default WebChannel transport hangs
+// (symptom: pages open but spin forever because onSnapshot never fires).
+// Fall back to getFirestore() if Firestore was already started (e.g. HMR).
+let db: ReturnType<typeof getFirestore>;
+try {
+  db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+} catch {
+  db = getFirestore(app);
+}
 const auth = getAuth(app);
 const storage = getStorage(app);
 

@@ -917,6 +917,57 @@ export interface EngagementPayment {
   externalId?: string;
 }
 
+// ─── Sourcing (X-ray) ──────────────────────────────────────────────────────────
+// Per-opening LinkedIn X-ray sourcing: pull candidates by country, track them
+// through a status pipeline. Ported from the standalone nearwork-xray-sourcing tool.
+
+export type SourceStatus = 'New' | 'Reached out' | 'Interested' | 'Not interested' | 'Applied';
+export const SRC_STATUSES: SourceStatus[] = ['New', 'Reached out', 'Interested', 'Not interested', 'Applied'];
+
+export type SourceReason = 'High salary' | 'Doesn’t fit the role' | 'Not in LATAM' | 'No reply' | 'Other';
+export const SRC_REASONS: SourceReason[] = ['High salary', 'Doesn’t fit the role', 'Not in LATAM', 'No reply', 'Other'];
+
+// 10 LATAM countries; the first 7 (South America, Spanish-speaking) on by default.
+export const SRC_COUNTRIES: { code: string; name: string; on: boolean }[] = [
+  { code: 'co', name: 'Colombia', on: true }, { code: 'ar', name: 'Argentina', on: true },
+  { code: 'pe', name: 'Peru', on: true }, { code: 'cl', name: 'Chile', on: true },
+  { code: 've', name: 'Venezuela', on: true }, { code: 'ec', name: 'Ecuador', on: true },
+  { code: 'uy', name: 'Uruguay', on: true }, { code: 'bo', name: 'Bolivia', on: false },
+  { code: 'py', name: 'Paraguay', on: false }, { code: 'mx', name: 'Mexico', on: false },
+];
+
+export interface SourcedCandidate {
+  id: string;
+  openingId: string;
+  name: string;
+  li: string;                // '/in/slug' — the LinkedIn match key
+  linkedin: string;          // full profile URL
+  location?: string;
+  country?: string;
+  source: 'X-ray' | 'Manual';
+  owner?: string;            // staff owner id, '' = unassigned
+  status: SourceStatus;
+  reason?: string;           // set only when status = 'Not interested'
+  salary?: string;           // formatted '$2,000'
+  applied?: boolean;         // auto-set when they apply on the job board
+  last?: string;             // relative timestamp label
+  notes?: string;
+  dupe?: string;             // opening id where this LinkedIn also appears
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface SearchPlan {
+  openingId: string;
+  phrases?: string[];        // AI-written X-ray phrases (cached; reused with no AI cost)
+  runs?: number;
+  page?: number;             // pagination depth for "find more"
+  kept?: number;
+  pulled?: string[];         // slugs already pulled for this opening (dedup)
+  createdAt?: Timestamp;
+  lastRun?: Timestamp;
+}
+
 // EOR (Employer of Record) compliance / onboarding lifecycle
 export type EORComplianceStatus = 'pending' | 'onboarding' | 'compliant' | 'issue';
 

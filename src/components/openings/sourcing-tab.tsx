@@ -38,9 +38,27 @@ const fmtUSD = (raw: string) => {
   const n = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
   return n ? '$' + n.toLocaleString('en-US') : '';
 };
+// Role / industry / seniority words that show up in LinkedIn slugs but aren't names.
+const NAME_STOP = new Set((
+  'marketing sales digital growth manager director copywriter copy designer design developer dev ' +
+  'engineer engineering seo sem ppc crm account accounts executive specialist consultant consulting ' +
+  'freelance freelancer remote lifecycle email brand branding content social media ux ui product data ' +
+  'analyst analytics recruiter recruiting coach mentor strategist strategy ceo cmo cto coo founder ' +
+  'cofounder owner mba phd msc pmp agency ads advertising ecommerce saas b2b b2c senior sr junior jr ' +
+  'lead head vp officer partner gestor gestora inbound outbound abm kam dem gen demandgen demand ' +
+  'digitalmarketing growthmarketing marketingdigital marketingydiseño publicista'
+).split(' '));
+
+// Extract a clean display name from a LinkedIn slug: drop trailing hash ids, any
+// number-bearing fragments, and role/keyword tokens — keep just the name words.
 const nameFromSlug = (li: string) => {
-  const slug = li.replace(/^.*\/in\//, '').replace(/-[0-9a-f]{6,}$/i, '').replace(/[0-9]+$/,'');
-  return slug.split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  let slug = li.replace(/^.*\/in\//, '').replace(/[/?#].*$/, '');
+  try { slug = decodeURIComponent(slug); } catch { /* noop */ }
+  const toks = slug.split('-')
+    .map(t => t.toLowerCase().trim().replace(/\d+$/, ''))   // drop trailing digits (e.g. nickwest89 → nickwest)
+    .filter(t => t && t.length > 1 && !/\d/.test(t) && !NAME_STOP.has(t)); // drop hashes + keywords
+  const name = toks.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return name || slug.replace(/[0-9]/g, ' ').split(/[-\s]+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 };
 // Normalize any LinkedIn value (full URL or bare slug) to a comparable slug.
 const slugify = (s: string) => (s || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^(www\.)?linkedin\.com\/in\//, '').replace(/[/?#].*$/, '').replace(/\/+$/, '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();

@@ -27,6 +27,11 @@ const CITY_HINTS: Record<string, string> = {
 const EXCLUDE_OWNER = /(\bfounder\b|\bco-?founder\b|\bceo\b|\bc\.e\.o\b|\bowner\b|\bco-?owner\b|\bpropietari[oa]\b|\bdue[ñn][oa]\b|\bfundador[a]?\b|\bcofundador[a]?\b|\bpresidente\b|\bchief executive\b|\bmanaging director\b|\bself-employed\b)/i;
 const NON_LATAM_LOC = /(\bspain\b|\bespa[ñn]a\b|\bbarcelona\b|\bmadrid\b|\bsevilla\b|\bbilbao\b|\bunited states\b|\bu\.?s\.?a\b|\bmiami\b|\bnew york\b|\blos angeles\b|\bsan francisco\b|\blondon\b|\bunited kingdom\b|\bcanada\b|\btoronto\b|\bportugal\b|\blisbon\b|\bgermany\b|\bberlin\b|\bfrance\b|\bparis\b|\bitaly\b|\baustralia\b|metropolitan area)/i;
 
+// Never source Nearwork's own team — they sit on LATAM subdomains and match
+// marketing/account keywords (Nearwork is a staffing/marketing company), so they
+// slip past the founder filter when their result title doesn't say "CEO/Founder".
+const NEARWORK_SELF = /\bnearwork\b/i;
+
 // FreshPrints master-list snapshot — candidates already sourced, always deduped out.
 const EXISTING_RAW = [
   'simon-gomez-palacio-9944a9143', 'ivanna-z-923122114', 'alejandra-garcía-rosales', 'harol-alvear',
@@ -58,6 +63,9 @@ export function normSlug(s: string) {
   return stripAccents(s).toLowerCase().replace(/\/+$/, '').trim();
 }
 const EXISTING = new Set(EXISTING_RAW.map(normSlug));
+
+// Known Nearwork-team LinkedIn slugs — always dropped (belt-and-suspenders with NEARWORK_SELF).
+const SELF_EXCLUDE = new Set(['byron-giraldo-30513b215'].map(normSlug));
 
 function cleanName(title: string) {
   if (!title) return '';
@@ -122,10 +130,10 @@ export type XrayResult = {
 export function filterResults(
   rawItems: RawItem[],
   { codes, pulled, excludeOwners }: { codes: string[]; pulled: Set<string>; excludeOwners: boolean }
-): { candidates: XrayResult[]; stats: { found: number; net_new: number; skipped_existing: number; dropped_geo: number; dropped_owner: number; dropped_offshore: number } } {
+): { candidates: XrayResult[]; stats: { found: number; net_new: number; skipped_existing: number; dropped_geo: number; dropped_owner: number; dropped_offshore: number; dropped_internal: number } } {
   const codeSet = new Set(codes);
   const candidates: XrayResult[] = [];
-  let dupExisting = 0, droppedGeo = 0, droppedOwner = 0, droppedOffshore = 0;
+  let dupExisting = 0, droppedGeo = 0, droppedOwner = 0, droppedOffshore = 0, droppedInternal = 0;
   for (const it of rawItems) {
     const host = (() => { try { return new URL(it.link || '').host; } catch { return ''; } })();
     const sub = host.split('.')[0];
@@ -136,6 +144,7 @@ export function filterResults(
     if (EXISTING.has(slug)) { dupExisting++; continue; }
     if (pulled.has(slug)) continue;
     const text = (it.title || '') + ' ' + (it.snippet || '');
+    if (SELF_EXCLUDE.has(slug) || NEARWORK_SELF.test(text)) { droppedInternal++; continue; }  // never source our own team
     if (excludeOwners && EXCLUDE_OWNER.test(it.title || '')) { droppedOwner++; continue; }
     if (NON_LATAM_LOC.test(text)) { droppedOffshore++; continue; }
     pulled.add(slug);
@@ -151,7 +160,7 @@ export function filterResults(
       location: loc, country,
     });
   }
-  return { candidates, stats: { found: rawItems.length, net_new: candidates.length, skipped_existing: dupExisting, dropped_geo: droppedGeo, dropped_owner: droppedOwner, dropped_offshore: droppedOffshore } };
+  return { candidates, stats: { found: rawItems.length, net_new: candidates.length, skipped_existing: dupExisting, dropped_geo: droppedGeo, dropped_owner: droppedOwner, dropped_offshore: droppedOffshore, dropped_internal: droppedInternal } };
 }
 
 export const XRAY_COUNTRY_CODES = Object.keys(COUNTRIES);

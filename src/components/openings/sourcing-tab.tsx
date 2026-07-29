@@ -159,8 +159,13 @@ function SourcePanel({ opening, plan, countries, setCountries, onRun, busy }: {
       </div>
 
       {hasPlan && plan && (
-        <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${NW.teal500}22` }}>
-          Search plan · {plan.runs || 0} run{plan.runs === 1 ? '' : 's'} · {(plan.phrases || []).slice(0, 3).join(' · ')}{(plan.phrases || []).length > 3 ? '…' : ''}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${NW.teal500}22` }}>
+          {plan.aliases?.length ? (
+            <div style={{ fontSize: 11.5, color: NW.gray600, marginBottom: 3 }}>
+              <Icon name="target" size={11} color={NW.teal600} /> Read as <span style={{ fontWeight: 600, color: NW.gray800 }}>{plan.aliases.join(' · ')}</span>{plan.domain ? <span style={{ color: NW.gray400 }}> · every search anchored to <b>{plan.domain}</b></span> : null}
+            </div>
+          ) : null}
+          <div style={{ fontSize: 11.5, color: NW.gray500 }}>Search plan · {plan.runs || 0} run{plan.runs === 1 ? '' : 's'} · {(plan.phrases || []).slice(0, 3).join(' · ')}{(plan.phrases || []).length > 3 ? '…' : ''}</div>
         </div>
       )}
     </div>
@@ -207,6 +212,7 @@ function PlanModal({ plan, onClose, onRerun, busy }: { plan: SearchPlan | null; 
   return (
     <Modal open onClose={onClose} title="Search plan" className="min-w-0">
       <p style={{ fontSize: 13, color: NW.gray600, lineHeight: 1.6, margin: '0 0 14px' }}>These phrases were written once by AI from the job post and are reused on every “Find more” at no AI cost. Candidates are geo-locked to the selected countries, deduped against the master list, and founders/owners/CEOs are excluded.</p>
+      {plan?.aliases?.length ? <div style={{ fontSize: 12.5, color: NW.gray600, margin: '0 0 12px' }}>Read as <b>{plan.aliases.join(' · ')}</b>{plan.domain ? ` — domain: ${plan.domain} (every phrase anchored to it)` : ''}</div> : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {(plan?.phrases || []).map((p, i) => <span key={i} style={{ fontSize: 12, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}30`, borderRadius: 999, padding: '5px 11px' }}>{p}</span>)}
         {!plan?.phrases?.length && <span style={{ fontSize: 13, color: NW.gray400 }}>No plan yet — run AI Search.</span>}

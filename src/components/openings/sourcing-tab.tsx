@@ -384,10 +384,10 @@ export function SourcingTab({ op }: { op: Opening }) {
           <tbody>
             {pageRows.map(r => (
               <tr key={r.id} style={{ borderTop: `1px solid ${NW.gray100}`, height: 56 }}>
-                <td style={{ padding: '8px 14px', maxWidth: 260 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
-                  <a href={r.linkedin} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: NW.teal600, textDecoration: 'none', whiteSpace: 'nowrap' }}>{r.li} ↗</a>
-                  {r.dupe && <span style={{ marginLeft: 8, fontSize: 10.5, color: '#B45309' }}>⚠ also in another opening</span>}
+                <td style={{ padding: '8px 14px' }}>
+                  <div style={{ maxWidth: 230, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                  <a href={r.linkedin} target="_blank" rel="noopener noreferrer" title={r.linkedin} style={{ display: 'block', maxWidth: 230, fontSize: 11.5, color: NW.teal600, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.li} ↗</a>
+                  {r.dupe && <span style={{ fontSize: 10.5, color: '#B45309' }}>⚠ also in another opening</span>}
                 </td>
                 <td style={{ padding: '8px 14px', color: NW.gray600, whiteSpace: 'nowrap' }}>{r.location || '—'}</td>
                 <td style={{ padding: '8px 14px' }}><span style={{ fontSize: 10.5, fontWeight: 600, borderRadius: 6, padding: '2px 8px', color: r.source === 'X-ray' ? NW.teal700 : NW.gray600, background: r.source === 'X-ray' ? NW.teal50 : NW.gray50 }}>{r.source}</span></td>

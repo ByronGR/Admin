@@ -1,0 +1,360 @@
+'use client';
+
+// ============================================================
+// Sourcing (X-ray) tab — per-opening LinkedIn sourcing.
+// Source panel pulls candidates via /api/sourcing/find; the table tracks them
+// through a status pipeline. Ported from the standalone X-ray tool + design handoff.
+// Candidates + plan live in Firestore (sourcedCandidates / searchPlans).
+// ============================================================
+
+import { useState, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import {
+  db, auth, collection, query, where, onSnapshot, doc, updateDoc, addDoc, getDoc, serverTimestamp,
+} from '@/lib/firebase';
+import { NW, Icon, Button } from '@/components/nw/primitives';
+import { Modal } from '@/components/ui/modal';
+import {
+  SRC_STATUSES, SRC_REASONS, SRC_COUNTRIES,
+  type Opening, type SourcedCandidate, type SourceStatus, type SearchPlan,
+} from '@/lib/types';
+
+// Staff who can own a sourced candidate.
+const SRC_OWNERS = [
+  { id: 'bg', name: 'Byron Giraldo', initials: 'BG', color: '#16A085' },
+  { id: 'sp', name: 'Stephany Picos', initials: 'SP', color: '#8E44AD' },
+  { id: 'md', name: 'Marina Duarte', initials: 'MD', color: '#2980B9' },
+];
+const ownerById = (id?: string) => SRC_OWNERS.find(o => o.id === id);
+
+const STATUS_STYLE: Record<SourceStatus, { fg: string; bg: string; dot: string }> = {
+  New: { fg: '#475569', bg: '#EEF1F5', dot: '#94A3B8' },
+  'Reached out': { fg: '#B45309', bg: '#FEF3C7', dot: '#D97706' },
+  Interested: { fg: '#15803D', bg: '#DCFCE7', dot: '#16A34A' },
+  'Not interested': { fg: '#B91C1C', bg: '#FEE2E2', dot: '#DC2626' },
+  Applied: { fg: '#4F46E5', bg: '#EEF2FF', dot: '#4F46E5' },
+};
+
+const fmtUSD = (raw: string) => {
+  const n = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
+  return n ? '$' + n.toLocaleString('en-US') : '';
+};
+const nameFromSlug = (li: string) => {
+  const slug = li.replace(/^.*\/in\//, '').replace(/-[0-9a-f]{6,}$/i, '').replace(/[0-9]+$/,'');
+  return slug.split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
+
+const field: CSSProperties = { height: 36, boxSizing: 'border-box', border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '0 10px', font: 'inherit', fontSize: 12.5, color: NW.black, outline: 'none', background: NW.white };
+const lbl: CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray500, marginBottom: 6, display: 'block' };
+
+function OwnerAvatar({ id, showName }: { id?: string; showName?: boolean }) {
+  const o = ownerById(id);
+  if (!o) return <span style={{ fontSize: 12.5, color: NW.gray400 }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+      <span style={{ width: 22, height: 22, borderRadius: '50%', background: o.color, color: '#fff', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{o.initials}</span>
+      {showName && <span style={{ fontSize: 12.5, color: NW.gray700 }}>{o.name.split(' ')[0]}</span>}
+    </span>
+  );
+}
+
+// Status pill that is a native select — one click to change.
+function StatusSelect({ value, onChange }: { value: SourceStatus; onChange: (s: SourceStatus) => void }) {
+  const s = STATUS_STYLE[value];
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <span style={{ position: 'absolute', left: 10, width: 6, height: 6, borderRadius: '50%', background: s.dot, pointerEvents: 'none' }} />
+      <select value={value} onChange={e => onChange(e.target.value as SourceStatus)}
+        style={{ appearance: 'none', WebkitAppearance: 'none', font: 'inherit', fontSize: 11.5, fontWeight: 600, color: s.fg, background: s.bg, border: `1px solid ${s.fg}22`, borderRadius: 999, padding: '4px 22px 4px 22px', cursor: 'pointer' }}>
+        {SRC_STATUSES.map(x => <option key={x} value={x} style={{ color: NW.black, background: '#fff' }}>{x}</option>)}
+      </select>
+      <Icon name="chevron-down" size={12} color={s.fg} style={{ position: 'absolute', right: 7, pointerEvents: 'none' }} />
+    </span>
+  );
+}
+
+function ReasonSelect({ value, onChange }: { value?: string; onChange: (r: string) => void }) {
+  return (
+    <select value={value || ''} onChange={e => onChange(e.target.value)}
+      style={{ font: 'inherit', fontSize: 11, fontWeight: 600, color: '#B91C1C', background: '#FEE2E2', border: '1px solid #B91C1C22', borderRadius: 999, padding: '4px 8px', cursor: 'pointer', maxWidth: 150 }}>
+      <option value="" style={{ color: NW.black }}>Reason…</option>
+      {SRC_REASONS.map(r => <option key={r} value={r} style={{ color: NW.black }}>{r}</option>)}
+    </select>
+  );
+}
+
+function SalaryCell({ value, onSave }: { value?: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(value || '');
+  useEffect(() => { setV(value || ''); }, [value]);
+  if (editing) {
+    return <input autoFocus value={v} onChange={e => setV(e.target.value)} onBlur={() => { setEditing(false); const f = fmtUSD(v); if (f !== (value || '')) onSave(f); }}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      placeholder="2000" style={{ ...field, height: 28, width: 90, fontSize: 12 }} />;
+  }
+  return value
+    ? <button onClick={() => setEditing(true)} style={{ font: 'inherit', fontSize: 12.5, color: NW.black, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>{value}</button>
+    : <button onClick={() => setEditing(true)} style={{ font: 'inherit', fontSize: 12, color: NW.teal600, background: 'transparent', border: `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: '3px 8px' }}>+ Add</button>;
+}
+
+// ── Source panel — the only block that PULLS people in ──
+function SourcePanel({ opening, plan, countries, setCountries, onRun, busy }: {
+  opening: Opening; plan: SearchPlan | null; countries: string[]; setCountries: (c: string[]) => void;
+  onRun: (mode: 'ai' | 'more') => void; busy: false | 'ai' | 'more';
+}) {
+  const hasPlan = !!(plan && plan.phrases && plan.phrases.length);
+  const nOn = countries.length;
+  const allOn = nOn === SRC_COUNTRIES.length;
+  const toggle = (code: string) => setCountries(countries.includes(code) ? countries.filter(c => c !== code) : [...countries, code]);
+  return (
+    <div style={{ border: `1px solid ${NW.teal500}`, borderRadius: 16, padding: 18, marginBottom: 16, background: `linear-gradient(180deg, ${NW.teal50}, #fff 70%)` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: NW.black, letterSpacing: '-0.02em' }}>{hasPlan ? `Pull a fresh batch from ${nOn} countr${nOn === 1 ? 'y' : 'ies'}` : 'Set up sourcing for this opening'}</div>
+          <div style={{ fontSize: 12.5, color: NW.gray600, marginTop: 3 }}>{hasPlan ? 'Runs append candidates — nothing is ever removed.' : 'AI Search reads the job post and writes the search plan (once).'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {hasPlan && <Button size="lg" icon="plus" disabled={!!busy || !nOn} onClick={() => onRun('more')}>{busy === 'more' ? 'Searching…' : 'Find more candidates'}</Button>}
+          <Button variant={hasPlan ? 'secondary' : 'primary'} size="lg" icon="sparkles" disabled={!!busy || !nOn} onClick={() => onRun('ai')}>{busy === 'ai' ? 'AI thinking…' : hasPlan ? 'AI Search' : 'Run AI Search'}</Button>
+        </div>
+      </div>
+      {hasPlan && <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 8 }}>AI Search rewrites the plan — only needed if the role changes. Find more reuses it at no AI cost.</div>}
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={lbl}>Countries to search · {nOn} of {SRC_COUNTRIES.length}</span>
+          <button onClick={() => setCountries(allOn ? [] : SRC_COUNTRIES.map(c => c.code))} style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{allOn ? 'Clear all' : 'Select all'}</button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {SRC_COUNTRIES.map(c => { const on = countries.includes(c.code); return (
+            <button key={c.code} onClick={() => toggle(c.code)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', borderRadius: 999, padding: '6px 12px', border: `1px solid ${on ? NW.teal500 : NW.gray200}`, background: on ? NW.teal50 : NW.white, color: on ? NW.teal700 : NW.gray600 }}>
+              {on && <Icon name="check" size={12} color={NW.teal600} />}{c.name}
+            </button>
+          ); })}
+        </div>
+        {!nOn && <div style={{ fontSize: 12, color: '#B45309', marginTop: 8 }}>Pick at least one country.</div>}
+      </div>
+
+      {hasPlan && plan && (
+        <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${NW.teal500}22` }}>
+          Search plan · {plan.runs || 0} run{plan.runs === 1 ? '' : 's'} · {(plan.phrases || []).slice(0, 3).join(' · ')}{(plan.phrases || []).length > 3 ? '…' : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddManualModal({ openingId, onClose, onDone }: { openingId: string; onClose: () => void; onDone: () => void }) {
+  const [li, setLi] = useState(''); const [name, setName] = useState(''); const [autoName, setAutoName] = useState(true);
+  const [owner, setOwner] = useState(''); const [country, setCountry] = useState('co'); const [err, setErr] = useState(''); const [saving, setSaving] = useState(false);
+  function onLi(v: string) { setLi(v); if (autoName && v.includes('/in/')) setName(nameFromSlug(v)); }
+  async function save() {
+    if (!li.includes('/in/')) { setErr('Paste a LinkedIn profile URL (must contain /in/).'); return; }
+    setSaving(true);
+    const slug = li.replace(/^.*\/in\//, '').replace(/[/?#].*$/, '');
+    try {
+      await addDoc(collection(db, 'sourcedCandidates'), {
+        openingId, name: name.trim() || nameFromSlug(li), li: '/in/' + slug, linkedin: 'https://www.linkedin.com/in/' + slug,
+        location: SRC_COUNTRIES.find(c => c.code === country)?.name || '', country: SRC_COUNTRIES.find(c => c.code === country)?.name || '',
+        source: 'Manual', owner, status: 'New', reason: '', salary: '', applied: false, last: 'just now', notes: '',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      onDone();
+    } catch (e) { console.error('[sourcing] add failed', e); setErr('Could not save — check permissions.'); setSaving(false); }
+  }
+  return (
+    <Modal open onClose={onClose} title="Add candidate manually" className="min-w-0">
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 14 }}>
+        <div><label style={lbl}>LinkedIn URL</label><input style={{ ...field, height: 38, width: '100%' }} value={li} placeholder="https://www.linkedin.com/in/…" onChange={e => onLi(e.target.value)} />{err && <div style={{ fontSize: 11.5, color: '#B91C1C', marginTop: 5 }}>{err}</div>}</div>
+        <div><label style={lbl}>Name</label><input style={{ ...field, height: 38, width: '100%' }} value={name} placeholder="Full name" onChange={e => { setName(e.target.value); setAutoName(false); }} /></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 14 }}>
+          <div><label style={lbl}>Owner</label><select style={{ ...field, height: 38, width: '100%' }} value={owner} onChange={e => setOwner(e.target.value)}><option value="">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
+          <div><label style={lbl}>Country</label><select style={{ ...field, height: 38, width: '100%' }} value={country} onChange={e => setCountry(e.target.value)}>{SRC_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}</select></div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${NW.gray100}` }}>
+        <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+        <Button size="sm" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Add candidate'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function PlanModal({ plan, onClose, onRerun, busy }: { plan: SearchPlan | null; onClose: () => void; onRerun: () => void; busy: boolean }) {
+  return (
+    <Modal open onClose={onClose} title="Search plan" className="min-w-0">
+      <p style={{ fontSize: 13, color: NW.gray600, lineHeight: 1.6, margin: '0 0 14px' }}>These phrases were written once by AI from the job post and are reused on every “Find more” at no AI cost. Candidates are geo-locked to the selected countries, deduped against the master list, and founders/owners/CEOs are excluded.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {(plan?.phrases || []).map((p, i) => <span key={i} style={{ fontSize: 12, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}30`, borderRadius: 999, padding: '5px 11px' }}>{p}</span>)}
+        {!plan?.phrases?.length && <span style={{ fontSize: 13, color: NW.gray400 }}>No plan yet — run AI Search.</span>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${NW.gray100}` }}>
+        <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
+        <Button size="sm" icon="sparkles" disabled={busy} onClick={onRerun}>{busy ? 'Thinking…' : 'Re-run AI Search'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function NotesModal({ row, onClose, onSave }: { row: SourcedCandidate; onClose: () => void; onSave: (v: string) => void }) {
+  const [v, setV] = useState(row.notes || '');
+  const [saving, setSaving] = useState(false);
+  return (
+    <Modal open onClose={onClose} title={`Notes — ${row.name}`} className="min-w-0">
+      <p style={{ fontSize: 11.5, color: NW.gray500, margin: '0 0 8px' }}>Staff-only. Separate from the “not interested” reason.</p>
+      <textarea autoFocus value={v} onChange={e => setV(e.target.value)} rows={5} style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: 10, font: 'inherit', fontSize: 13.5, resize: 'vertical' }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${NW.gray100}` }}>
+        <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+        <Button size="sm" disabled={saving} onClick={() => { setSaving(true); onSave(v); }}>{saving ? 'Saving…' : 'Save note'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Main tab ──
+export function SourcingTab({ op }: { op: Opening }) {
+  const openingId = op.id;
+  const [rows, setRows] = useState<SourcedCandidate[]>([]);
+  const [plan, setPlan] = useState<SearchPlan | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
+  const [countries, setCountries] = useState<string[]>(SRC_COUNTRIES.filter(c => c.on).map(c => c.code));
+  const [busy, setBusy] = useState<false | 'ai' | 'more'>(false);
+  const [runNote, setRunNote] = useState('');
+
+  // Filters
+  const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
+  const [fStatus, setFStatus] = useState<SourceStatus | ''>(''); const [fSource, setFSource] = useState('');
+  const [modal, setModal] = useState<null | 'add' | 'plan'>(null);
+  const [notesRow, setNotesRow] = useState<SourcedCandidate | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(query(collection(db, 'sourcedCandidates'), where('openingId', '==', openingId)),
+      snap => { setRows(snap.docs.map(d => ({ ...d.data(), id: d.id }) as SourcedCandidate)); setLoadErr(false); },
+      err => { console.error('[sourcing] snapshot', err); setLoadErr(true); });
+    getDoc(doc(db, 'searchPlans', openingId)).then(s => setPlan(s.exists() ? ({ ...s.data(), openingId } as SearchPlan) : null)).catch(() => {});
+    return () => unsub();
+  }, [openingId]);
+
+  const save = (id: string, patch: Partial<SourcedCandidate>) => {
+    updateDoc(doc(db, 'sourcedCandidates', id), { ...patch, updatedAt: serverTimestamp() }).catch(e => { console.error('[sourcing] save', e); alert('Could not save — check permissions.'); });
+  };
+  const setStatus = (r: SourcedCandidate, status: SourceStatus) => {
+    const patch: Partial<SourcedCandidate> = { status };
+    if (status === 'Reached out') { patch.last = 'just now'; if (!r.owner) patch.owner = SRC_OWNERS[0].id; }
+    if (status !== 'Not interested') patch.reason = '';
+    save(r.id, patch);
+  };
+
+  async function runSearch(mode: 'ai' | 'more') {
+    if (!countries.length || busy) return;
+    setBusy(mode); setRunNote('');
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sourcing/find', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ openingId, countries, english: true, excludeOwners: true, mode }),
+      });
+      const d = await res.json();
+      if (!d.ok) { setRunNote(d.message || d.reason || 'Search failed.'); }
+      else { setRunNote(`Added ${d.added} new · scanned ${d.stats?.found ?? 0} · skipped ${d.stats?.skipped_existing ?? 0} already in the sheet${d.aiCost ? ' · AI wrote the plan' : ''}`); getDoc(doc(db, 'searchPlans', openingId)).then(s => setPlan(s.exists() ? ({ ...s.data(), openingId } as SearchPlan) : null)); }
+    } catch (e) { setRunNote('Error: ' + (e as Error).message); }
+    setBusy(false);
+  }
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {}; SRC_STATUSES.forEach(s => c[s] = 0);
+    rows.forEach(r => { c[r.status] = (c[r.status] || 0) + 1; });
+    return c;
+  }, [rows]);
+
+  const filtered = useMemo(() => rows.filter(r => {
+    if (q && !(`${r.name} ${r.linkedin}`.toLowerCase().includes(q.toLowerCase()))) return false;
+    if (fCountry && r.country !== fCountry) return false;
+    if (fOwner && (fOwner === 'none' ? !!r.owner : r.owner !== fOwner)) return false;
+    if (fStatus && r.status !== fStatus) return false;
+    if (fSource && r.source !== fSource) return false;
+    return true;
+  }), [rows, q, fCountry, fOwner, fStatus, fSource]);
+
+  const total = rows.length;
+  const isFiltered = filtered.length !== total;
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} />
+      {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
+      {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
+
+      {/* Pipeline counts — click to filter */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {SRC_STATUSES.map(s => { const on = fStatus === s; const st = STATUS_STYLE[s]; return (
+          <button key={s} onClick={() => setFStatus(on ? '' : s)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5, cursor: 'pointer', borderRadius: 999, padding: '5px 12px', background: st.bg, color: st.fg, border: `1px solid ${on ? st.fg : st.fg + '22'}`, boxShadow: on ? `0 0 0 2px ${st.fg}22` : 'none' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot }} />{s}<b>{counts[s] || 0}</b>
+          </button>
+        ); })}
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{total} sourced</span>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or LinkedIn" style={{ ...field, width: 200 }} />
+        <select value={fCountry} onChange={e => setFCountry(e.target.value)} style={field}><option value="">All countries</option>{[...new Set(rows.map(r => r.country).filter(Boolean))].map(c => <option key={c}>{c}</option>)}</select>
+        <select value={fOwner} onChange={e => setFOwner(e.target.value)} style={field}><option value="">All owners</option><option value="none">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
+        <select value={fSource} onChange={e => setFSource(e.target.value)} style={field}><option value="">All sources</option><option>X-ray</option><option>Manual</option></select>
+        <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>
+        {plan?.phrases?.length ? <button onClick={() => setModal('plan')} style={{ ...field, cursor: 'pointer', color: NW.gray700 }}>View plan</button> : null}
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{isFiltered ? `${filtered.length} of ${total}` : `${total} candidates`}</span>
+      </div>
+
+      {/* Table */}
+      <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1200, fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: NW.gray50 }}>
+              {['Candidate', 'Location', 'Source', 'Owner', 'Status', 'Salary exp.', 'Applied?', 'Last action', 'Notes'].map((h, i) => (
+                <th key={h} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', ...(i === 8 ? { position: 'sticky', right: 0, background: NW.gray50, borderLeft: `1px solid ${NW.gray100}` } : {}) }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(r => (
+              <tr key={r.id} style={{ borderTop: `1px solid ${NW.gray100}`, height: 56 }}>
+                <td style={{ padding: '8px 14px', maxWidth: 260 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                  <a href={r.linkedin} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: NW.teal600, textDecoration: 'none', whiteSpace: 'nowrap' }}>{r.li} ↗</a>
+                  {r.dupe && <span style={{ marginLeft: 8, fontSize: 10.5, color: '#B45309' }}>⚠ also in another opening</span>}
+                </td>
+                <td style={{ padding: '8px 14px', color: NW.gray600, whiteSpace: 'nowrap' }}>{r.location || '—'}</td>
+                <td style={{ padding: '8px 14px' }}><span style={{ fontSize: 10.5, fontWeight: 600, borderRadius: 6, padding: '2px 8px', color: r.source === 'X-ray' ? NW.teal700 : NW.gray600, background: r.source === 'X-ray' ? NW.teal50 : NW.gray50 }}>{r.source}</span></td>
+                <td style={{ padding: '8px 14px' }}>
+                  <select value={r.owner || ''} onChange={e => save(r.id, { owner: e.target.value })} style={{ font: 'inherit', fontSize: 12, color: NW.gray700, border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                    <option value="">—</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name.split(' ')[0]}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: '8px 14px' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <StatusSelect value={r.status} onChange={s => setStatus(r, s)} />
+                    {r.status === 'Not interested' && <ReasonSelect value={r.reason} onChange={reason => save(r.id, { reason })} />}
+                  </span>
+                </td>
+                <td style={{ padding: '8px 14px' }}><SalaryCell value={r.salary} onSave={v => save(r.id, { salary: v })} /></td>
+                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{r.applied ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
+                <td style={{ padding: '8px 14px', color: NW.gray500, fontSize: 12, whiteSpace: 'nowrap', width: 110 }}>{r.last || '—'}</td>
+                <td style={{ padding: '8px 14px', position: 'sticky', right: 0, background: NW.white, borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
+                  <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>
+                </td>
+              </tr>
+            ))}
+            {!filtered.length && (
+              <tr><td colSpan={9} style={{ padding: '32px 14px', textAlign: 'center', color: NW.gray400, fontSize: 13 }}>{total ? 'No candidates match these filters.' : 'No one sourced yet — run AI Search or add manually.'}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11, color: NW.gray400, marginTop: 8 }}>Applied matches on LinkedIn URL from the job board · nothing is ever deleted. (Applied-sync + salary→Airtable land in a later pass.)</div>
+
+      {modal === 'add' && <AddManualModal openingId={openingId} onClose={() => setModal(null)} onDone={() => setModal(null)} />}
+      {modal === 'plan' && <PlanModal plan={plan} onClose={() => setModal(null)} busy={busy === 'ai'} onRerun={() => { setModal(null); runSearch('ai'); }} />}
+      {notesRow && <NotesModal row={notesRow} onClose={() => setNotesRow(null)} onSave={v => { save(notesRow.id, { notes: v }); setNotesRow(null); }} />}
+    </div>
+  );
+}

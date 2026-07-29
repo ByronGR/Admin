@@ -42,6 +42,9 @@ const nameFromSlug = (li: string) => {
   const slug = li.replace(/^.*\/in\//, '').replace(/-[0-9a-f]{6,}$/i, '').replace(/[0-9]+$/,'');
   return slug.split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 };
+// Normalize any LinkedIn value (full URL or bare slug) to a comparable slug.
+const slugify = (s: string) => (s || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^(www\.)?linkedin\.com\/in\//, '').replace(/[/?#].*$/, '').replace(/\/+$/, '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+const normName = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 
 const field: CSSProperties = { height: 36, boxSizing: 'border-box', border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '0 10px', font: 'inherit', fontSize: 12.5, color: NW.black, outline: 'none', background: NW.white };
 const lbl: CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: NW.gray500, marginBottom: 6, display: 'block' };
@@ -215,6 +218,8 @@ export function SourcingTab({ op }: { op: Opening }) {
   const openingId = op.id;
   const [rows, setRows] = useState<SourcedCandidate[]>([]);
   const [plan, setPlan] = useState<SearchPlan | null>(null);
+  const [appliedSlugs, setAppliedSlugs] = useState<Set<string>>(new Set());
+  const [appliedNames, setAppliedNames] = useState<Set<string>>(new Set());
   const [loadErr, setLoadErr] = useState(false);
   const [countries, setCountries] = useState<string[]>(SRC_COUNTRIES.filter(c => c.on).map(c => c.code));
   const [busy, setBusy] = useState<false | 'ai' | 'more'>(false);
@@ -223,6 +228,7 @@ export function SourcingTab({ op }: { op: Opening }) {
   // Filters
   const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
   const [fStatus, setFStatus] = useState<SourceStatus | ''>(''); const [fSource, setFSource] = useState('');
+  const [pageSize, setPageSize] = useState(25); const [pageNum, setPageNum] = useState(1);
   const [modal, setModal] = useState<null | 'add' | 'plan'>(null);
   const [notesRow, setNotesRow] = useState<SourcedCandidate | null>(null);
 
@@ -233,6 +239,31 @@ export function SourcingTab({ op }: { op: Opening }) {
     getDoc(doc(db, 'searchPlans', openingId)).then(s => setPlan(s.exists() ? ({ ...s.data(), openingId } as SearchPlan) : null)).catch(() => {});
     return () => unsub();
   }, [openingId]);
+
+  // Auto-applied: match sourced people to real applicants by LinkedIn slug.
+  // Applying appends the candidate to this opening's pipeline, where their profile
+  // carries a LinkedIn — so anyone in the pipeline whose slug matches is "Applied".
+  useEffect(() => {
+    const code = op.code || op.id;
+    getDoc(doc(db, 'pipelines', code)).then(s => {
+      const set = new Set<string>();
+      const names = new Set<string>();
+      if (s.exists()) {
+        const cands = (s.data().candidates || []) as Record<string, unknown>[];
+        cands.forEach(c => {
+          const prof = (c.profile || {}) as Record<string, unknown>;
+          const raw = (c.linkedIn || c.linkedin || prof.linkedIn || prof.linkedin || '') as string;
+          const slug = slugify(raw);
+          if (slug) set.add(slug);
+          const nm = (c.name || c.candidateName || prof.name || [prof.firstName, prof.lastName].filter(Boolean).join(' ') || '') as string;
+          const n = normName(nm);
+          if (n) names.add(n);
+        });
+      }
+      setAppliedSlugs(set);
+      setAppliedNames(names);
+    }).catch(() => {});
+  }, [op.code, op.id]);
 
   const save = (id: string, patch: Partial<SourcedCandidate>) => {
     updateDoc(doc(db, 'sourcedCandidates', id), { ...patch, updatedAt: serverTimestamp() }).catch(e => { console.error('[sourcing] save', e); alert('Could not save — check permissions.'); });
@@ -277,6 +308,9 @@ export function SourcingTab({ op }: { op: Opening }) {
 
   const total = rows.length;
   const isFiltered = filtered.length !== total;
+  useEffect(() => { setPageNum(1); }, [q, fCountry, fOwner, fStatus, fSource, pageSize, total]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageRows = filtered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -307,7 +341,7 @@ export function SourcingTab({ op }: { op: Opening }) {
 
       {/* Table */}
       <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1200, fontSize: 13 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1440, fontSize: 13 }}>
           <thead>
             <tr style={{ background: NW.gray50 }}>
               {['Candidate', 'Location', 'Source', 'Owner', 'Status', 'Salary exp.', 'Applied?', 'Last action', 'Notes'].map((h, i) => (
@@ -316,7 +350,7 @@ export function SourcingTab({ op }: { op: Opening }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pageRows.map(r => (
               <tr key={r.id} style={{ borderTop: `1px solid ${NW.gray100}`, height: 56 }}>
                 <td style={{ padding: '8px 14px', maxWidth: 260 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
@@ -330,14 +364,14 @@ export function SourcingTab({ op }: { op: Opening }) {
                     <option value="">—</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name.split(' ')[0]}</option>)}
                   </select>
                 </td>
-                <td style={{ padding: '8px 14px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
                     <StatusSelect value={r.status} onChange={s => setStatus(r, s)} />
                     {r.status === 'Not interested' && <ReasonSelect value={r.reason} onChange={reason => save(r.id, { reason })} />}
                   </span>
                 </td>
                 <td style={{ padding: '8px 14px' }}><SalaryCell value={r.salary} onSave={v => save(r.id, { salary: v })} /></td>
-                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{r.applied ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
+                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{(r.applied || appliedSlugs.has(slugify(r.li.replace(/^\/in\//, ''))) || appliedNames.has(normName(r.name))) ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
                 <td style={{ padding: '8px 14px', color: NW.gray500, fontSize: 12, whiteSpace: 'nowrap', width: 110 }}>{r.last || '—'}</td>
                 <td style={{ padding: '8px 14px', position: 'sticky', right: 0, background: NW.white, borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
                   <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>
@@ -350,7 +384,21 @@ export function SourcingTab({ op }: { op: Opening }) {
           </tbody>
         </table>
       </div>
-      <div style={{ fontSize: 11, color: NW.gray400, marginTop: 8 }}>Applied matches on LinkedIn URL from the job board · nothing is ever deleted. (Applied-sync + salary→Airtable land in a later pass.)</div>
+      {filtered.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: NW.gray500 }}>
+            Rows per page
+            <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={{ ...field, height: 30, padding: '0 8px' }}>{[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}</select>
+            <span>{(pageNum - 1) * pageSize + 1}–{Math.min(pageNum * pageSize, filtered.length)} of {filtered.length}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setPageNum(p => Math.max(1, p - 1))} disabled={pageNum <= 1} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: `1px solid ${NW.gray200}`, background: NW.white, color: pageNum <= 1 ? NW.gray300 : NW.gray700, cursor: pageNum <= 1 ? 'default' : 'pointer' }}>Prev</button>
+            <span style={{ fontSize: 12.5, color: NW.gray600 }}>Page {pageNum} of {pageCount}</span>
+            <button onClick={() => setPageNum(p => Math.min(pageCount, p + 1))} disabled={pageNum >= pageCount} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: `1px solid ${NW.gray200}`, background: NW.white, color: pageNum >= pageCount ? NW.gray300 : NW.gray700, cursor: pageNum >= pageCount ? 'default' : 'pointer' }}>Next</button>
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: NW.gray400, marginTop: 8 }}>Applied is matched automatically from the job board by LinkedIn URL · nothing is ever deleted.</div>
 
       {modal === 'add' && <AddManualModal openingId={openingId} onClose={() => setModal(null)} onDone={() => setModal(null)} />}
       {modal === 'plan' && <PlanModal plan={plan} onClose={() => setModal(null)} busy={busy === 'ai'} onRerun={() => { setModal(null); runSearch('ai'); }} />}

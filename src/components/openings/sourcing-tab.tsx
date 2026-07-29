@@ -26,6 +26,9 @@ const SRC_OWNERS = [
 ];
 const ownerById = (id?: string) => SRC_OWNERS.find(o => o.id === id);
 
+// Sort order for the Status column — Reached out first, dead statuses last.
+const STATUS_ORDER: Record<SourceStatus, number> = { 'Reached out': 0, Interested: 1, New: 2, Applied: 3, 'Not interested': 4 };
+
 const STATUS_STYLE: Record<SourceStatus, { fg: string; bg: string; dot: string }> = {
   New: { fg: '#475569', bg: '#EEF1F5', dot: '#94A3B8' },
   'Reached out': { fg: '#B45309', bg: '#FEF3C7', dot: '#D97706' },
@@ -247,6 +250,7 @@ export function SourcingTab({ op }: { op: Opening }) {
   const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
   const [fStatus, setFStatus] = useState<SourceStatus | ''>(''); const [fSource, setFSource] = useState('');
   const [pageSize, setPageSize] = useState(25); const [pageNum, setPageNum] = useState(1);
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [modal, setModal] = useState<null | 'add' | 'plan'>(null);
   const [notesRow, setNotesRow] = useState<SourcedCandidate | null>(null);
 
@@ -339,9 +343,29 @@ export function SourcingTab({ op }: { op: Opening }) {
 
   const total = rows.length;
   const isFiltered = filtered.length !== total;
+  const isApplied = (r: SourcedCandidate) => !!(r.applied || appliedSlugs.has(slugify(r.li.replace(/^\/in\//, ''))) || appliedNames.has(normName(r.name)));
+  const sortedFiltered = useMemo(() => {
+    if (!sort) return filtered;
+    const val = (r: SourcedCandidate): number | string => {
+      switch (sort.key) {
+        case 'name': return (r.name || '').toLowerCase();
+        case 'location': return (r.location || '').toLowerCase();
+        case 'source': return r.source || '';
+        case 'owner': return (ownerById(r.owner)?.name || 'zzz').toLowerCase();
+        case 'status': return STATUS_ORDER[r.status] ?? 99;
+        case 'salary': return parseInt(String(r.salary || '').replace(/[^0-9]/g, ''), 10) || 0;
+        case 'applied': return isApplied(r) ? 0 : 1;
+        case 'last': return r.createdAt?.seconds ?? 0;
+        default: return 0;
+      }
+    };
+    return [...filtered].sort((a, b) => { const va = val(a), vb = val(b); return va < vb ? -sort.dir : va > vb ? sort.dir : 0; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sort, appliedSlugs, appliedNames]);
   useEffect(() => { setPageNum(1); }, [q, fCountry, fOwner, fStatus, fSource, pageSize, total]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+  const pageCount = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
+  const pageRows = sortedFiltered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+  const toggleSort = (key: string) => setSort(prev => (prev?.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -376,9 +400,14 @@ export function SourcingTab({ op }: { op: Opening }) {
         <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 900, fontSize: 13 }}>
           <thead>
             <tr style={{ background: NW.gray50 }}>
-              {['Candidate', 'Location', 'Source', 'Owner', 'Status', 'Salary exp.', 'Applied', 'Last action', 'Notes'].map((h, i) => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>{h}</th>
-              ))}
+              {([['name', 'Candidate'], ['location', 'Location'], ['source', 'Source'], ['owner', 'Owner'], ['status', 'Status'], ['salary', 'Salary exp.'], ['applied', 'Applied'], ['last', 'Last action'], ['', 'Notes']] as const).map(([key, label], i) => {
+                const active = !!key && sort?.key === key;
+                return (
+                  <th key={label} onClick={key ? () => toggleSort(key) : undefined} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? NW.gray700 : NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>
+                    {label}{active ? (sort!.dir === 1 ? ' ↑' : ' ↓') : ''}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -403,7 +432,7 @@ export function SourcingTab({ op }: { op: Opening }) {
                   </span>
                 </td>
                 <td style={{ padding: '8px 14px' }}><SalaryCell value={r.salary} onSave={v => save(r.id, { salary: v })} /></td>
-                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{(r.applied || appliedSlugs.has(slugify(r.li.replace(/^\/in\//, ''))) || appliedNames.has(normName(r.name))) ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
+                <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{isApplied(r) ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
                 <td style={{ padding: '8px 14px', color: NW.gray500, fontSize: 12, whiteSpace: 'nowrap', width: 110 }}>{r.last || '—'}</td>
                 <td style={{ padding: '8px 14px', borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
                   <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>

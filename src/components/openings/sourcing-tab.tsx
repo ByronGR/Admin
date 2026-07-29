@@ -359,11 +359,11 @@ export function SourcingTab({ op }: { op: Opening }) {
 
       {/* Table */}
       <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1440, fontSize: 13 }}>
+        <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 900, fontSize: 13 }}>
           <thead>
             <tr style={{ background: NW.gray50 }}>
-              {['Candidate', 'Location', 'Source', 'Owner', 'Status', 'Salary exp.', 'Applied?', 'Last action', 'Notes'].map((h, i) => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', ...(i === 8 ? { position: 'sticky', right: 0, background: NW.gray50, borderLeft: `1px solid ${NW.gray100}` } : {}) }}>{h}</th>
+              {['Candidate', 'Location', 'Source', 'Owner', 'Status', 'Salary exp.', 'Applied', 'Last action', 'Notes'].map((h, i) => (
+                <th key={h} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -391,7 +391,7 @@ export function SourcingTab({ op }: { op: Opening }) {
                 <td style={{ padding: '8px 14px' }}><SalaryCell value={r.salary} onSave={v => save(r.id, { salary: v })} /></td>
                 <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{(r.applied || appliedSlugs.has(slugify(r.li.replace(/^\/in\//, ''))) || appliedNames.has(normName(r.name))) ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
                 <td style={{ padding: '8px 14px', color: NW.gray500, fontSize: 12, whiteSpace: 'nowrap', width: 110 }}>{r.last || '—'}</td>
-                <td style={{ padding: '8px 14px', position: 'sticky', right: 0, background: NW.white, borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
+                <td style={{ padding: '8px 14px', borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
                   <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>
                 </td>
               </tr>

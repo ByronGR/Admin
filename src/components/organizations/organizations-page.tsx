@@ -991,6 +991,7 @@ function OrgDetail({
 
   // Users state
   const [addUserEmail, setAddUserEmail] = useState('');
+  const [addUserRole, setAddUserRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [addingUser, setAddingUser] = useState(false);
   const [invitesSending, setInvitesSending] = useState<Set<string>>(new Set());
   // Real client accounts from the App's `users` collection (keyed by lowercase email)
@@ -1505,11 +1506,12 @@ function OrgDetail({
     try {
       // Step 1: add user to org — this must succeed. Name + role are collected from
       // the client on the create-account screen, so we only store the email here.
-      const newUser: OrgUser = { email, status: 'invited', invitedAt: new Date().toISOString() };
+      const newUser: OrgUser = { email, role: addUserRole, status: 'invited', invitedAt: new Date().toISOString() };
       const updatedUsers = [...orgUsers, newUser];
       await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
       setAddUserEmail('');
+      setAddUserRole('member');
       showToast('User added', 'success');
     } catch {
       showToast('Failed to add user', 'error');
@@ -2534,8 +2536,8 @@ function OrgDetail({
             </h3>
           </div>
 
-          {/* Add user — just an email; the client fills in their name + role on signup */}
-          <div className="mb-4 flex gap-2">
+          {/* Add user — email + the access level they start with */}
+          <div className="mb-1 flex gap-2">
             <input
               value={addUserEmail}
               onChange={(e) => setAddUserEmail(e.target.value)}
@@ -2544,6 +2546,15 @@ function OrgDetail({
               type="email"
               className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs outline-none focus:border-[var(--green)]"
             />
+            <select
+              value={addUserRole}
+              onChange={(e) => setAddUserRole(e.target.value as 'admin' | 'member' | 'viewer')}
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-2 text-xs outline-none focus:border-[var(--green)]"
+            >
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+            </select>
             <button
               onClick={addUser}
               disabled={addingUser || !addUserEmail.trim()}
@@ -2554,6 +2565,7 @@ function OrgDetail({
               Invite
             </button>
           </div>
+          <p className="mb-4 text-[10px] text-[var(--light)]">Admin = full access (team, billing, approvals) · Member = works the pipeline · Viewer = read-only. You can change this later.</p>
 
           {orgUsers.length === 0 ? (
             <div className="rounded-xl bg-[var(--bg)] px-4 py-8 text-center">

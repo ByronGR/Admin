@@ -319,19 +319,6 @@ export function SourcingTab({ op }: { op: Opening }) {
     setBusy(false);
   }
 
-  async function importSheet() {
-    if (busy) return;
-    setBusy('more'); setRunNote('Importing the FreshPrints sheet…');
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/sourcing/import-freshprints', { method: 'POST', headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} });
-      const d = await res.json();
-      if (!d.ok) setRunNote(d.reason === 'unauthorized' ? 'Not authorized — reload and sign in.' : (d.reason || 'Import failed.'));
-      else setRunNote(`Imported ${d.added} lead${d.added === 1 ? '' : 's'} · skipped ${d.skipped} already present${d.missing?.length ? ` · couldn’t match opening for: ${d.missing.join(', ')}` : ''}. Open the matching opening to see them.`);
-    } catch (e) { setRunNote('Error: ' + (e as Error).message); }
-    setBusy(false);
-  }
-
   const counts = useMemo(() => {
     const c: Record<string, number> = {}; SRC_STATUSES.forEach(s => c[s] = 0);
     rows.forEach(r => { c[r.status] = (c[r.status] || 0) + 1; });
@@ -396,7 +383,6 @@ export function SourcingTab({ op }: { op: Opening }) {
         <select value={fOwner} onChange={e => setFOwner(e.target.value)} style={field}><option value="">All owners</option><option value="none">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
         <select value={fSource} onChange={e => setFSource(e.target.value)} style={field}><option value="">All sources</option><option>X-ray</option><option>Manual</option></select>
         <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>
-        <button onClick={importSheet} disabled={!!busy} title="One-time import of the FreshPrints Excel into both openings" style={{ ...field, cursor: busy ? 'default' : 'pointer', color: NW.gray700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="upload" size={14} color={NW.gray500} />Import FreshPrints</button>
         {plan?.phrases?.length ? <button onClick={() => setModal('plan')} style={{ ...field, cursor: 'pointer', color: NW.gray700 }}>View plan</button> : null}
         <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{isFiltered ? `${filtered.length} of ${total}` : `${total} candidates`}</span>
       </div>

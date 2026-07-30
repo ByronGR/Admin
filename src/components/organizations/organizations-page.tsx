@@ -1543,6 +1543,25 @@ function OrgDetail({
     });
   }
 
+  // Change a client's access level. Persists on the org record, and — if they've
+  // already signed up — on their user doc's portalRole so the portal reflects it live.
+  async function setUserRole(email: string, account: ClientAccount | undefined, role: 'admin' | 'member' | 'viewer') {
+    markUserBusy(email, true);
+    try {
+      const updatedUsers = orgUsers.map((x) => (x.email === email ? { ...x, role } : x));
+      await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
+      onUpdated({ ...org, orgUsers: updatedUsers });
+      if (account?.id) {
+        await updateDoc(doc(db, 'users', account.id), { portalRole: role, updatedAt: serverTimestamp() });
+      }
+      showToast('Access updated', 'success');
+    } catch {
+      showToast('Could not update access', 'error');
+    } finally {
+      markUserBusy(email, false);
+    }
+  }
+
   async function resetUserPassword(email: string) {
     markUserBusy(email, true);
     try {
@@ -2608,6 +2627,17 @@ function OrgDetail({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <select
+                      value={(['admin', 'member', 'viewer'] as const).includes(u.role as 'admin' | 'member' | 'viewer') ? (u.role as string) : 'member'}
+                      onChange={(e) => setUserRole(u.email, account, e.target.value as 'admin' | 'member' | 'viewer')}
+                      disabled={busy}
+                      title="Access level"
+                      className="rounded-md border border-[var(--border)] bg-white px-1.5 py-1 text-[10px] text-[var(--mid)] outline-none focus:border-[var(--green)] disabled:opacity-50"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
                     {loggedIn ? (
                       <>
                         <button

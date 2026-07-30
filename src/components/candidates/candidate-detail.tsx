@@ -214,10 +214,10 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   }
 
   // ── Inline-editable quick facts (availability / timezone) ──────────────────
-  const [editField, setEditField] = useState<null | 'availability' | 'timezone'>(null);
+  const [editField, setEditField] = useState<null | 'availability' | 'timezone' | 'phone'>(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
-  async function saveQuickFact(key: 'availability' | 'timezone') {
+  async function saveQuickFact(key: 'availability' | 'timezone' | 'phone') {
     setFieldSaving(true);
     const value = fieldDraft.trim() || null;
     try {
@@ -1368,12 +1368,22 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <span style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, wordBreak: 'break-all' }}>{candidate.email}</span>
               </a>
             )}
-            {candidate.phone && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: candidate.email ? `1px solid ${NW.gray100}` : 'none' }}>
-                <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.gray600 }}><Phone className="h-4 w-4" /></span>
-                <span style={{ fontFamily: MONO, fontSize: 13, color: NW.gray800 }}>{candidate.phone}</span>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: candidate.email ? `1px solid ${NW.gray100}` : 'none' }}>
+              <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.gray600 }}><Phone className="h-4 w-4" /></span>
+              {editField === 'phone' ? (
+                <>
+                  <input autoFocus value={fieldDraft} onChange={(e) => setFieldDraft(e.target.value)} placeholder="+57 300 123 4567"
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveQuickFact('phone'); if (e.key === 'Escape') setEditField(null); }}
+                    style={{ flex: 1, height: 32, border: `1px solid ${NW.gray200}`, borderRadius: 8, padding: '0 10px', fontFamily: MONO, fontSize: 13, outline: 'none' }} />
+                  <button onClick={() => saveQuickFact('phone')} disabled={fieldSaving} style={{ fontSize: 12, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{fieldSaving ? 'Saving…' : 'Save'}</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontFamily: MONO, fontSize: 13, color: candidate.phone ? NW.gray800 : NW.gray400 }}>{candidate.phone || 'No phone on file'}</span>
+                  <button onClick={() => { setFieldDraft(candidate.phone || ''); setEditField('phone'); }} style={{ fontSize: 12, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{candidate.phone ? 'Edit' : '+ Add'}</button>
+                </>
+              )}
+            </div>
             {cvUrl && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: `1px solid ${NW.gray100}` }}>
                 <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.rose50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.rose600 }}><FileText className="h-4 w-4" /></span>
@@ -1386,9 +1396,6 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.blue50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.blue500 }}><ExternalLink className="h-4 w-4" /></span>
                 <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: NW.teal700, fontWeight: 500 }}>LinkedIn profile</a>
               </div>
-            )}
-            {!candidate.email && !candidate.phone && !cvUrl && !linkedInUrl && (
-              <div style={{ fontSize: 13, color: NW.gray400 }}>No contact details on file.</div>
             )}
           </div>
 

@@ -216,6 +216,10 @@ export default function PipelinePage() {
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
+  // If the pipelines read is denied (e.g. this account isn't recognised as staff),
+  // surface it instead of spinning forever — an unhandled onSnapshot error would
+  // otherwise never clear `loading`.
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Set of candidateId strings that still exist in the `candidates` collection.
   // Used to filter out "ghost" pipeline entries after Firebase deletes. null means
   // not yet loaded (show all while loading so there's no flash of missing content).
@@ -283,18 +287,33 @@ export default function PipelinePage() {
 
   useEffect(() => {
     // Real-time listener
-    const unsub = onSnapshot(collection(db, 'pipelines'), (snap) => {
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Pipeline[];
-      // Ensure candidates array
-      data.forEach((p) => {
-        if (!p.candidates) p.candidates = [];
-      });
-      setPipelines(data);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      collection(db, 'pipelines'),
+      (snap) => {
+        const data = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as Pipeline[];
+        // Ensure candidates array
+        data.forEach((p) => {
+          if (!p.candidates) p.candidates = [];
+        });
+        setPipelines(data);
+        setLoadError(null);
+        setLoading(false);
+      },
+      (err) => {
+        // Denied/failed read — stop the spinner and say why (this is what caused
+        // the "opens but loads forever" reports for accounts not seen as staff).
+        console.error('pipelines onSnapshot error:', err);
+        setLoadError(
+          err?.code === 'permission-denied'
+            ? "You don't have access to the pipelines right now. Ask an owner to check your account access."
+            : "Couldn't load pipelines. Check your connection and try again.",
+        );
+        setLoading(false);
+      },
+    );
     return unsub;
   }, []);
 
@@ -892,6 +911,11 @@ export default function PipelinePage() {
         {loading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />
+          </div>
+        ) : loadError ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
+            <p className="text-sm font-600" style={{ color: NW.black }}>Couldn&apos;t load pipelines</p>
+            <p className="max-w-sm text-xs" style={{ color: NW.gray500 }}>{loadError}</p>
           </div>
         ) : activePipeline ? (
           /* Full workspace */

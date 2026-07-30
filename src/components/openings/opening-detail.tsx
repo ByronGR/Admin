@@ -24,6 +24,7 @@ import { OpeningAdminControls } from './opening-admin-controls';
 import { SourcingTab } from './sourcing-tab';
 import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
+import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import { WORK_MODE_LABELS, PIPELINE_STAGE_LABELS } from '@/lib/types';
 import {
   Edit3, Briefcase, CheckCircle, Clock, AlertCircle,
@@ -119,6 +120,22 @@ export function OpeningDetail({
       .then((snap) => setPipeCandidates(snap.exists() ? (((snap.data() as Pipeline).candidates) ?? []) : []))
       .catch(() => setPipeCandidates([]));
   }, [briefCode]);
+
+  // Talent pool search + "add back to pipeline" (e.g. a candidate removed by mistake).
+  const [poolSearch, setPoolSearch] = useState('');
+  const [addingPipe, setAddingPipe] = useState<Set<string>>(new Set());
+  async function addToPipeline(c: Candidate) {
+    const code = opening.code ?? opening.id;
+    if (pipeCandidates.some((x) => x.candidateId === c.id)) return;
+    const stage = (opening.pipelineType === 'sourcing' ? 'sourced' : 'applied') as PipelineCandidate['stage'];
+    const newEntry: PipelineCandidate = { candidateId: c.id, name: c.name, email: c.email, stage, ...clientCandidateSnapshot(c) };
+    setAddingPipe((s) => new Set(s).add(c.id));
+    try {
+      await updateDoc(doc(db, 'pipelines', code), { candidates: [...pipeCandidates, newEntry], updatedAt: serverTimestamp() });
+      setPipeCandidates((prev) => [...prev, newEntry]);
+    } catch { /* rules / offline — surfaced by the row staying in the pool */ }
+    finally { setAddingPipe((s) => { const n = new Set(s); n.delete(c.id); return n; }); }
+  }
 
   // Pending applicants (applied via Jobs, not yet pulled into the pipeline).
   const [applicantCount, setApplicantCount] = useState(0);
@@ -494,11 +511,17 @@ export function OpeningDetail({
   const inPipelineCount = pipeCandidates.filter((c) => c.stage !== 'not-selected').length;
   const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
   const openingSkills = (opening.skills ?? []).map((s) => s.toLowerCase());
-  const talentPool = poolCandidates
-    .filter((c) => !pipeIds.has(c.id))
-    .map((c) => ({ c, overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length }))
-    .sort((a, b) => b.overlap - a.overlap)
-    .slice(0, 8);
+  const poolQuery = poolSearch.trim().toLowerCase();
+  const talentPool = (() => {
+    const base = poolCandidates
+      .filter((c) => !pipeIds.has(c.id))
+      .map((c) => ({ c, overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length }));
+    if (poolQuery) {
+      // Searching: match across ALL candidates by name/email (not just top skill matches).
+      return base.filter(({ c }) => `${c.name ?? ''} ${c.email ?? ''}`.toLowerCase().includes(poolQuery)).slice(0, 25);
+    }
+    return base.sort((a, b) => b.overlap - a.overlap).slice(0, 8);
+  })();
 
   const scoredPipe = pipeCandidates.filter((c) => typeof c.score === 'number');
   const avgScore = scoredPipe.length ? Math.round(scoredPipe.reduce((s, c) => s + (c.score ?? 0), 0) / scoredPipe.length) : null;
@@ -633,9 +656,15 @@ export function OpeningDetail({
                   <div style={{ fontSize: 12, color: NW.gray500 }}>Candidates not in this pipeline{openingSkills.length ? ' · best skill matches first' : ''}</div>
                 </div>
               </div>
+              <input
+                value={poolSearch}
+                onChange={(e) => setPoolSearch(e.target.value)}
+                placeholder="Search any candidate by name or email to add…"
+                style={{ width: '100%', boxSizing: 'border-box', height: 34, marginTop: 8, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '0 11px', fontSize: 12.5, outline: 'none', background: NW.white }}
+              />
               <div style={{ marginTop: 10 }}>
                 {talentPool.length === 0 ? (
-                  <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>No available candidates to surface.</div>
+                  <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>{poolQuery ? 'No candidates match your search.' : 'No available candidates to surface.'}</div>
                 ) : (
                   talentPool.map(({ c, overlap }, i) => {
                     const on = picked.has(c.id);
@@ -657,6 +686,15 @@ export function OpeningDetail({
                           </div>
                           {overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => addToPipeline(c)}
+                          disabled={addingPipe.has(c.id)}
+                          title="Add to this pipeline"
+                          style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, height: 28, padding: '0 12px', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, cursor: addingPipe.has(c.id) ? 'default' : 'pointer', opacity: addingPipe.has(c.id) ? 0.6 : 1 }}
+                        >
+                          {addingPipe.has(c.id) ? 'Adding…' : '+ Add'}
+                        </button>
                       </div>
                     );
                   })

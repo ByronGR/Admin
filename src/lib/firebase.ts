@@ -55,13 +55,16 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-// Auto-detect long-polling so real-time listeners work on iPadOS/Safari and
-// restrictive networks where Firestore's default WebChannel transport hangs
-// (symptom: pages open but spin forever because onSnapshot never fires).
-// Fall back to getFirestore() if Firestore was already started (e.g. HMR).
+// Force long-polling so reads/listeners work on iPadOS/Safari and restrictive
+// networks (corporate/school wifi, proxies) where Firestore's default WebChannel
+// transport hangs — symptom: a page opens but spins forever because getDocs /
+// onSnapshot never settles (it neither resolves nor rejects). Auto-detect was
+// mis-detecting some of those environments as streaming-capable and hanging, so
+// we skip detection and always long-poll. Fall back to getFirestore() if
+// Firestore was already started (e.g. HMR).
 let db: ReturnType<typeof getFirestore>;
 try {
-  db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  db = initializeFirestore(app, { experimentalForceLongPolling: true });
 } catch {
   db = getFirestore(app);
 }

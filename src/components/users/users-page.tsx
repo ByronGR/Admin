@@ -88,7 +88,9 @@ export default function UsersPage() {
     }
   }
 
-  const isSuperAdmin = currentProfile?.role === 'super_admin';
+  const myEmail = (currentProfile?.email ?? currentUser?.email ?? '').toLowerCase();
+  const isSuperAdmin =
+    currentProfile?.role === 'super_admin' || HARD_CODED_SUPER_ADMINS.includes(myEmail);
 
   // Always surface the signed-in user and the hardcoded super admins, even if
   // their Firestore `users` doc doesn't exist yet (e.g. never logged into Admin).

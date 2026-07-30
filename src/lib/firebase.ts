@@ -80,10 +80,15 @@ const STAFF_ROLES: StaffRole[] = [
   'super_admin', 'admin', 'recruiter', 'sales', 'hr', 'employee', 'user',
 ];
 
-// Super admin status is driven by the `role: 'super_admin'` field in each
-// user's Firestore profile — set once via the Firebase console or Admin UI.
-// No email addresses are hardcoded here to keep them out of the source bundle.
-export const HARD_CODED_SUPER_ADMINS: string[] = [];
+// Super admin status is normally driven by the `role: 'super_admin'` field in
+// each user's Firestore profile. The two owners are also hardcoded here as a
+// break-glass so they can never lose the super-admin tools (e.g. if their profile
+// role gets reset) — this mirrors the owner list already baked into the Firestore
+// rules and OWNER_EMAILS elsewhere, so it leaks nothing new.
+export const HARD_CODED_SUPER_ADMINS: string[] = [
+  'byron.giraldo@nearwork.co',
+  'stephany.picos@nearwork.co',
+];
 
 // ─── Microsoft (Entra) sign-in ────────────────────────────────────────────────
 // Firebase Auth stays the identity system: Firestore rules key off the Firebase

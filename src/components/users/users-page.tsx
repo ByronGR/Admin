@@ -224,6 +224,20 @@ export default function UsersPage() {
     }
   }
 
+  // A staffer mistakenly marked as 'placed' (employee placed with a client) is
+  // locked out of all internal data by the Firestore rules. Flip them back to
+  // internal staff to restore access.
+  async function restoreInternal(userId: string) {
+    try {
+      await updateDoc(doc(db, 'users', userId), { employmentType: 'internal', updatedAt: serverTimestamp() });
+      showToast('Access restored — they can reload now', 'success');
+      setSelectedMember((m) => (m && m.id === userId ? { ...m, employmentType: 'internal' } : m));
+      load();
+    } catch {
+      showToast('Failed to restore access', 'error');
+    }
+  }
+
   function copyLink() {
     navigator.clipboard.writeText(generatedLink).then(() => {
       setCopied(true);
@@ -513,6 +527,27 @@ export default function UsersPage() {
                       Save
                     </button>
                   </div>
+                </div>
+              )}
+
+            {/* Locked out because marked as a placed employee — one-click restore */}
+            {isSuperAdmin &&
+              selectedMember.employmentType === 'placed' &&
+              !selectedMember.id.startsWith('sa:') && (
+                <div className="rounded-lg border border-[var(--amber)] bg-[var(--amber-bg,#fff8ec)] p-3">
+                  <p className="text-xs font-700 text-[var(--black)]">Locked out of internal data</p>
+                  <p className="mt-1 text-[11px] text-[var(--mid)]">
+                    This person is marked as an employee <strong>placed with a client</strong>, so the
+                    system won&apos;t show them pipelines, openings or other internal tabs. If they&apos;re
+                    internal staff, restore their access.
+                  </p>
+                  <button
+                    onClick={() => restoreInternal(selectedMember.id)}
+                    className="mt-2 rounded-lg px-3 py-2 text-xs font-600 text-white"
+                    style={{ background: 'var(--green)' }}
+                  >
+                    Restore internal-staff access
+                  </button>
                 </div>
               )}
 

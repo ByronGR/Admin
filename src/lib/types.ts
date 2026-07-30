@@ -483,6 +483,7 @@ export interface PipelineCandidate {
   // profile (esp. sourcing) without read access to the candidates collection.
   role?: string;                 // target/current job title
   location?: string;             // candidate location label
+  phone?: string;                // candidate phone (sourcing — client contacts directly)
   experience?: number;           // years of experience
   expectedSalaryAmount?: number;
   expectedSalaryCurrency?: string;

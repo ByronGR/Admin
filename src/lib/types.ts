@@ -40,6 +40,10 @@ export interface UserProfile {
   calendlyLink?: string;
   source?: string;
   status?: 'active' | 'inactive' | 'suspended';
+  // 'placed' = an employee placed with a client (locked out of internal data by the
+  // Firestore rules). Internal staff must be 'internal' (or unset, which defaults to
+  // internal). A mistaken 'placed' value is what blocks a staffer from pipelines.
+  employmentType?: 'internal' | 'placed';
   orgId?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

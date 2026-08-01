@@ -312,6 +312,13 @@ export interface WorkHistoryEntry {
   from?: string;
   to?: string;
   contact?: string;
+  // ── Added by the AI CV parser ──
+  location?: string;
+  industry?: string;
+  isCurrent?: boolean;
+  responsibilities?: string[];  // duties
+  accomplishments?: string[];   // quantified outcomes — kept separate on purpose,
+                                // this is the material worth showing a client
 }
 
 export interface CertificationEntry {
@@ -353,6 +360,25 @@ export interface Candidate {
   workHistory?: WorkHistoryEntry[];       // full work history (talent.nearwork.co)
   languages?: string[];                   // other languages besides English
   certifications?: CertificationEntry[];  // certificates & courses
+
+  // ── AI CV parser output ──────────────────────────────────────────────────
+  // Classification drives candidate↔opening matching, so these come from a
+  // controlled vocabulary (see FUNCTIONS / SENIORITY in cv-ai-extract.ts) and
+  // must never be free text, or matching silently stops working.
+  tools?: string[];            // named platforms — Salesforce, Klaviyo, Power BI
+  industries?: string[];
+  function?: string;           // marketing | sales | operations | ...
+  subFunction?: string;        // lifecycle_email | paid_performance | ...
+  seniority?: string;          // junior | mid | senior | manager | ...
+  yearsInFunction?: number;
+  cvParse?: {
+    parsedAt?: Timestamp | string;
+    model?: string;
+    schemaVersion?: number;
+    lowConfidence?: string[];  // staff review queue — internal, never shown to clients
+    rawText?: string;          // lets us re-parse the whole database for ~$2
+                               // after a prompt change, instead of re-uploading
+  };
   summary?: string;                       // professional summary / bio
   english?: string;           // English level written by jobs.nearwork.co
   englishScore?: EnglishScore; // Nearwork-assessed English level + comments — visible to staff & client
@@ -494,7 +520,8 @@ export interface PipelineCandidate {
   english?: string;              // CEFR level (e.g. 'C1')
   availability?: string;         // staff-entered — when they can start
   timezone?: string;             // staff-entered — candidate working timezone
-  workHistory?: WorkHistoryEntry[];
+  workHistory?: WorkHistoryEntry[];   // carries accomplishments through to the client view
+  tools?: string[];              // named platforms, shown as its own client-facing section
   resumeUrl?: string;            // resume/CV URL (alias of cvUrl)
   // true while the applicant is in the pre-screening inbox (Applicants tab).
   // Cleared to false when a recruiter approves them into the Kanban pipeline.

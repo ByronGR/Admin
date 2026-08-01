@@ -91,6 +91,8 @@ export default function CVBulkPage() {
 
   async function openDetail(r: Row) {
     setSelected(r); setDetail(null);
+    // The list is long; make sure the panel is actually on screen.
+    setTimeout(() => document.getElementById('cv-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     const snap = await getDoc(doc(db, 'candidates', r.id));
     if (snap.exists()) setDetail({ id: snap.id, ...snap.data() } as Candidate);
   }
@@ -159,43 +161,9 @@ export default function CVBulkPage() {
         </div>
       )}
 
-      <div style={{ ...card, marginTop: 16 }}>
-        <div style={label}>Candidates</div>
-        {loading ? <Spinner /> : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {rows.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => openDetail(r)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                  border: 'none', background: selected?.id === r.id ? NW.gray50 : 'transparent',
-                  borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontSize: 12.5,
-                }}
-              >
-                <span style={{ flex: 1, fontWeight: 500, color: NW.black }}>{r.name}</span>
-                <span style={{ color: NW.gray400, fontSize: 11.5 }}>{r.email}</span>
-                {r.flags > 0 && (
-                  <span style={{ fontSize: 10.5, color: '#A16207', background: '#FFF8EC', padding: '2px 8px', borderRadius: 999 }}>
-                    {r.flags} to review
-                  </span>
-                )}
-                <span style={{
-                  fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
-                  color: r.parsedAt ? NW.teal700 : NW.gray500,
-                  background: r.parsedAt ? NW.teal50 : NW.gray50,
-                }}>
-                  {r.parsedAt ? 'parsed' : 'not parsed'}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Side-by-side review: the CV itself next to what we pulled out of it. */}
       {selected && (
-        <div style={{ ...card, marginTop: 16 }}>
+        <div id="cv-review" style={{ ...card, marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: NW.black }}>{selected.name}</div>
             <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Close</Button>
@@ -261,6 +229,40 @@ export default function CVBulkPage() {
           </div>
         </div>
       )}
+      <div style={{ ...card, marginTop: 16 }}>
+        <div style={label}>Candidates</div>
+        {loading ? <Spinner /> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 420, overflowY: 'auto' }}>
+            {rows.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => openDetail(r)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                  border: 'none', background: selected?.id === r.id ? NW.gray50 : 'transparent',
+                  borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontSize: 12.5,
+                }}
+              >
+                <span style={{ flex: 1, fontWeight: 500, color: NW.black }}>{r.name}</span>
+                <span style={{ color: NW.gray400, fontSize: 11.5 }}>{r.email}</span>
+                {r.flags > 0 && (
+                  <span style={{ fontSize: 10.5, color: '#A16207', background: '#FFF8EC', padding: '2px 8px', borderRadius: 999 }}>
+                    {r.flags} to review
+                  </span>
+                )}
+                <span style={{
+                  fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
+                  color: r.parsedAt ? NW.teal700 : NW.gray500,
+                  background: r.parsedAt ? NW.teal50 : NW.gray50,
+                }}>
+                  {r.parsedAt ? 'parsed' : 'not parsed'}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
     </MainLayout>
   );
 }

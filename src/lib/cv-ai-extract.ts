@@ -198,6 +198,8 @@ Rules:
 - yearsExperience: compute from employment dates. If dates are missing or contradictory, return null rather than estimating.
 - accomplishments = quantified outcomes ("cut churn 18%", "led a team of 22"). responsibilities = duties. Never put a duty in accomplishments.
 - Education is schools and degrees. A Google, DataCamp or AWS certificate is a CERTIFICATION with that body as issuer — never an institution under education.
+- Every education entry must have a non-empty "degree" naming the qualification or programme as the CV states it ("Bachelor of Business Administration", "Aircraft Mechanic/Maintenance", "Technologist in..."). Use "field" only for a subject that is genuinely distinct from the degree name; leave it empty otherwise rather than repeating the degree. Never leave degree empty and put the programme in field.
+- Education entries are independent. Do not let the subject of one qualification bleed into another — a business degree and an aviation qualification are two separate entries, not one combined.
 - Never list an education entry as employment.
 - englishClaimed and languages record what the candidate claims. This is self-reported and is not a verified score.
 - function/subFunction is the candidate's actual discipline, which matters more than their job title: an "Account Manager" doing marketing is function=marketing; an "Account Manager" doing logistics is function=operations.

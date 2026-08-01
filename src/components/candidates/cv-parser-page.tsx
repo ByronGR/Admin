@@ -36,7 +36,7 @@ interface Profile {
 }
 interface Meta { model: string; costUsd: number; usage: { input_tokens: number; output_tokens: number }; }
 
-const BUILD = 'v5-pdf-native';
+const BUILD = 'v6-education';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -270,11 +270,23 @@ export default function CVParserPage() {
           </Section>
 
           <Section title="Education" when={!!p.education?.length}>
-            {p.education.map((e, i) => (
-              <div key={i} style={{ fontSize: 12.5, color: NW.gray700, marginBottom: 3 }}>
-                <strong>{e.degree}</strong>{e.field && ` — ${e.field}`} · {e.institution}{e.endYear ? ` · ${e.endYear}` : ''}
-              </div>
-            ))}
+            {p.education.map((e, i) => {
+              // A missing degree used to render a leading "—", which made the next
+              // entry read like a continuation of the previous one. Fall back to
+              // the field as the heading instead.
+              const heading = e.degree || e.field;
+              const sub = e.degree && e.field && e.degree !== e.field ? e.field : '';
+              return (
+                <div key={i} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: NW.black }}>
+                    {heading}{sub && <span style={{ fontWeight: 400, color: NW.gray700 }}> — {sub}</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: NW.gray500, marginTop: 1 }}>
+                    {[e.institution, e.endYear].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              );
+            })}
           </Section>
 
           <Section title="Certifications" when={!!p.certifications?.length}>

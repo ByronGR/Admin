@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { FieldValue as GCFieldValue } from 'firebase-admin/firestore';
+// GCFieldValue must come from our own module — the sentinels only work when they
+// share the firebase-admin instance the SDK was initialised with.
+import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 import { detectKind, extractCVText } from '@/lib/cv-extract-text';
 import { parseCV } from '@/lib/cv-parser';
 import { extractCVWithAI } from '@/lib/cv-ai-extract';

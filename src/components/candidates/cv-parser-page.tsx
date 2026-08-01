@@ -79,34 +79,42 @@ export default function CVParserPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [engine, setEngine] = useState('');
+  const [error, setError] = useState<string>('');
   const [fileName, setFileName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function run(file: File) {
-    setBusy(true); setProfile(null); setMeta(null); setFileName(file.name);
+    setBusy(true); setProfile(null); setMeta(null); setError(''); setEngine('');
+    setFileName(file.name);
     try {
       const token = await auth.currentUser?.getIdToken();
-      if (!token) { showToast('Please sign in again', 'error'); return; }
+      if (!token) { setError('Not signed in — reload the page and sign in again.'); return; }
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/cv-parse', {
         method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd,
       });
-      const json = await res.json();
-      if (!res.ok) { showToast(json.error || 'Parse failed', 'error'); return; }
-      if (json.engine === 'code') {
-        showToast('Parsed with the fallback parser — the AI path was unavailable', 'error');
-        setEngine('code');
-        setProfile(null);
+
+      const raw = await res.text();
+      let json: Record<string, unknown> = {};
+      try { json = JSON.parse(raw); } catch { /* server returned non-JSON (a crash page) */ }
+
+      if (!res.ok) {
+        setError(`${res.status} — ${(json.error as string) || raw.slice(0, 400) || 'no response body'}`);
         return;
       }
-      setEngine(json.engine);
-      setProfile(json.profile);
-      setMeta(json.meta);
-      showToast(`Parsed in ${json.engine} mode`, 'success');
+      if (json.engine === 'code') {
+        // The AI path threw and we fell back. Still show it, but say so loudly.
+        setEngine('code');
+        setError('The AI extractor failed, so this was parsed by the old rules parser. Check the server logs.');
+        return;
+      }
+      setEngine(String(json.engine));
+      setProfile(json.profile as Profile);
+      setMeta(json.meta as Meta);
+      showToast('Parsed', 'success');
     } catch (e) {
-      console.error(e);
-      showToast('Something went wrong parsing that file', 'error');
+      setError(`Request failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
@@ -144,6 +152,17 @@ export default function CVParserPage() {
           </div>
         )}
       </div>
+
+      {error && (
+        <div style={{ ...card, marginTop: 16, background: '#FEF2F2', borderColor: '#FCA5A5' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#B91C1C' }}>
+            <AlertTriangle size={15} /> Parse failed
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12.5, color: NW.gray800, fontFamily: 'ui-monospace, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {error}
+          </div>
+        </div>
+      )}
 
       {p && (
         <div style={{ ...card, marginTop: 16 }}>

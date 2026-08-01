@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 import { detectKind, extractCVText } from '@/lib/cv-extract-text';
 import { parseCV } from '@/lib/cv-parser';
-import { extractCVWithAI, cvApiKey } from '@/lib/cv-ai-extract';
+import { extractCVWithAI, cvApiKey, cvDailyCap } from '@/lib/cv-ai-extract';
 
 // ── POST /api/cv-parse ────────────────────────────────────────────────────────
 // Staff upload a candidate's CV (PDF or .docx). The file is parsed IN MEMORY
@@ -27,7 +27,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — CVs are small; reject oversized files.
-const CAP_AI_PARSES = 200;          // ≈ $6/day ceiling at ~$0.03 per parse
 
 export async function POST(req: Request) {
   // Staff-only, same gate as assessment-upload.
@@ -73,7 +72,7 @@ export async function POST(req: Request) {
     const capped = await adminDb().runTransaction(async (tx) => {
       const snap = await tx.get(usageRef);
       const d = (snap.exists ? snap.data() : {}) as { aiParses?: number };
-      if ((d.aiParses || 0) >= CAP_AI_PARSES) return true;
+      if ((d.aiParses || 0) >= cvDailyCap()) return true;
       tx.set(usageRef, { aiParses: (d.aiParses || 0) + 1, updatedAt: GCFieldValue.serverTimestamp() }, { merge: true });
       return false;
     });

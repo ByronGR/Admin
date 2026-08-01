@@ -55,7 +55,7 @@ function groupFlags(rows: Row[]) {
   return { buckets: buckets.filter((b) => b.hits.length).sort((a, b) => b.hits.length - a.hits.length), other };
 }
 
-const BUILD = 'v5-reparse';
+const BUILD = 'v6-cap';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -76,6 +76,8 @@ export default function CVBulkPage() {
   const [selected, setSelected] = useState<Row | null>(null);
   const [detail, setDetail] = useState<Candidate | null>(null);
   const [idToken, setIdToken] = useState('');
+  const [usedToday, setUsedToday] = useState(0);
+  const [dailyCap, setDailyCap] = useState(500);
 
   const token = useCallback(async () => auth.currentUser?.getIdToken(), []);
 
@@ -86,6 +88,8 @@ export default function CVBulkPage() {
       const j = await res.json();
       if (!res.ok) { showToast(j.error || 'Could not load candidates', 'error'); return; }
       setRows(j.candidates as Row[]);
+      setUsedToday(j.usedToday ?? 0);
+      setDailyCap(j.dailyCap ?? 500);
     } finally { setLoading(false); }
   }, [token, showToast]);
 
@@ -160,6 +164,12 @@ export default function CVBulkPage() {
         <div>
           <div style={{ fontSize: 26, fontWeight: 700, color: NW.gray700 }}>${(unparsed * 0.04).toFixed(2)}</div>
           <div style={{ fontSize: 12, color: NW.gray500 }}>estimated cost</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: (dailyCap - usedToday) < 50 ? '#B91C1C' : NW.gray700 }}>
+            {Math.max(0, dailyCap - usedToday)}
+          </div>
+          <div style={{ fontSize: 12, color: NW.gray500 }}>parses left today</div>
         </div>
         <div style={{ flex: 1 }} />
         {running ? (

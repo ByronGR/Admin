@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
-import { extractCVWithAI, cvApiKey } from '@/lib/cv-ai-extract';
+import { extractCVWithAI, cvApiKey, cvDailyCap } from '@/lib/cv-ai-extract';
 import { aiProfileToCandidate } from '@/lib/cv-ai-to-candidate';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import type { Candidate, PipelineCandidate } from '@/lib/types';
@@ -19,7 +19,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const MAX_PER_CALL = 3;      // keeps each request comfortably inside the limit
-const CAP_AI_PARSES = 200;   // shared daily ceiling with the single-parse route
 
 async function requireStaff(req: Request): Promise<string | null> {
   const authz = req.headers.get('authorization') || '';
@@ -55,7 +54,19 @@ export async function GET(req: Request) {
       };
     })
     .filter((r) => r.cvUrl);
-  return NextResponse.json({ total: snap.size, withCv: rows.length, candidates: rows });
+  // Surface today's usage so the page can warn before a run rather than
+  // stopping half-way through one.
+  const day = new Date().toISOString().slice(0, 10);
+  const usage = await adminDb().collection('cvParseUsage').doc(day).get();
+  const usedToday = (usage.exists ? (usage.data() as { aiParses?: number }).aiParses : 0) || 0;
+
+  return NextResponse.json({
+    total: snap.size,
+    withCv: rows.length,
+    candidates: rows,
+    usedToday,
+    dailyCap: cvDailyCap(),
+  });
 }
 
 export async function POST(req: Request) {
@@ -91,7 +102,7 @@ export async function POST(req: Request) {
     const capped = await db.runTransaction(async (tx) => {
       const s = await tx.get(usageRef);
       const d = (s.exists ? s.data() : {}) as { aiParses?: number };
-      if ((d.aiParses || 0) >= CAP_AI_PARSES) return true;
+      if ((d.aiParses || 0) >= cvDailyCap()) return true;
       tx.set(usageRef, { aiParses: (d.aiParses || 0) + 1, updatedAt: GCFieldValue.serverTimestamp() }, { merge: true });
       return false;
     });

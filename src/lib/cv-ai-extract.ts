@@ -25,6 +25,18 @@ const API = 'https://api.anthropic.com/v1/messages';
  * shared key when the CV-specific one isn't set, so nothing breaks if only one
  * is configured.
  */
+/**
+ * Daily ceiling on CV parses, shared by the single and bulk routes.
+ *
+ * Guards against a runaway loop, not against deliberate work — a full re-parse
+ * of the database has to fit inside it with room to spare, or the guard blocks
+ * the very thing it was meant to make safe. Override with CV_PARSE_DAILY_CAP.
+ */
+export function cvDailyCap(): number {
+  const n = Number(process.env.CV_PARSE_DAILY_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 500;   // ~$20/day at ~4c per parse
+}
+
 export function cvApiKey(): string {
   return (process.env.ANTHROPIC_CV_API_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
 }

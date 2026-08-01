@@ -197,7 +197,10 @@ Rules:
 - Never invent. Empty string for unknown text, null for unknown numbers, "unknown" for function/seniority when the CV genuinely does not say.
 - yearsExperience: compute from employment dates. If dates are missing or contradictory, return null rather than estimating.
 - accomplishments = quantified outcomes ("cut churn 18%", "led a team of 22"). responsibilities = duties. Never put a duty in accomplishments.
-- Education is schools and degrees. A Google, DataCamp or AWS certificate is a CERTIFICATION with that body as issuer — never an institution under education.
+- Education vs certifications, both directions:
+  · Anything awarded by a SCHOOL for completing a course of study is EDUCATION — degrees, diplomas, high-school completion, technical/vocational qualifications. A "High School Diploma" from a named school is education, never a certification.
+  · A CERTIFICATION is a credential awarded by a professional or vendor body for passing an exam or course — Google, DataCamp, AWS, HubSpot, PMI, Scrum Alliance. Put that body in "issuer" and never list it as an institution under education.
+  · If unsure, ask whether the awarding body is a school (education) or a certifying organisation (certification).
 - Every education entry must have a non-empty "degree" naming the qualification or programme as the CV states it ("Bachelor of Business Administration", "Aircraft Mechanic/Maintenance", "Technologist in..."). Use "field" only for a subject that is genuinely distinct from the degree name; leave it empty otherwise rather than repeating the degree. Never leave degree empty and put the programme in field.
 - Education entries are independent. Do not let the subject of one qualification bleed into another — a business degree and an aviation qualification are two separate entries, not one combined.
 - Never list an education entry as employment.

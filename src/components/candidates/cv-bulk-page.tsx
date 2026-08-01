@@ -21,7 +21,7 @@ interface RunResult {
   id: string; name: string; ok: boolean; costUsd?: number; flags?: number; error?: string;
 }
 
-const BUILD = 'v2-review-above';
+const BUILD = 'v3-cv-proxy';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -41,6 +41,7 @@ export default function CVBulkPage() {
   const [spent, setSpent] = useState(0);
   const [selected, setSelected] = useState<Row | null>(null);
   const [detail, setDetail] = useState<Candidate | null>(null);
+  const [idToken, setIdToken] = useState('');
 
   const token = useCallback(async () => auth.currentUser?.getIdToken(), []);
 
@@ -93,6 +94,7 @@ export default function CVBulkPage() {
 
   async function openDetail(r: Row) {
     setSelected(r); setDetail(null);
+    setIdToken((await auth.currentUser?.getIdToken()) || '');
     // The list is long; make sure the panel is actually on screen.
     setTimeout(() => document.getElementById('cv-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     const snap = await getDoc(doc(db, 'candidates', r.id));
@@ -178,11 +180,11 @@ export default function CVBulkPage() {
             <div>
               <div style={label}>The CV</div>
               <iframe
-                src={selected.cvUrl}
+                src={`/api/cv-file/${selected.id}?t=${idToken}`}
                 title="CV"
                 style={{ width: '100%', height: 620, border: `1px solid ${NW.gray200}`, borderRadius: 10, background: NW.gray50 }}
               />
-              <a href={selected.cvUrl} target="_blank" rel="noopener noreferrer"
+              <a href={`/api/cv-file/${selected.id}?t=${idToken}`} target="_blank" rel="noopener noreferrer"
                  style={{ fontSize: 11.5, color: NW.teal700, marginTop: 6, display: 'inline-block' }}>
                 Open in a new tab
               </a>

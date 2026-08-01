@@ -277,6 +277,14 @@ export async function extractCVWithAI(
       : `<cv>\n${rawText}\n</cv>\n\nExtract the profile.`,
   });
 
+  // Claude has no clock of its own. Without today's date it flags current roles
+  // as impossibly in the future and can't anchor "Present" when working out how
+  // long someone has been somewhere.
+  const today = new Date().toISOString().slice(0, 10);
+  const system = `${SYSTEM}
+
+Today's date is ${today}. Use it to resolve "Present"/"Current" when computing tenure, and treat any date on or before it as normal. Only flag a date as suspect when it is genuinely after today, or contradicts another date in the same CV.`;
+
   const res = await fetch(API, {
     method: 'POST',
     headers: {
@@ -287,7 +295,7 @@ export async function extractCVWithAI(
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 8000,
-      system: SYSTEM,
+      system,
       thinking: { type: 'disabled' },   // extraction is recall, not reasoning
       messages: [{ role: 'user', content }],
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },

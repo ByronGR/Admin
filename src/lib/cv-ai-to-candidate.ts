@@ -6,7 +6,7 @@
 //     verified result; the CV only ever contributes a self-reported claim.
 
 import type { AIExtractedCV } from './cv-ai-extract';
-import type { Candidate, WorkHistoryEntry, CertificationEntry } from './types';
+import type { Candidate, WorkHistoryEntry, CertificationEntry, EducationEntry } from './types';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const arr = (v: unknown): string[] =>
@@ -95,6 +95,20 @@ export function aiProfileToCandidate(
       return e;
     });
   set('certifications', certs);
+
+  const education: EducationEntry[] = (p.education || [])
+    .filter((e) => str(e.degree) || str(e.field))
+    .map((e) => {
+      const out: EducationEntry = {};
+      // Fall back to the field when no qualification name was given, so an entry
+      // never renders as a bare dash.
+      if (str(e.degree) || str(e.field)) out.degree = str(e.degree) || str(e.field);
+      if (str(e.field) && str(e.field) !== out.degree) out.field = str(e.field);
+      if (str(e.institution)) out.institution = str(e.institution);
+      if (e.endYear != null) out.endYear = e.endYear;
+      return out;
+    });
+  set('education', education);
 
   // Languages are stored as plain strings on Candidate; keep the claimed level
   // in the label so nothing is silently dropped.

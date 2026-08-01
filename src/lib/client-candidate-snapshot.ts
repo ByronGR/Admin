@@ -11,7 +11,7 @@ import type { Candidate, PipelineCandidate } from './types';
 export type ClientCandidateSnapshot = Partial<Pick<PipelineCandidate,
   | 'role' | 'location' | 'phone' | 'skills' | 'tools' | 'experience' | 'expectedSalary'
   | 'expectedSalaryAmount' | 'expectedSalaryCurrency' | 'english'
-  | 'availability' | 'timezone' | 'workHistory' | 'resumeUrl' | 'cvUrl'>>;
+  | 'availability' | 'timezone' | 'workHistory' | 'education' | 'resumeUrl' | 'cvUrl'>>;
 
 // Firestore rejects `undefined` (including inside array elements), so we only
 // emit keys that actually have a value.
@@ -26,6 +26,7 @@ export function clientCandidateSnapshot(c: Partial<Candidate>): ClientCandidateS
   set('phone', c.phone || undefined);
   set('skills', Array.isArray(c.skills) ? c.skills : undefined);
   set('tools', Array.isArray(c.tools) ? c.tools : undefined);
+  set('education', Array.isArray(c.education) ? c.education : undefined);
   set('experience', typeof c.experience === 'number' ? c.experience : undefined);
 
   if (typeof c.expectedSalary === 'string' && c.expectedSalary.trim()) set('expectedSalary', c.expectedSalary);

@@ -21,6 +21,8 @@ interface RunResult {
   id: string; name: string; ok: boolean; costUsd?: number; flags?: number; error?: string;
 }
 
+const BUILD = 'v2-review-above';
+
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
 };
@@ -105,6 +107,10 @@ export default function CVBulkPage() {
         title="Parse all CVs"
         subtitle="Runs the AI parser across every candidate with a CV on file and saves the result to their profile."
       />
+
+      <div style={{ fontSize: 11, color: NW.gray400, marginBottom: 10 }}>
+        build <strong style={{ color: NW.gray600 }}>{BUILD}</strong> · if clicking a name does nothing, you&rsquo;re on an older build — hard-refresh with Cmd+Shift+R
+      </div>
 
       <div style={{ ...card, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <div>

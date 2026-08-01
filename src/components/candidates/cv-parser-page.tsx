@@ -36,6 +36,8 @@ interface Profile {
 }
 interface Meta { model: string; costUsd: number; usage: { input_tokens: number; output_tokens: number }; }
 
+const BUILD = 'v4-error-panel';
+
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
 };
@@ -128,6 +130,12 @@ export default function CVParserPage() {
         title="CV parser"
         subtitle="Drop a CV to see exactly what gets extracted, what it cost, and what needs review. Nothing is saved."
       />
+
+      {/* Build stamp — lets us tell instantly whether the browser is running a
+          stale cached bundle rather than the deployed one. */}
+      <div style={{ fontSize: 11, color: NW.gray400, marginBottom: 10 }}>
+        build <strong style={{ color: NW.gray600 }}>{BUILD}</strong> · if this isn&rsquo;t the latest, hard-refresh with Cmd+Shift+R
+      </div>
 
       <div style={{ ...card, textAlign: 'center', padding: 32 }}>
         <input

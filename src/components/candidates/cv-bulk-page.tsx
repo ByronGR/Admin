@@ -16,12 +16,46 @@ import type { Candidate } from '@/lib/types';
 
 interface Row {
   id: string; name: string; email: string; cvUrl: string; parsedAt: string; flags: number;
+  flagList?: string[];
 }
 interface RunResult {
   id: string; name: string; ok: boolean; costUsd?: number; flags?: number; error?: string;
 }
 
-const BUILD = 'v3-cv-proxy';
+
+// Review flags grouped by cause. Keyword-matched on purpose — deterministic and
+// free, and the model reliably names the field it was unsure about.
+const THEMES: { key: string; label: string; test: (s: string) => boolean }[] = [
+  { key: 'years',    label: 'Years of experience — estimated from dates',
+    test: (t) => /yearsexperience|yearsinfunction|years of experience|employment period|overlap/i.test(t) },
+  { key: 'seniority',label: 'Seniority — inferred from titles',
+    test: (t) => /seniority/i.test(t) },
+  { key: 'function', label: 'Function / sub-function — mixed background',
+    test: (t) => /function|discipline|classif/i.test(t) },
+  { key: 'links',    label: 'Links — anchor text instead of a URL',
+    test: (t) => /linkedin|url|portfolio|github|anchor/i.test(t) },
+  { key: 'dates',    label: 'Dates on the CV look odd (future / conflicting)',
+    test: (t) => /date|future|graduat|endyear|typo/i.test(t) },
+  { key: 'education',label: 'Education / certifications',
+    test: (t) => /educat|degree|certif|universit|school/i.test(t) },
+  { key: 'employer', label: 'Current employer unclear',
+    test: (t) => /currentemployer|current employer/i.test(t) },
+];
+
+function groupFlags(rows: Row[]) {
+  const buckets = THEMES.map((t) => ({ ...t, hits: [] as { name: string; text: string }[] }));
+  const other: { name: string; text: string }[] = [];
+  for (const r of rows) {
+    for (const text of r.flagList || []) {
+      const t = buckets.find((b) => b.test(text));
+      if (t) t.hits.push({ name: r.name, text });
+      else other.push({ name: r.name, text });
+    }
+  }
+  return { buckets: buckets.filter((b) => b.hits.length).sort((a, b) => b.hits.length - a.hits.length), other };
+}
+
+const BUILD = 'v4-flag-summary';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -168,6 +202,55 @@ export default function CVBulkPage() {
           </div>
         </div>
       )}
+
+      {/* What the parser was unsure about, across the whole database. Grouping
+          by cause turns 300+ individual notes into a handful of decisions. */}
+      {(() => {
+        const { buckets, other } = groupFlags(rows);
+        const total = buckets.reduce((n, b) => n + b.hits.length, 0) + other.length;
+        if (!total) return null;
+        return (
+          <div style={{ ...card, marginTop: 16 }}>
+            <div style={label}>Review flags — {total} across {rows.filter((r) => r.flags).length} candidates</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {buckets.map((b) => (
+                <details key={b.key} style={{ border: `1px solid ${NW.gray100}`, borderRadius: 10, padding: '10px 12px' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, color: NW.black }}>
+                    <strong>{b.hits.length}</strong> · {b.label}
+                    <span style={{ color: NW.gray400, fontSize: 11.5 }}>
+                      {' '}({Math.round((b.hits.length / total) * 100)}% of all flags)
+                    </span>
+                  </summary>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
+                    {b.hits.slice(0, 40).map((h, i) => (
+                      <div key={i} style={{ fontSize: 12, color: NW.gray700 }}>
+                        <strong style={{ color: NW.gray800 }}>{h.name}</strong> — {h.text}
+                      </div>
+                    ))}
+                    {b.hits.length > 40 && (
+                      <div style={{ fontSize: 11.5, color: NW.gray400 }}>…and {b.hits.length - 40} more</div>
+                    )}
+                  </div>
+                </details>
+              ))}
+              {other.length > 0 && (
+                <details style={{ border: `1px solid ${NW.gray100}`, borderRadius: 10, padding: '10px 12px' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, color: NW.black }}>
+                    <strong>{other.length}</strong> · Everything else
+                  </summary>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
+                    {other.slice(0, 40).map((h, i) => (
+                      <div key={i} style={{ fontSize: 12, color: NW.gray700 }}>
+                        <strong style={{ color: NW.gray800 }}>{h.name}</strong> — {h.text}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Side-by-side review: the CV itself next to what we pulled out of it. */}
       {selected && (

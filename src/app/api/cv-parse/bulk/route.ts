@@ -49,6 +49,9 @@ export async function GET(req: Request) {
         cvUrl: cv,
         parsedAt: c.cvParse?.parsedAt ? String(c.cvParse.parsedAt) : '',
         flags: c.cvParse?.lowConfidence?.length || 0,
+        // Full text, so the UI can group flags by theme across the whole
+        // database instead of making staff open 122 profiles one by one.
+        flagList: c.cvParse?.lowConfidence || [],
       };
     })
     .filter((r) => r.cvUrl);

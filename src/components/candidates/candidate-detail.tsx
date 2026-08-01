@@ -60,6 +60,9 @@ import {
   ChevronRight,
   Check,
   X,
+  CheckCircle2,
+  Wrench,
+  Target,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
 
@@ -1120,8 +1123,30 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                           <span style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{w.title || 'Role'}</span>
                           {(w.from || w.to) && <span style={{ fontSize: 12, color: NW.gray400 }}>{w.from || '?'} – {w.to === 'present' ? 'Present' : (w.to || '?')}</span>}
                         </div>
-                        {w.company && <div style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, marginTop: 2 }}>{w.company}</div>}
+                        {w.company && (
+                          <div style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, marginTop: 2 }}>
+                            {w.company}
+                            {w.location && <span style={{ color: NW.gray400, fontWeight: 400 }}> · {w.location}</span>}
+                          </div>
+                        )}
                         {w.contact && <div style={{ fontSize: 12.5, color: NW.gray500, marginTop: 4 }}>Contact: {w.contact}</div>}
+                        {/* Accomplishments before duties: quantified outcomes are
+                            what actually sells a candidate to a client. */}
+                        {!!w.accomplishments?.length && (
+                          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            {w.accomplishments.map((a, j) => (
+                              <div key={j} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: NW.teal700, lineHeight: 1.5 }}>
+                                <CheckCircle2 className="h-3.5 w-3.5" style={{ flexShrink: 0, marginTop: 2 }} />
+                                <span>{a}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {!!w.responsibilities?.length && (
+                          <ul style={{ margin: '8px 0 0 16px', padding: 0, fontSize: 12.5, color: NW.gray600, lineHeight: 1.55 }}>
+                            {w.responsibilities.map((r, j) => <li key={j}>{r}</li>)}
+                          </ul>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1217,6 +1242,43 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 )}
                 <div style={{ fontSize: 12, color: NW.gray400, marginTop: 16 }}>Match score reflects the candidate&apos;s Nearwork Score. Skills are drawn from CV, assessments and recruiter tags.</div>
               </div>
+
+              {/* Tools & applications — the named platforms a candidate has
+                  actually used. Hidden entirely when we have none. */}
+              {!!candidate.tools?.length && (
+                <div style={card}>
+                  {cardHead(<Wrench className="h-4 w-4" />, 'Tools & applications', `${candidate.tools.length} on file`)}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {candidate.tools.map((t) => (
+                      <span key={t} style={{ fontSize: 12, fontWeight: 500, color: NW.teal700, background: NW.teal50, border: '1px solid #16A08522', borderRadius: 999, padding: '4px 10px' }}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* How this candidate is classified — what opening matching runs on. */}
+              {(candidate.function || candidate.seniority || !!candidate.industries?.length) && (
+                <div style={card}>
+                  {cardHead(<Target className="h-4 w-4" />, 'Classification', 'Used to match against openings')}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {([
+                      ['Function', candidate.function],
+                      ['Specialism', candidate.subFunction],
+                      ['Seniority', candidate.seniority],
+                      ['Years in function', candidate.yearsInFunction != null ? `${candidate.yearsInFunction}` : ''],
+                    ] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+                      <span key={k} style={{ fontSize: 12, color: NW.gray700, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 999, padding: '4px 10px' }}>
+                        <span style={{ color: NW.gray400 }}>{k}: </span><strong>{v}</strong>
+                      </span>
+                    ))}
+                  </div>
+                  {!!candidate.industries?.length && (
+                    <div style={{ marginTop: 10, fontSize: 12.5, color: NW.gray600 }}>
+                      <span style={{ color: NW.gray400 }}>Industries: </span>{candidate.industries.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <AssessmentsSection
                 candidateId={candidate.id}

@@ -166,6 +166,24 @@ the score orders the list, a human decides.
 with `klaviyo` in `tools` satisfies an `email_marketing` requirement even if that
 phrase never appears in the CV.
 
+### Never lose a good candidate to an extraction gap
+
+The expensive failure isn't a wrong match — a human filters those in seconds. It's
+a qualified person who never appears because one skill was phrased unusually and
+didn't get extracted. You never find out. Four defences, in order:
+
+1. **Extract generously.** Skills include anything *evidenced* by the work
+   described, not only what's listed, plus the capability implied by each tool.
+2. **Skills never exclude anyone.** The only hard gate is discipline
+   (`function`/`subFunction`). A missing skill lowers the score; it can never
+   remove a candidate from the results.
+3. **Fall back to the raw CV text.** Before marking a required skill as missing,
+   search the stored `cvParse.rawText` for it. We keep the full text for cheap
+   re-parsing; it doubles as a recall backstop, so a candidate is only ever marked
+   as lacking a skill when it appears nowhere in their CV at all.
+4. **Show the gaps.** The Fit-for-role panel lists matched *and* missing
+   must-haves, so a human sees why someone ranked low and can overrule it.
+
 Openings need their required skills extracted into the same vocabulary — same
 one-time AI pass, run when an opening is created, with staff able to edit the
 must-have / nice-to-have split before it goes live.

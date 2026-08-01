@@ -207,6 +207,11 @@ Rules:
 - englishClaimed and languages record what the candidate claims. This is self-reported and is not a verified score.
 - function/subFunction is the candidate's actual discipline, which matters more than their job title: an "Account Manager" doing marketing is function=marketing; an "Account Manager" doing logistics is function=operations.
 - skills are capabilities; tools are named platforms. Keep them separate.
+- SKILLS: be generous and thorough. These are used to match candidates to job openings, and a capability you leave out means a qualified person is never shown for a role they could do. Missing a real skill is far more costly than listing one that turns out to be marginal.
+  · Include skills the CV states explicitly, AND skills clearly evidenced by the work described. "Ran weekly campaigns in Klaviyo and cut unsubscribes" evidences email_marketing, campaign_management and retention even if none of those words appear.
+  · Add the capability implied by each tool: Klaviyo/Mailchimp → email marketing; Salesforce/HubSpot → CRM; Power BI/Tableau → data visualisation; Jira → agile delivery.
+  · Include transferable capabilities the roles demonstrate — team leadership, stakeholder management, process improvement, training, client communication — when the CV shows them being done, not merely claimed.
+  · Do NOT invent skills with no basis in the document. Evidence in the text is the bar, not the exact phrase.
 - Put anything you were unsure about in lowConfidence, with a short reason.`;
 
 function costOf(usage: { input_tokens: number; output_tokens: number }): number {

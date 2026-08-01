@@ -2,10 +2,10 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
-  // pdf-parse is a CommonJS PDF text extractor used server-side by
-  // /api/assessment-upload; keep it out of the bundle so it loads from
-  // node_modules at runtime.
-  serverExternalPackages: ['pdf-parse'],
+  // pdf-parse (assessment upload) and pdfjs-dist + mammoth (CV parser) are
+  // server-side document extractors; keep them out of the bundle so they load
+  // from node_modules at runtime.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'mammoth'],
   async headers() {
     return [
       {

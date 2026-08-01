@@ -7,7 +7,7 @@
 // Nothing here writes to Firestore.
 
 import { useState, useRef } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db, collection, getDocs } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
@@ -36,7 +36,7 @@ interface Profile {
 }
 interface Meta { model: string; costUsd: number; usage: { input_tokens: number; output_tokens: number }; }
 
-const BUILD = 'v6-education';
+const BUILD = 'v7-save';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -129,6 +129,52 @@ export default function CVParserPage() {
     }
   }
 
+  // ── Save to an existing candidate ──────────────────────────────────────────
+  const [people, setPeople] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState('');
+
+  async function loadPeople() {
+    if (people.length) return;
+    const snap = await getDocs(collection(db, 'candidates'));
+    setPeople(snap.docs.map((d) => {
+      const c = d.data() as { name?: string; email?: string };
+      return { id: d.id, name: c.name || '(no name)', email: (c.email || '').toLowerCase() };
+    }));
+  }
+
+  async function saveTo(candidateId: string, who: string) {
+    if (!profile) return;
+    setSaving(true); setSaved('');
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/cv-parse/save', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          candidateId,
+          profile,
+          model: meta?.model,
+          schemaVersion: (meta as unknown as { schemaVersion?: number })?.schemaVersion,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) { setError(`Save failed: ${j.error || res.status}`); return; }
+      setSaved(`Saved to ${who} — ${j.fieldsWritten} fields, ${j.updatedPipelines} pipeline(s) updated`);
+      showToast('Saved to candidate', 'success');
+    } catch (e) {
+      setError(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const matches = search.trim().length < 2 ? [] : people.filter((x) => {
+    const q = search.toLowerCase();
+    return x.name.toLowerCase().includes(q) || x.email.includes(q);
+  }).slice(0, 8);
+
   const p = profile;
 
   return (
@@ -199,6 +245,47 @@ export default function CVParserPage() {
                 <div>{meta.usage.input_tokens.toLocaleString()} in / {meta.usage.output_tokens.toLocaleString()} out</div>
                 <div style={{ marginTop: 2 }}>140 CVs ≈ ${(meta.costUsd * 140).toFixed(2)}</div>
               </div>
+            )}
+          </div>
+
+          {/* Save to a candidate — this is the same write path the bulk backfill uses */}
+          <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: NW.gray50, border: `1px solid ${NW.gray100}` }}>
+            <div style={{ ...label, marginBottom: 6 }}>Save to a candidate</div>
+            {saved ? (
+              <div style={{ fontSize: 12.5, color: NW.teal700, fontWeight: 600 }}>{saved}</div>
+            ) : (
+              <>
+                <input
+                  value={search}
+                  onFocus={loadPeople}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  style={{
+                    width: '100%', maxWidth: 380, padding: '8px 12px', fontSize: 13,
+                    borderRadius: 9, border: `1px solid ${NW.gray200}`, background: NW.white,
+                  }}
+                />
+                {matches.length > 0 && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {matches.map((m) => (
+                      <button
+                        key={m.id}
+                        disabled={saving}
+                        onClick={() => saveTo(m.id, m.name)}
+                        style={{
+                          textAlign: 'left', padding: '7px 11px', borderRadius: 8, cursor: 'pointer',
+                          border: `1px solid ${NW.gray200}`, background: NW.white, fontSize: 12.5,
+                        }}
+                      >
+                        <strong>{m.name}</strong>{m.email && <span style={{ color: NW.gray500 }}> · {m.email}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 7 }}>
+                  Only fills in what the CV actually contained — nothing you typed by hand gets wiped.
+                </div>
+              </>
             )}
           </div>
 

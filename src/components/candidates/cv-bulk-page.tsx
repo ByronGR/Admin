@@ -55,7 +55,7 @@ function groupFlags(rows: Row[]) {
   return { buckets: buckets.filter((b) => b.hits.length).sort((a, b) => b.hits.length - a.hits.length), other };
 }
 
-const BUILD = 'v4-flag-summary';
+const BUILD = 'v5-reparse';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -177,6 +177,22 @@ export default function CVBulkPage() {
             </Button>
             <Button variant="primary" size="md" disabled={!unparsed} onClick={() => runAll(true)}>
               Parse {unparsed} remaining
+            </Button>
+            {/* Re-parse picks up prompt improvements (better skill recall,
+                education, the certification fix) on candidates already done.
+                Safe to repeat: the patch only writes non-empty values, so
+                hand-curated fields survive. */}
+            <Button
+              variant="secondary"
+              size="md"
+              disabled={!rows.length}
+              onClick={() => {
+                if (confirm(`Re-parse all ${rows.length} candidates? About $${(rows.length * 0.04).toFixed(2)}. Existing hand-edited fields are not overwritten.`)) {
+                  runAll(false);
+                }
+              }}
+            >
+              Re-parse all {rows.length}
             </Button>
           </div>
         )}

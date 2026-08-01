@@ -63,6 +63,7 @@ export async function POST(req: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
   // ?engine=code forces the free local parser (comparison / fallback testing).
   const forceCode = new URL(req.url).searchParams.get('engine') === 'code';
+  let aiError = '';
 
   // ── AI path (default) ──────────────────────────────────────────────────────
   if (key && !forceCode) {
@@ -101,7 +102,9 @@ export async function POST(req: Request) {
         },
       });
     } catch (e) {
-      // Never hard-fail an upload on the AI path — fall through to the parser.
+      // Never hard-fail an upload on the AI path — fall through to the parser,
+      // but keep the reason so the response can explain what happened.
+      aiError = e instanceof Error ? e.message : String(e);
       console.error('[cv-parse] AI extraction failed, falling back to code parser:', e);
     }
   }
@@ -111,8 +114,18 @@ export async function POST(req: Request) {
   try {
     text = await extractCVText(buf, kind);
   } catch (e) {
+    const textError = e instanceof Error ? e.message : String(e);
     console.error('[cv-parse] text extraction failed:', e);
-    return NextResponse.json({ error: "Couldn't read that file. Make sure it's a valid PDF or .docx." }, { status: 422 });
+    return NextResponse.json(
+      {
+        error: "Couldn't read that file. Make sure it's a valid PDF or .docx.",
+        // Both engines failed — report each reason so this is diagnosable
+        // instead of surfacing as one generic message.
+        aiError: aiError || (key ? undefined : 'ANTHROPIC_API_KEY not set on this deployment'),
+        textError,
+      },
+      { status: 422 },
+    );
   }
 
   if (!text.trim()) {

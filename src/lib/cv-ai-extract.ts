@@ -221,9 +221,21 @@ export async function extractCVWithAI(
   const kind: CVFileKind | null = detectKind(filename, mime);
   if (!kind) throw new Error(`Unsupported CV type: ${filename}`);
 
-  // Text is always extracted: it carries the URLs, and it is what we persist for
-  // cheap re-parsing later.
-  const rawText = await extractCVText(buffer, kind);
+  // Text extraction is a BONUS for PDFs, never a requirement. Claude reads the
+  // PDF itself, so the parse must not depend on pdf.js — which works locally but
+  // can fail in the serverless runtime. We only lose exact hyperlink URLs.
+  // For .docx there is no document block to send, so text is mandatory there.
+  let rawText = '';
+  let textError = '';
+  try {
+    rawText = await extractCVText(buffer, kind);
+  } catch (e) {
+    textError = e instanceof Error ? e.message : String(e);
+    if (kind === 'docx') {
+      throw new Error(`Could not read the Word document: ${textError}`);
+    }
+    console.warn('[cv-ai-extract] text extraction failed, continuing with the PDF alone:', textError);
+  }
 
   const content: Record<string, unknown>[] = [];
   if (kind === 'pdf') {
@@ -235,7 +247,9 @@ export async function extractCVWithAI(
   content.push({
     type: 'text',
     text: kind === 'pdf'
-      ? `Extracted text from the same CV — use it for exact URLs:\n<text>\n${rawText}\n</text>\n\nExtract the profile.`
+      ? (rawText
+          ? `Extracted text from the same CV — use it for exact URLs:\n<text>\n${rawText}\n</text>\n\nExtract the profile.`
+          : 'Extract the profile from the attached document.')
       : `<cv>\n${rawText}\n</cv>\n\nExtract the profile.`,
   });
 

@@ -36,7 +36,7 @@ interface Profile {
 }
 interface Meta { model: string; costUsd: number; usage: { input_tokens: number; output_tokens: number }; }
 
-const BUILD = 'v4-error-panel';
+const BUILD = 'v5-pdf-native';
 
 const card: React.CSSProperties = {
   background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20,
@@ -102,7 +102,14 @@ export default function CVParserPage() {
       try { json = JSON.parse(raw); } catch { /* server returned non-JSON (a crash page) */ }
 
       if (!res.ok) {
-        setError(`${res.status} — ${(json.error as string) || raw.slice(0, 400) || 'no response body'}`);
+        const detail = [
+          json.aiError ? `AI engine: ${json.aiError}` : '',
+          json.textError ? `Text engine: ${json.textError}` : '',
+        ].filter(Boolean).join('\n');
+        setError(
+          `${res.status} — ${(json.error as string) || raw.slice(0, 400) || 'no response body'}` +
+          (detail ? `\n\n${detail}` : ''),
+        );
         return;
       }
       if (json.engine === 'code') {

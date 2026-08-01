@@ -327,6 +327,13 @@ export interface CertificationEntry {
   date?: string;
 }
 
+export interface EducationEntry {
+  degree?: string;        // the qualification as written on the CV
+  field?: string;         // subject, only when distinct from the degree name
+  institution?: string;
+  endYear?: number;
+}
+
 export interface Candidate {
   id: string;
   // Short, human-readable ID (e.g. "K7M2PX"). For candidates created in Admin
@@ -365,6 +372,7 @@ export interface Candidate {
   // Classification drives candidate↔opening matching, so these come from a
   // controlled vocabulary (see FUNCTIONS / SENIORITY in cv-ai-extract.ts) and
   // must never be free text, or matching silently stops working.
+  education?: EducationEntry[];  // degrees and schooling, distinct from certifications
   tools?: string[];            // named platforms — Salesforce, Klaviyo, Power BI
   industries?: string[];
   function?: string;           // marketing | sales | operations | ...
@@ -522,6 +530,7 @@ export interface PipelineCandidate {
   timezone?: string;             // staff-entered — candidate working timezone
   workHistory?: WorkHistoryEntry[];   // carries accomplishments through to the client view
   tools?: string[];              // named platforms, shown as its own client-facing section
+  education?: EducationEntry[];
   resumeUrl?: string;            // resume/CV URL (alias of cvUrl)
   // true while the applicant is in the pre-screening inbox (Applicants tab).
   // Cleared to false when a recruiter approves them into the Kanban pipeline.

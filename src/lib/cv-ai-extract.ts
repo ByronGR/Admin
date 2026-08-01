@@ -17,6 +17,30 @@ import { extractCVText, detectKind, type CVFileKind } from './cv-extract-text';
 const MODEL = 'claude-sonnet-5';
 const API = 'https://api.anthropic.com/v1/messages';
 
+/**
+ * The key CV parsing should use.
+ *
+ * Prefers ANTHROPIC_CV_API_KEY so CV spend can be tracked separately from the
+ * Sourcing X-ray tool, which keeps using ANTHROPIC_API_KEY. Falls back to the
+ * shared key when the CV-specific one isn't set, so nothing breaks if only one
+ * is configured.
+ */
+/**
+ * Daily ceiling on CV parses, shared by the single and bulk routes.
+ *
+ * Guards against a runaway loop, not against deliberate work — a full re-parse
+ * of the database has to fit inside it with room to spare, or the guard blocks
+ * the very thing it was meant to make safe. Override with CV_PARSE_DAILY_CAP.
+ */
+export function cvDailyCap(): number {
+  const n = Number(process.env.CV_PARSE_DAILY_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 500;   // ~$20/day at ~4c per parse
+}
+
+export function cvApiKey(): string {
+  return (process.env.ANTHROPIC_CV_API_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
+}
+
 // ─── Controlled vocabulary ───────────────────────────────────────────────────
 // Matching compares these values, never free text. Both candidates AND openings
 // must classify into the same lists or nothing lines up. 'unknown' rather than
@@ -265,6 +289,14 @@ export async function extractCVWithAI(
       : `<cv>\n${rawText}\n</cv>\n\nExtract the profile.`,
   });
 
+  // Claude has no clock of its own. Without today's date it flags current roles
+  // as impossibly in the future and can't anchor "Present" when working out how
+  // long someone has been somewhere.
+  const today = new Date().toISOString().slice(0, 10);
+  const system = `${SYSTEM}
+
+Today's date is ${today}. Use it to resolve "Present"/"Current" when computing tenure, and treat any date on or before it as normal. Only flag a date as suspect when it is genuinely after today, or contradicts another date in the same CV.`;
+
   const res = await fetch(API, {
     method: 'POST',
     headers: {
@@ -275,7 +307,7 @@ export async function extractCVWithAI(
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 8000,
-      system: SYSTEM,
+      system,
       thinking: { type: 'disabled' },   // extraction is recall, not reasoning
       messages: [{ role: 'user', content }],
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },

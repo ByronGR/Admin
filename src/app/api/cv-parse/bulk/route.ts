@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
-import { extractCVWithAI } from '@/lib/cv-ai-extract';
+import { extractCVWithAI, cvApiKey } from '@/lib/cv-ai-extract';
 import { aiProfileToCandidate } from '@/lib/cv-ai-to-candidate';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import type { Candidate, PipelineCandidate } from '@/lib/types';
@@ -62,8 +62,8 @@ export async function POST(req: Request) {
   const email = await requireStaff(req);
   if (!email) return NextResponse.json({ error: 'Staff only' }, { status: 401 });
 
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+  const key = cvApiKey();
+  if (!key) return NextResponse.json({ error: 'No CV parsing key configured (ANTHROPIC_CV_API_KEY or ANTHROPIC_API_KEY)' }, { status: 500 });
 
   let body: { candidateIds?: string[] };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Expected JSON' }, { status: 400 }); }

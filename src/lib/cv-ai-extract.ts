@@ -17,6 +17,18 @@ import { extractCVText, detectKind, type CVFileKind } from './cv-extract-text';
 const MODEL = 'claude-sonnet-5';
 const API = 'https://api.anthropic.com/v1/messages';
 
+/**
+ * The key CV parsing should use.
+ *
+ * Prefers ANTHROPIC_CV_API_KEY so CV spend can be tracked separately from the
+ * Sourcing X-ray tool, which keeps using ANTHROPIC_API_KEY. Falls back to the
+ * shared key when the CV-specific one isn't set, so nothing breaks if only one
+ * is configured.
+ */
+export function cvApiKey(): string {
+  return (process.env.ANTHROPIC_CV_API_KEY || process.env.ANTHROPIC_API_KEY || '').trim();
+}
+
 // ─── Controlled vocabulary ───────────────────────────────────────────────────
 // Matching compares these values, never free text. Both candidates AND openings
 // must classify into the same lists or nothing lines up. 'unknown' rather than

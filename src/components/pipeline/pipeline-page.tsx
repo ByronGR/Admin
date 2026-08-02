@@ -47,7 +47,8 @@ import { StaffPicker } from '@/components/ui/staff-picker';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
 import { initials, snakeToTitle, fmtCurrency, fmtDate, yearsOfExperience } from '@/lib/utils';
-import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp } from '@/lib/types';
+import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp, Opening } from '@/lib/types';
+import { scoreCandidate, type MatchDetail } from '@/lib/candidate-match';
 import { stagesFor, isSourcing, normalizeSourcingStage, stageLabel, type StageDef } from '@/lib/pipeline-stages';
 import { DROP_OFF_REASON_LABELS } from '@/lib/types';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
@@ -1935,6 +1936,44 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
+  // ── Fit ranking ────────────────────────────────────────────────────────────
+  // These are the people who actually applied for this role, so they're the
+  // first list worth ranking — not an afterthought behind the talent pool.
+  // Best-effort throughout: no requirements, or no parsed profile, and the list
+  // simply shows in its original order rather than breaking.
+  const [reqs, setReqs] = useState<Opening['reqs']>();
+  const [profiles, setProfiles] = useState<Record<string, Candidate>>({});
+
+  useEffect(() => {
+    if (!pipeline.openingId) return;
+    getDoc(doc(db, 'openings', pipeline.openingId))
+      .then((s) => { if (s.exists()) setReqs((s.data() as Opening).reqs); })
+      .catch(() => { /* ranking is optional */ });
+  }, [pipeline.openingId]);
+
+  useEffect(() => {
+    const missing = applications.map((a) => a.candidateId).filter((id) => id && !profiles[id]);
+    if (!missing.length) return;
+    Promise.all(missing.map((id) => getDoc(doc(db, 'candidates', id)).catch(() => null)))
+      .then((snaps) => {
+        const next: Record<string, Candidate> = {};
+        snaps.forEach((s) => { if (s?.exists()) next[s.id] = { id: s.id, ...s.data() } as Candidate; });
+        if (Object.keys(next).length) setProfiles((p) => ({ ...p, ...next }));
+      });
+  }, [applications, profiles]);
+
+  const ranked = (() => {
+    if (!reqs) return applications.map((app) => ({ app, match: undefined as MatchDetail | undefined }));
+    return applications
+      .map((app) => {
+        const c = profiles[app.candidateId];
+        return { app, match: c ? scoreCandidate(c, reqs) : undefined };
+      })
+      // Applicants are never filtered out by score — everyone who applied gets
+      // reviewed. Ranking only changes the order they're reviewed in.
+      .sort((a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1));
+  })();
+
   // Live listener — only show applications not yet approved or rejected
   useEffect(() => {
     const q = query(collection(db, 'applications'), where('openingCode', '==', pipeline.code));
@@ -1948,6 +1987,7 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
         setLoadingApps(false);
       },
       () => setLoadingApps(false),
+
     );
     return () => unsub();
   }, [pipeline.code]);
@@ -2076,9 +2116,10 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
       <div className="space-y-2">
         <p className="text-xs text-[var(--light)] pb-1">
           {applications.length} applicant{applications.length !== 1 ? 's' : ''} waiting for review
+          {reqs ? ' · best fit first' : ''}
           {' · '}Approve to add to the pipeline, or reject to dismiss.
         </p>
-        {applications.map((app) => {
+        {ranked.map(({ app, match }) => {
           const isApproving = approvingId === app.id;
           const isRejecting = rejectingId === app.id;
           const appliedDateStr = fmtDate(app.submittedAt, { month: 'short', day: 'numeric' });
@@ -2101,8 +2142,27 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
                 <p className="truncate text-sm font-600 text-[var(--black)]">
                   {app.candidateName || 'No name'}
                 </p>
-                <p className="text-xs text-[var(--light)]">{app.candidateEmail || '—'}</p>
+                <p className="truncate text-xs text-[var(--light)]">
+                  {/* Why they rank where they do — the email is one click away
+                      on the profile, the fit reason isn't. */}
+                  {match?.reasons.length ? match.reasons[0] : (app.candidateEmail || '—')}
+                </p>
               </div>
+
+              {/* Fit */}
+              {match && (
+                <span
+                  className="hidden shrink-0 rounded-full px-2 py-0.5 text-[11px] font-700 sm:block"
+                  title={[...match.reasons, ...match.cautions].join(' · ')}
+                  style={
+                    match.score >= 70 ? { background: '#ECFDF5', color: '#047857' }
+                    : match.score >= 45 ? { background: '#FFFBEB', color: '#B45309' }
+                    : { background: '#F1F5F9', color: '#64748B' }
+                  }
+                >
+                  {match.score}
+                </span>
+              )}
 
               {/* Applied date */}
               {appliedDate && (

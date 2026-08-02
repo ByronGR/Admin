@@ -15,7 +15,7 @@ const API = 'https://api.anthropic.com/v1/messages';
 const PRICE_IN = 2;
 const PRICE_OUT = 10;
 
-export const OPENING_SCHEMA_VERSION = 1;
+export const OPENING_SCHEMA_VERSION = 2;
 
 /** Beyond ~5 mandatory skills nothing matches, so the split is capped. */
 export const MAX_MUST_HAVE = 5;
@@ -55,8 +55,8 @@ const SCHEMA = {
     seniority: { type: 'string', enum: SENIORITY as unknown as string[] },
     yearsRequired: { type: ['number', 'null'], description: 'Years of experience asked for. null when not stated — never invent a number.' },
     englishRequired: { type: 'string', description: 'CEFR level (B2, C1) when stated, otherwise empty' },
-    mustHaveSkills: { type: 'array', items: { type: 'string' }, description: `At most ${MAX_MUST_HAVE}. The capabilities without which someone genuinely cannot do this job.` },
-    niceToHaveSkills: { type: 'array', items: { type: 'string' }, description: 'Everything else that would help' },
+    mustHaveSkills: { type: 'array', items: { type: 'string' }, description: `At most ${MAX_MUST_HAVE}. One to three lowercase words each, phrased as they would appear on a CV — never the job post's competency wording.` },
+    niceToHaveSkills: { type: 'array', items: { type: 'string' }, description: 'Everything else that would help. Same phrasing rules: short, CV-like.' },
     tools: { type: 'array', items: { type: 'string' }, description: 'Named platforms the role requires' },
     industries: { type: 'array', items: { type: 'string' } },
     summary: { type: 'string', description: 'One line: what this role actually does' },
@@ -71,7 +71,11 @@ Roles span every business function — operations, finance, HR, engineering, des
 Rules:
 - function/subFunction is the role's actual discipline, which matters more than its title. An "Account Manager" running campaigns is marketing; one running logistics is operations. This is the single field that decides which candidates are even considered, so get it right.
 - mustHaveSkills: at most ${MAX_MUST_HAVE}, and only capabilities without which someone genuinely could not do the job. Clients list far more than they mean; everything else goes to niceToHaveSkills. A long must-have list matches nobody, which helps no one.
-- Name skills the way a CV would ("email marketing", "financial reporting", "process improvement"), not as job titles or sentences. Keep them lowercase.
+
+- CRITICAL — these skills get matched against real CVs by text, so every one must be a phrase a person would actually write about themselves. Job posts are full of competency language nobody puts on a CV; you must translate it, not copy it.
+  Rewrite: "cross-functional influence without authority" → "stakeholder management". "executive-level communication and stakeholder management" → "client communication". "account growth strategy development" → "account management". "customer segmentation and prioritization" → "customer segmentation".
+  Rules: one to three words. A thing someone DOES or KNOWS, not a quality they possess. No "ability to", no "-level", no "and", no "without", no adjectives like strategic/proven/strong. Lowercase.
+  Before emitting any skill, ask: would this appear verbatim in a skills list or a CV bullet? If not, shorten it until it would. A skill nobody's CV contains is worse than no skill at all — it makes a good candidate look unqualified.
 - yearsRequired: only when stated. Never infer a number from seniority.
 - Put anything genuinely ambiguous in notes for a recruiter to confirm — do not guess in the fields themselves.`;
 

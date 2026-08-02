@@ -651,8 +651,11 @@ export function OpeningDetail({
 
       {tab === 'sourcing' && <SourcingTab op={opening} />}
 
+      {/* minmax(0, …) on the tracks — grid items default to min-width:auto, so a
+          long unbroken line (a match reason) blows the column out past the page
+          instead of ellipsising inside it. */}
       {tab === 'pipeline' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
           {/* Pipeline by stage */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {applicantCount > 0 && (

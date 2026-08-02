@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug } from '@/lib/xray';
+import { ensureOpeningReqs, reqsAsPlanBrief } from '@/lib/opening-reqs';
+import type { Opening } from '@/lib/types';
 
 // ─── POST /api/sourcing/find ──────────────────────────────────────────────────
 // Runs an X-ray sourcing pass for one opening and appends net-new candidates to
@@ -65,7 +67,16 @@ export async function POST(req: Request) {
   if (!opSnap.exists) return NextResponse.json({ ok: false, reason: 'opening_not_found' }, { status: 404 });
   const op = opSnap.data() as Record<string, unknown>;
   const arr = (v: unknown) => (Array.isArray(v) ? v.join('; ') : '');
-  const jd = [
+
+  // Structured requirements, extracted once and shared with candidate matching.
+  // Sourcing and matching used to interpret the job post separately, which meant
+  // people found outside were judged by different keywords than people already
+  // in the database. Best-effort: if this fails, the plan writer still gets the
+  // raw post and behaves exactly as it did before.
+  const ensured = await ensureOpeningReqs(openingId, op as unknown as Opening);
+  const brief = reqsAsPlanBrief(ensured.reqs);
+
+  const jd = brief + [
     op.title, op.content_about || op.description || op.publicSummary || '',
     arr(op.content_qualifications), arr(op.requirements),
     Array.isArray(op.skills) ? 'Skills: ' + (op.skills as string[]).join(', ') : '',

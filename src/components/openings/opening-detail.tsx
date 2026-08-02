@@ -23,6 +23,7 @@ import { StaffPicker } from '@/components/ui/staff-picker';
 import { OpeningAdminControls } from './opening-admin-controls';
 import { SourcingTab } from './sourcing-tab';
 import { MatchesTab } from './matches-tab';
+import { scoreCandidate, type MatchDetail } from '@/lib/candidate-match';
 import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
@@ -157,6 +158,37 @@ export function OpeningDetail({
       .then((snap) => setPoolCandidates(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate))))
       .catch(() => setPoolCandidates([]));
   }, []);
+
+  // Reading the opening's requirements is the one paid step (~1c, once). It also
+  // runs automatically the first time X-ray sources for this opening, so most
+  // openings never need this button.
+  const [readingReqs, setReadingReqs] = useState(false);
+  // `opening` is a prop, so the freshly-read requirements live here until the
+  // parent refetches.
+  const [reqs, setReqs] = useState(opening.reqs);
+  useEffect(() => { setReqs(opening.reqs); }, [opening.reqs]);
+
+  async function readRequirements() {
+    setReadingReqs(true);
+    try {
+      const res = await fetch('/api/opening-parse', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ openingId: opening.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) { showToast(j.error || 'Could not read the requirements', 'error'); return; }
+      setReqs(j.reqs as Opening['reqs']);
+      showToast('Ranked by fit', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), 'error');
+    } finally {
+      setReadingReqs(false);
+    }
+  }
 
   // ── Opening core edit state ──
   const [editing, setEditing] = useState(false);
@@ -513,13 +545,32 @@ export function OpeningDetail({
   const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
   const openingSkills = (opening.skills ?? []).map((s) => s.toLowerCase());
   const poolQuery = poolSearch.trim().toLowerCase();
+  // Ranking. Once the opening's requirements have been read, this uses the real
+  // matcher — the same scoring sourced candidates are judged by, which tolerates
+  // near misses and checks the CV's raw text before calling a skill missing.
+  // Without requirements it falls back to exact skill overlap, which is why an
+  // opening with no `skills` set used to surface candidates in arbitrary order.
   const talentPool = (() => {
-    const base = poolCandidates
-      .filter((c) => !pipeIds.has(c.id))
-      .map((c) => ({ c, overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length }));
+    const available = poolCandidates.filter((c) => !pipeIds.has(c.id));
+    const base = reqs
+      ? available.map((c) => {
+          const m = scoreCandidate(c, reqs!);
+          return { c, overlap: m.matchedMustHave.length, match: m as MatchDetail | undefined };
+        })
+      : available.map((c) => ({
+          c,
+          overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length,
+          match: undefined as MatchDetail | undefined,
+        }));
     if (poolQuery) {
-      // Searching: match across ALL candidates by name/email (not just top skill matches).
+      // Searching: match across ALL candidates by name/email (not just top matches).
       return base.filter(({ c }) => `${c.name ?? ''} ${c.email ?? ''}`.toLowerCase().includes(poolQuery)).slice(0, 25);
+    }
+    if (reqs) {
+      return base
+        .filter((r) => (r.match?.score ?? 0) >= 25)   // below this it's noise, not a stretch
+        .sort((a, b) => (b.match?.score ?? 0) - (a.match?.score ?? 0))
+        .slice(0, 8);
     }
     return base.sort((a, b) => b.overlap - a.overlap).slice(0, 8);
   })();
@@ -656,9 +707,38 @@ export function OpeningDetail({
                 <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: NW.gray600 }}><Radar className="h-4 w-4" /></span>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Talent pool</div>
-                  <div style={{ fontSize: 12, color: NW.gray500 }}>Candidates not in this pipeline{openingSkills.length ? ' · best skill matches first' : ''}</div>
+                  <div style={{ fontSize: 12, color: NW.gray500 }}>
+                    Candidates not in this pipeline
+                    {reqs ? ' · ranked against this role' : openingSkills.length ? ' · best skill matches first' : ''}
+                  </div>
                 </div>
+                {reqs && (
+                  <button
+                    type="button"
+                    onClick={() => setTab('matches')}
+                    style={{ marginLeft: 'auto', flexShrink: 0, background: 'transparent', border: 'none', padding: 0, fontSize: 11.5, fontWeight: 600, color: NW.teal700, cursor: 'pointer' }}
+                  >
+                    See all &amp; why →
+                  </button>
+                )}
               </div>
+              {/* Without requirements the ordering is close to arbitrary, so say
+                  so rather than presenting an unranked list as "best first". */}
+              {!reqs && (
+                <div style={{ marginTop: 10, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 180, fontSize: 11.5, color: NW.gray600, lineHeight: 1.45 }}>
+                    These aren&rsquo;t ranked yet — read the role&rsquo;s requirements to sort by real fit.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={readRequirements}
+                    disabled={readingReqs}
+                    style={{ flexShrink: 0, height: 28, padding: '0 12px', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, cursor: readingReqs ? 'default' : 'pointer', opacity: readingReqs ? 0.6 : 1 }}
+                  >
+                    {readingReqs ? 'Reading…' : 'Rank by fit'}
+                  </button>
+                </div>
+              )}
               <input
                 value={poolSearch}
                 onChange={(e) => setPoolSearch(e.target.value)}
@@ -669,8 +749,13 @@ export function OpeningDetail({
                 {talentPool.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>{poolQuery ? 'No candidates match your search.' : 'No available candidates to surface.'}</div>
                 ) : (
-                  talentPool.map(({ c, overlap }, i) => {
+                  talentPool.map(({ c, overlap, match }, i) => {
                     const on = picked.has(c.id);
+                    const band = match
+                      ? (match.score >= 70 ? { bg: '#ECFDF5', fg: '#047857' }
+                        : match.score >= 45 ? { bg: '#FFFBEB', fg: '#B45309' }
+                        : { bg: NW.gray50, fg: NW.gray500 })
+                      : null;
                     return (
                       <div key={c.id} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}`, borderRadius: 8 }}>
                         <button
@@ -685,9 +770,18 @@ export function OpeningDetail({
                           <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.email}</div>
-                            <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—')}</div>
+                            <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={match ? [...match.reasons, ...match.cautions].join(' · ') : undefined}>
+                              {/* Why this person, not just who they are. */}
+                              {match?.matchedMustHave.length
+                                ? `${match.matchedMustHave.length}/${match.matchedMustHave.length + match.missingMustHave.length} must-haves · ${match.matchedMustHave.join(', ')}`
+                                : match
+                                  ? (match.cautions[0] || match.reasons[0] || (c.currentRole ?? '—'))
+                                  : ((c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—'))}
+                            </div>
                           </div>
-                          {overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
+                          {band
+                            ? <span style={{ fontSize: 10.5, fontWeight: 700, color: band.fg, background: band.bg, borderRadius: 999, padding: '2px 9px' }}>{match!.score}</span>
+                            : overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
                         </div>
                         <button
                           type="button"

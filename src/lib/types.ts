@@ -278,6 +278,30 @@ export interface Opening {
   wfh?: string;                    // "Remote" | "Hybrid" | "On-site" (from workMode)
   exp?: string;                    // mirrors seniority
   'sb-exp'?: string;               // mirrors seniority (Jobs reads either)
+
+  // Extracted requirements — the opening half of candidate matching. Written by
+  // /api/opening-parse, then editable by staff (a recruiter always outranks the
+  // extractor, so `editedBy` marks entries that must not be overwritten).
+  reqs?: OpeningReqs;
+}
+
+export interface OpeningReqs {
+  function?: string;
+  subFunction?: string;
+  seniority?: string;
+  yearsRequired?: number | null;
+  englishRequired?: string;
+  mustHaveSkills?: string[];
+  niceToHaveSkills?: string[];
+  tools?: string[];
+  industries?: string[];
+  summary?: string;
+  notes?: string[];
+  extractedAt?: string;
+  model?: string;
+  schemaVersion?: number;
+  editedBy?: string;               // set once a human adjusts the split
+  editedAt?: string;
 }
 
 export type WorkMode = 'remote' | 'hybrid' | 'onsite';

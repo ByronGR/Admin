@@ -22,6 +22,7 @@ import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { OpeningAdminControls } from './opening-admin-controls';
 import { SourcingTab } from './sourcing-tab';
+import { MatchesTab } from './matches-tab';
 import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
@@ -108,7 +109,7 @@ export function OpeningDetail({
   }, [briefCode]);
 
   // ── Redesign tabs (Pipeline & sourcing | Kick-off notes | Jobs listing) ──
-  const [tab, setTab] = useState<'pipeline' | 'sourcing' | 'notes' | 'jobs'>('pipeline');
+  const [tab, setTab] = useState<'pipeline' | 'matches' | 'sourcing' | 'notes' | 'jobs'>('pipeline');
   // Talent-pool multi-select for bulk outreach.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const togglePick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -587,13 +588,15 @@ export function OpeningDetail({
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
-        {([['pipeline', 'Pipeline & sourcing'], ['sourcing', 'Sourcing (X-ray)'], ['notes', 'Kick-off notes'], ['jobs', 'Jobs listing']] as const).map(([k, label]) => {
+        {([['pipeline', 'Pipeline & sourcing'], ['matches', 'Talent we have'], ['sourcing', 'Sourcing (X-ray)'], ['notes', 'Kick-off notes'], ['jobs', 'Jobs listing']] as const).map(([k, label]) => {
           const on = tab === k;
           return (
             <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>{label}</button>
           );
         })}
       </div>
+
+      {tab === 'matches' && <MatchesTab op={opening} />}
 
       {tab === 'sourcing' && <SourcingTab op={opening} />}
 

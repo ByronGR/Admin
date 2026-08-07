@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
-import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug } from '@/lib/xray';
+import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug, normKw, countryNames } from '@/lib/xray';
 import { ensureOpeningReqs, reqsAsPlanBrief } from '@/lib/opening-reqs';
 import type { Opening } from '@/lib/types';
 
@@ -36,8 +36,16 @@ export async function POST(req: Request) {
   const email = await requireStaffEmail(req);
   if (!email) return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
 
-  let body: { openingId?: string; countries?: string[]; english?: boolean; excludeOwners?: boolean; mode?: 'ai' | 'more' } = {};
+  let body: {
+    openingId?: string; countries?: string[]; english?: boolean; excludeOwners?: boolean;
+    mode?: 'ai' | 'more';
+    // Manual steering on top of the AI plan. Array or comma-separated string,
+    // matching the brain's runSearch contract.
+    includeKeywords?: string[] | string; excludeKeywords?: string[] | string;
+  } = {};
   try { body = await req.json(); } catch { /* noop */ }
+  const inc = normKw(body.includeKeywords);   // extra search phrases
+  const exc = normKw(body.excludeKeywords);   // negated in query AND post-filtered
   const openingId = (body.openingId || '').trim();
   const mode = body.mode === 'ai' ? 'ai' : 'more';
   const english = body.english !== false;
@@ -105,11 +113,33 @@ export async function POST(req: Request) {
   const page = mode === 'more' ? (plan.page || 1) + 1 : 1;
   const pulled = new Set<string>(mode === 'more' ? (plan.pulled || []) : []);
   // Also dedup against everyone already in this opening's table (incl. manual adds).
+  // Keep the slug → doc id map: someone this search re-surfaces is deduped out of
+  // the insert, but should still gain this run's ref, so the audit trail shows
+  // every search that found them (a candidate can be S1 and S3).
   const existingSnap = await db.collection('sourcedCandidates').where('openingId', '==', openingId).get();
-  existingSnap.docs.forEach(d => { const li = (d.data().li as string) || ''; if (li) pulled.add(normSlug(li.replace('/in/', ''))); });
+  const docBySlug = new Map<string, string>();
+  existingSnap.docs.forEach(d => {
+    const li = (d.data().li as string) || '';
+    if (!li) return;
+    const slug = normSlug(li.replace('/in/', ''));
+    pulled.add(slug);
+    docBySlug.set(slug, d.id);
+  });
+
+  // ── Reference code for THIS run (audit trail) ──
+  // Allocated in a transaction so two searches started at once can't both be S3.
+  const ref = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(planRef);
+    const seq = ((snap.exists ? (snap.data() as { refSeq?: number }).refSeq : 0) || 0) + 1;
+    tx.set(planRef, { refSeq: seq }, { merge: true });
+    return `S${seq}`;
+  });
+  const at = new Date().toISOString();
 
   // ── Run the searches ──
-  const queries = buildQueriesFromPhrases(phrases, codes);
+  // Job-post plan phrases + any manual must-include keywords = what we search.
+  const phrasesForRun = [...phrases, ...inc];
+  const queries = buildQueriesFromPhrases(phrasesForRun, codes, exc);
   const serperKey = process.env.SERPER_API_KEY;
   const gKey = process.env.GOOGLE_API_KEY, gCx = process.env.GOOGLE_CX;
   const rawItems: { title?: string; link?: string; snippet?: string }[] = [];
@@ -129,9 +159,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: 'not_configured', message: 'No SERPER_API_KEY or Google key configured.' }, { status: 500 });
   }
 
-  const { candidates, stats } = filterResults(rawItems, { codes, pulled, excludeOwners });
+  const { candidates, stats } = filterResults(rawItems, { codes, pulled, excludeOwners, excludeKeywords: exc });
 
-  // ── Append net-new candidates ──
+  // ── Append net-new candidates, tagged with this run's ref ──
   if (candidates.length) {
     const batch = db.batch();
     const col = db.collection('sourcedCandidates');
@@ -139,11 +169,46 @@ export async function POST(req: Request) {
       batch.set(col.doc(), {
         openingId, name: c.name, li: c.li, linkedin: c.linkedin, location: c.location, country: c.country,
         source: 'X-ray', owner: '', status: 'New', reason: '', salary: '', applied: false,
+        refs: [ref],
         last: 'just sourced', notes: '', createdAt: GCFieldValue.serverTimestamp(), updatedAt: GCFieldValue.serverTimestamp(),
       });
     }
     await batch.commit();
   }
+
+  // ── Tag anyone this run re-surfaced who was already on the board ──
+  // They're correctly deduped out of the insert above, but "S1 and S3 both found
+  // this person" is exactly the signal the audit trail exists to carry.
+  const resurfaced: string[] = [];
+  for (const it of rawItems) {
+    const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(it.link || '');
+    if (!m) continue;
+    const id = docBySlug.get(normSlug(m[1]));
+    if (id && !resurfaced.includes(id)) resurfaced.push(id);
+  }
+  if (resurfaced.length) {
+    const batch = db.batch();
+    for (const id of resurfaced) {
+      batch.set(db.collection('sourcedCandidates').doc(id), { refs: GCFieldValue.arrayUnion(ref) }, { merge: true });
+    }
+    await batch.commit();
+  }
+
+  // ── Record what THIS search targeted ──
+  const runMeta = {
+    openingId, ref, at, mode,
+    countries: countryNames(codes),
+    domain: planDomain,
+    aliases: planAliases,
+    include: inc,
+    exclude: exc,
+    found: candidates.length,
+    resurfaced: resurfaced.length,
+    by: email,
+  };
+  await db.collection('searchRuns').doc(`${openingId}_${ref}`).set({
+    ...runMeta, createdAt: GCFieldValue.serverTimestamp(),
+  });
 
   // ── Save the plan + pagination state ──
   await planRef.set({
@@ -152,5 +217,28 @@ export async function POST(req: Request) {
     lastRun: GCFieldValue.serverTimestamp(), ...(planSnap.exists ? {} : { createdAt: GCFieldValue.serverTimestamp() }),
   }, { merge: true });
 
-  return NextResponse.json({ ok: true, added: candidates.length, phrases, aliases: planAliases, domain: planDomain, aiCost, stats, notes, page });
+  return NextResponse.json({
+    ok: true, added: candidates.length, phrases, aliases: planAliases, domain: planDomain,
+    aiCost, stats, notes, page,
+    ref,             // this run's code
+    run: runMeta,    // what it targeted
+  });
+}
+
+// ─── GET /api/sourcing/find?openingId=… ───────────────────────────────────────
+// The audit trail for one opening, newest first. Served from the API rather than
+// read client-side, because `searchRuns` has no Firestore rule of its own.
+export async function GET(req: Request) {
+  const email = await requireStaffEmail(req);
+  if (!email) return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
+
+  const openingId = (new URL(req.url).searchParams.get('openingId') || '').trim();
+  if (!openingId) return NextResponse.json({ ok: false, reason: 'missing_opening' }, { status: 400 });
+
+  const snap = await adminDb().collection('searchRuns').where('openingId', '==', openingId).get();
+  const runs = snap.docs
+    .map((d) => d.data() as { ref?: string })
+    .sort((a, b) => Number((b.ref || 'S0').slice(1)) - Number((a.ref || 'S0').slice(1)));
+
+  return NextResponse.json({ ok: true, runs });
 }

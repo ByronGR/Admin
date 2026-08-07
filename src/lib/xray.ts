@@ -72,9 +72,21 @@ function cleanName(title: string) {
   return title.split('|')[0].split(' - ')[0].split(' – ')[0].trim();
 }
 
-export function buildQueriesFromPhrases(phrases: string[], codes: string[]) {
+/** Accepts an array or a comma-separated string, as the brain's runSearch does. */
+export function normKw(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof v === 'string') return v.split(',').map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
+// One query per phrase, scoped to the selected country subdomains, with any
+// exclude keywords appended as Google negatives. Excludes are ALSO post-filtered
+// in filterResults — the negative alone isn't reliable, since the term can sit
+// in profile text Google didn't index as a match.
+export function buildQueriesFromPhrases(phrases: string[], codes: string[], excludeKeywords: string[] = []) {
   const site = '(' + codes.filter(c => COUNTRIES[c]).map(c => `site:${c}.linkedin.com/in`).join(' OR ') + ')';
-  return phrases.map(p => `${site} ${p}`);
+  const neg = excludeKeywords.map((k) => ` -"${k}"`).join('');
+  return phrases.map(p => `${site} ${p}${neg}`);
 }
 
 type RawItem = { title?: string; link?: string; snippet?: string };
@@ -137,11 +149,12 @@ export type XrayResult = {
 // Parse raw search results → net-new candidates, applying geo-lock, dedup and exclusions.
 export function filterResults(
   rawItems: RawItem[],
-  { codes, pulled, excludeOwners }: { codes: string[]; pulled: Set<string>; excludeOwners: boolean }
-): { candidates: XrayResult[]; stats: { found: number; net_new: number; skipped_existing: number; dropped_geo: number; dropped_owner: number; dropped_offshore: number; dropped_internal: number } } {
+  { codes, pulled, excludeOwners, excludeKeywords = [] }: { codes: string[]; pulled: Set<string>; excludeOwners: boolean; excludeKeywords?: string[] }
+): { candidates: XrayResult[]; stats: { found: number; net_new: number; skipped_existing: number; dropped_geo: number; dropped_owner: number; dropped_offshore: number; dropped_internal: number; dropped_excluded: number } } {
   const codeSet = new Set(codes);
   const candidates: XrayResult[] = [];
-  let dupExisting = 0, droppedGeo = 0, droppedOwner = 0, droppedOffshore = 0, droppedInternal = 0;
+  const exc = excludeKeywords.map((k) => k.toLowerCase());
+  let dupExisting = 0, droppedGeo = 0, droppedOwner = 0, droppedOffshore = 0, droppedInternal = 0, droppedExcluded = 0;
   for (const it of rawItems) {
     const host = (() => { try { return new URL(it.link || '').host; } catch { return ''; } })();
     const sub = host.split('.')[0];
@@ -155,6 +168,9 @@ export function filterResults(
     if (SELF_EXCLUDE.has(slug) || NEARWORK_SELF.test(text)) { droppedInternal++; continue; }  // never source our own team
     if (excludeOwners && EXCLUDE_OWNER.test(it.title || '')) { droppedOwner++; continue; }
     if (NON_LATAM_LOC.test(text)) { droppedOffshore++; continue; }
+    // Post-filter the excludes: the Google negative catches most of them, but a
+    // term can still sit in text the query didn't match on.
+    if (exc.length && exc.some((k) => text.toLowerCase().includes(k))) { droppedExcluded++; continue; }
     pulled.add(slug);
     const country = SUBDOMAIN_COUNTRY[sub] || COUNTRIES[sub] || '';
     let loc = country;
@@ -168,7 +184,12 @@ export function filterResults(
       location: loc, country,
     });
   }
-  return { candidates, stats: { found: rawItems.length, net_new: candidates.length, skipped_existing: dupExisting, dropped_geo: droppedGeo, dropped_owner: droppedOwner, dropped_offshore: droppedOffshore, dropped_internal: droppedInternal } };
+  return { candidates, stats: { found: rawItems.length, net_new: candidates.length, skipped_existing: dupExisting, dropped_geo: droppedGeo, dropped_owner: droppedOwner, dropped_offshore: droppedOffshore, dropped_internal: droppedInternal, dropped_excluded: droppedExcluded } };
 }
 
 export const XRAY_COUNTRY_CODES = Object.keys(COUNTRIES);
+
+/** Country codes → display names, for the search-run audit record. */
+export function countryNames(codes: string[]): string[] {
+  return codes.map((c) => COUNTRIES[c]).filter(Boolean);
+}

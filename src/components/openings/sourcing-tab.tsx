@@ -7,7 +7,7 @@
 // Candidates + plan live in Firestore (sourcedCandidates / searchPlans).
 // ============================================================
 
-import { useState, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type CSSProperties, type ReactNode } from 'react';
 import {
   db, auth, collection, query, where, onSnapshot, doc, updateDoc, addDoc, getDoc, serverTimestamp,
 } from '@/lib/firebase';
@@ -15,7 +15,7 @@ import { NW, Icon, Button } from '@/components/nw/primitives';
 import { Modal } from '@/components/ui/modal';
 import {
   SRC_STATUSES, SRC_REASONS, SRC_COUNTRIES,
-  type Opening, type SourcedCandidate, type SourceStatus, type SearchPlan,
+  type Opening, type SourcedCandidate, type SourceStatus, type SearchPlan, type SearchRun,
 } from '@/lib/types';
 
 // Staff who can own a sourced candidate.
@@ -121,9 +121,11 @@ function SalaryCell({ value, onSave }: { value?: string; onSave: (v: string) => 
 }
 
 // ── Source panel — the only block that PULLS people in ──
-function SourcePanel({ opening, plan, countries, setCountries, onRun, busy }: {
+function SourcePanel({ opening, plan, countries, setCountries, onRun, busy, include, setInclude, exclude, setExclude }: {
   opening: Opening; plan: SearchPlan | null; countries: string[]; setCountries: (c: string[]) => void;
   onRun: (mode: 'ai' | 'more') => void; busy: false | 'ai' | 'more';
+  include: string; setInclude: (v: string) => void;
+  exclude: string; setExclude: (v: string) => void;
 }) {
   const hasPlan = !!(plan && plan.phrases && plan.phrases.length);
   const nOn = countries.length;
@@ -156,6 +158,32 @@ function SourcePanel({ opening, plan, countries, setCountries, onRun, busy }: {
           ); })}
         </div>
         {!nOn && <div style={{ fontSize: 12, color: '#B45309', marginTop: 8 }}>Pick at least one country.</div>}
+      </div>
+
+      {/* Manual steering, on top of the AI plan. The plan reads the job post;
+          this is where a recruiter adds what the client said afterwards — e.g.
+          "CRM people are fine for the Lifecycle role". */}
+      <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div>
+          <label style={lbl}>Must include</label>
+          <input
+            value={include}
+            onChange={e => setInclude(e.target.value)}
+            placeholder="CRM, Klaviyo"
+            style={{ ...field, height: 36, width: '100%' }}
+          />
+          <div style={{ fontSize: 11, color: NW.gray500, marginTop: 4 }}>Searched as well as the AI plan — widens the net.</div>
+        </div>
+        <div>
+          <label style={lbl}>Exclude</label>
+          <input
+            value={exclude}
+            onChange={e => setExclude(e.target.value)}
+            placeholder="intern, freelance"
+            style={{ ...field, height: 36, width: '100%' }}
+          />
+          <div style={{ fontSize: 11, color: NW.gray500, marginTop: 4 }}>Kept out of the query and filtered from results.</div>
+        </div>
       </div>
 
       {hasPlan && plan && (
@@ -208,6 +236,57 @@ function AddManualModal({ openingId, onClose, onDone }: { openingId: string; onC
   );
 }
 
+// What one search run was going after. The point is being able to tell whether a
+// candidate arrived before or after a change — so the countries, aliases and
+// keyword steering are shown as they were AT THAT RUN, not as they are now.
+function SearchRefModal({ run, onClose, onFilter }: { run: SearchRun; onClose: () => void; onFilter: () => void }) {
+  const when = (() => {
+    const d = new Date(run.at);
+    return isNaN(d.getTime()) ? run.at : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  })();
+  const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: 12, padding: '8px 0', borderTop: `1px solid ${NW.gray100}` }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: NW.gray500 }}>{label}</div>
+      <div style={{ fontSize: 12.5, color: NW.gray800, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+  const chips = (items: string[] | undefined, tone: 'plain' | 'good' | 'bad') => {
+    if (!items?.length) return <span style={{ color: NW.gray400 }}>—</span>;
+    const st = tone === 'good' ? { background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }
+      : tone === 'bad' ? { background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }
+      : { background: NW.gray50, color: NW.gray700, border: `1px solid ${NW.gray200}` };
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        {items.map(x => <span key={x} style={{ ...st, fontSize: 11.5, fontWeight: 600, borderRadius: 999, padding: '2px 8px' }}>{x}</span>)}
+      </div>
+    );
+  };
+  return (
+    <Modal open onClose={onClose} title={`Search ${run.ref}`} className="min-w-0">
+      <p style={{ fontSize: 13, color: NW.gray600, lineHeight: 1.6, margin: '0 0 12px' }}>
+        What this search was going after. Anyone tagged <b>{run.ref}</b> came from this run.
+      </p>
+      <div>
+        <Row label="When">{when}{run.by ? <span style={{ color: NW.gray400 }}> · {run.by}</span> : null}</Row>
+        <Row label="Type">{run.mode === 'ai' ? 'AI Search — the plan was rewritten' : 'Find more — reused the saved plan'}</Row>
+        <Row label="Countries">{chips(run.countries, 'plain')}</Row>
+        <Row label="Read as">{run.aliases?.length ? chips(run.aliases, 'plain') : <span style={{ color: NW.gray400 }}>—</span>}</Row>
+        <Row label="Discipline">{run.domain || <span style={{ color: NW.gray400 }}>—</span>}</Row>
+        <Row label="Must include">{chips(run.include, 'good')}</Row>
+        <Row label="Excluded">{chips(run.exclude, 'bad')}</Row>
+        <Row label="Result">
+          {run.found} net-new
+          {run.resurfaced ? <span style={{ color: NW.gray500 }}> · {run.resurfaced} already on the board</span> : null}
+        </Row>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+        <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
+        <Button size="sm" onClick={onFilter}>Show only {run.ref}</Button>
+      </div>
+    </Modal>
+  );
+}
+
 function PlanModal({ plan, onClose, onRerun, busy }: { plan: SearchPlan | null; onClose: () => void; onRerun: () => void; busy: boolean }) {
   return (
     <Modal open onClose={onClose} title="Search plan" className="min-w-0">
@@ -251,6 +330,14 @@ export function SourcingTab({ op }: { op: Opening }) {
   const [countries, setCountries] = useState<string[]>(SRC_COUNTRIES.filter(c => c.on).map(c => c.code));
   const [busy, setBusy] = useState<false | 'ai' | 'more'>(false);
   const [runNote, setRunNote] = useState('');
+  // Manual steering, remembered across runs within the session so "Find more"
+  // keeps whatever the recruiter dialled in.
+  const [include, setInclude] = useState('');
+  const [exclude, setExclude] = useState('');
+  // Audit trail. Served by the API — searchRuns has no Firestore rule of its own.
+  const [runs, setRuns] = useState<SearchRun[]>([]);
+  const [fRef, setFRef] = useState('');
+  const [refDetail, setRefDetail] = useState<SearchRun | null>(null);
 
   // Filters
   const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
@@ -303,6 +390,21 @@ export function SourcingTab({ op }: { op: Opening }) {
     save(r.id, patch);
   };
 
+  // The audit trail comes from the API, not a client Firestore read — searchRuns
+  // has no rule of its own, and this keeps it that way.
+  const loadRuns = useCallback(async () => {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/sourcing/find?openingId=${encodeURIComponent(openingId)}`, {
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
+      const d = await res.json();
+      if (d.ok) setRuns(d.runs as SearchRun[]);
+    } catch { /* the trail is informational — never block the table on it */ }
+  }, [openingId]);
+
+  useEffect(() => { loadRuns(); }, [loadRuns]);
+
   async function runSearch(mode: 'ai' | 'more') {
     if (!countries.length || busy) return;
     setBusy(mode); setRunNote('');
@@ -310,11 +412,15 @@ export function SourcingTab({ op }: { op: Opening }) {
       const idToken = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/sourcing/find', {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ openingId, countries, english: true, excludeOwners: true, mode }),
+        body: JSON.stringify({ openingId, countries, english: true, excludeOwners: true, mode, includeKeywords: include, excludeKeywords: exclude }),
       });
       const d = await res.json();
       if (!d.ok) { setRunNote(d.message || d.reason || 'Search failed.'); }
-      else { setRunNote(`Added ${d.added} new · scanned ${d.stats?.found ?? 0} · skipped ${d.stats?.skipped_existing ?? 0} already in the sheet${d.aiCost ? ' · AI wrote the plan' : ''}`); getDoc(doc(db, 'searchPlans', openingId)).then(s => setPlan(s.exists() ? ({ ...s.data(), openingId } as SearchPlan) : null)); }
+      else {
+        setRunNote(`${d.ref ? d.ref + ' · ' : ''}Added ${d.added} new · scanned ${d.stats?.found ?? 0} · skipped ${d.stats?.skipped_existing ?? 0} already in the sheet${d.stats?.dropped_excluded ? ` · ${d.stats.dropped_excluded} dropped by Exclude` : ''}${d.aiCost ? ' · AI wrote the plan' : ''}`);
+        getDoc(doc(db, 'searchPlans', openingId)).then(s => setPlan(s.exists() ? ({ ...s.data(), openingId } as SearchPlan) : null));
+        loadRuns();
+      }
     } catch (e) { setRunNote('Error: ' + (e as Error).message); }
     setBusy(false);
   }
@@ -330,6 +436,7 @@ export function SourcingTab({ op }: { op: Opening }) {
     if (fCountry && r.country !== fCountry) return false;
     if (fOwner && (fOwner === 'none' ? !!r.owner : r.owner !== fOwner)) return false;
     if (fStatus && r.status !== fStatus) return false;
+    if (fRef && !(r.refs || []).includes(fRef)) return false;
     if (fSource && r.source !== fSource) return false;
     return true;
   }), [rows, q, fCountry, fOwner, fStatus, fSource]);
@@ -362,7 +469,7 @@ export function SourcingTab({ op }: { op: Opening }) {
 
   return (
     <div style={{ marginTop: 4 }}>
-      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} />
+      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} />
       {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
       {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
 
@@ -382,6 +489,20 @@ export function SourcingTab({ op }: { op: Opening }) {
         <select value={fCountry} onChange={e => setFCountry(e.target.value)} style={field}><option value="">All countries</option>{[...new Set(rows.map(r => r.country).filter(Boolean))].map(c => <option key={c}>{c}</option>)}</select>
         <select value={fOwner} onChange={e => setFOwner(e.target.value)} style={field}><option value="">All owners</option><option value="none">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
         <select value={fSource} onChange={e => setFSource(e.target.value)} style={field}><option value="">All sources</option><option>X-ray</option><option>Manual</option></select>
+        {runs.length > 0 && (
+          <select value={fRef} onChange={e => setFRef(e.target.value)} style={field} title="Which search surfaced them">
+            <option value="">All searches</option>
+            {runs.map(r => <option key={r.ref} value={r.ref}>{r.ref} · {r.found} found</option>)}
+          </select>
+        )}
+        {fRef && (() => {
+          const run = runs.find(r => r.ref === fRef);
+          return run ? (
+            <button onClick={() => setRefDetail(run)} style={{ ...field, cursor: 'pointer', color: NW.teal700, fontWeight: 600 }}>
+              What did {fRef} target?
+            </button>
+          ) : null;
+        })()}
         <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>
         {plan?.phrases?.length ? <button onClick={() => setModal('plan')} style={{ ...field, cursor: 'pointer', color: NW.gray700 }}>View plan</button> : null}
         <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{isFiltered ? `${filtered.length} of ${total}` : `${total} candidates`}</span>
@@ -406,7 +527,18 @@ export function SourcingTab({ op }: { op: Opening }) {
             {pageRows.map(r => (
               <tr key={r.id} style={{ borderTop: `1px solid ${NW.gray100}`, height: 56 }}>
                 <td style={{ padding: '8px 14px' }}>
-                  <div style={{ maxWidth: 230, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                  <div style={{ maxWidth: 230, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {r.name}
+                    {/* Which search(es) surfaced them — click to see what that search was going after. */}
+                    {(r.refs || []).map(ref => (
+                      <button
+                        key={ref}
+                        onClick={e => { e.stopPropagation(); const run = runs.find(x => x.ref === ref); if (run) setRefDetail(run); }}
+                        title={`Surfaced by search ${ref}`}
+                        style={{ font: 'inherit', fontSize: 9.5, fontWeight: 700, color: NW.gray500, background: NW.gray50, border: `1px solid ${NW.gray200}`, borderRadius: 5, padding: '1px 4px', marginLeft: 5, cursor: 'pointer', verticalAlign: 'middle' }}
+                      >{ref}</button>
+                    ))}
+                  </div>
                   <a href={r.linkedin} target="_blank" rel="noopener noreferrer" title={r.linkedin} style={{ display: 'block', maxWidth: 230, fontSize: 11.5, color: NW.teal600, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.li} ↗</a>
                   {r.dupe && <span style={{ fontSize: 10.5, color: '#B45309' }}>⚠ also in another opening</span>}
                 </td>
@@ -456,6 +588,13 @@ export function SourcingTab({ op }: { op: Opening }) {
       {modal === 'add' && <AddManualModal openingId={openingId} onClose={() => setModal(null)} onDone={() => setModal(null)} />}
       {modal === 'plan' && <PlanModal plan={plan} onClose={() => setModal(null)} busy={busy === 'ai'} onRerun={() => { setModal(null); runSearch('ai'); }} />}
       {notesRow && <NotesModal row={notesRow} onClose={() => setNotesRow(null)} onSave={v => { save(notesRow.id, { notes: v }); setNotesRow(null); }} />}
+      {refDetail && (
+        <SearchRefModal
+          run={refDetail}
+          onClose={() => setRefDetail(null)}
+          onFilter={() => { setFRef(refDetail.ref); setRefDetail(null); }}
+        />
+      )}
     </div>
   );
 }

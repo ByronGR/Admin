@@ -1018,8 +1018,29 @@ export interface SourcedCandidate {
   last?: string;             // relative timestamp label
   notes?: string;
   dupe?: string;             // opening id where this LinkedIn also appears
+  refs?: string[];           // search runs that surfaced them, e.g. ['S1','S3']
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+}
+
+/**
+ * One sourcing run's audit record. Written per search so the team can tell
+ * whether a candidate came from before or after a change to the countries,
+ * the AI plan, or the include/exclude steering.
+ */
+export interface SearchRun {
+  openingId: string;
+  ref: string;               // 'S1', 'S2', …
+  at: string;                // ISO timestamp
+  mode: 'ai' | 'more';
+  countries: string[];       // display names
+  domain?: string;           // the AI plan's resolved discipline
+  aliases?: string[];        // equivalent titles it searched as
+  include?: string[];        // manual must-include keywords
+  exclude?: string[];        // manual exclude keywords
+  found: number;             // net-new candidates added
+  resurfaced?: number;       // already-on-the-board people this run found again
+  by?: string;               // staff email
 }
 
 export interface SearchPlan {

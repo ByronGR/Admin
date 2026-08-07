@@ -999,6 +999,9 @@ export const SRC_COUNTRIES: { code: string; name: string; on: boolean }[] = [
   { code: 've', name: 'Venezuela', on: true }, { code: 'ec', name: 'Ecuador', on: true },
   { code: 'uy', name: 'Uruguay', on: true }, { code: 'bo', name: 'Bolivia', on: false },
   { code: 'py', name: 'Paraguay', on: false }, { code: 'mx', name: 'Mexico', on: false },
+  // Off by default: Brazilian profiles are usually written in Portuguese, and
+  // the search runs with the English filter on.
+  { code: 'br', name: 'Brazil', on: false },
 ];
 
 export interface SourcedCandidate {

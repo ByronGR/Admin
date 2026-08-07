@@ -6,6 +6,9 @@
 const COUNTRIES: Record<string, string> = {
   co: 'Colombia', ar: 'Argentina', pe: 'Peru', cl: 'Chile', ve: 'Venezuela',
   ec: 'Ecuador', uy: 'Uruguay', bo: 'Bolivia', py: 'Paraguay', mx: 'Mexico',
+  // Brazil is Portuguese-speaking, so it sits outside the Spanish-speaking
+  // default set and is opted into per search rather than always on.
+  br: 'Brazil',
 };
 
 const SUBDOMAIN_COUNTRY: Record<string, string> = {
@@ -22,6 +25,9 @@ const CITY_HINTS: Record<string, string> = {
   Lima: 'Peru', Caracas: 'Venezuela', Maracaibo: 'Venezuela', Valencia: 'Venezuela',
   Santiago: 'Chile', Quito: 'Ecuador', Guayaquil: 'Ecuador', Cancun: 'Mexico', 'Cancún': 'Mexico',
   'Mexico City': 'Mexico', Guadalajara: 'Mexico', Monterrey: 'Mexico', Montevideo: 'Uruguay',
+  'Sao Paulo': 'Brazil', 'São Paulo': 'Brazil', 'Rio de Janeiro': 'Brazil',
+  'Belo Horizonte': 'Brazil', Brasilia: 'Brazil', 'Brasília': 'Brazil',
+  Curitiba: 'Brazil', 'Porto Alegre': 'Brazil', Recife: 'Brazil', Fortaleza: 'Brazil',
 };
 
 const EXCLUDE_OWNER = /(\bfounder\b|\bco-?founder\b|\bceo\b|\bc\.e\.o\b|\bowner\b|\bco-?owner\b|\bpropietari[oa]\b|\bdue[ñn][oa]\b|\bfundador[a]?\b|\bcofundador[a]?\b|\bpresidente\b|\bchief executive\b|\bmanaging director\b|\bself-employed\b)/i;

@@ -121,79 +121,200 @@ function SalaryCell({ value, onSave }: { value?: string; onSave: (v: string) => 
 }
 
 // ── Source panel — the only block that PULLS people in ──
-function SourcePanel({ opening, plan, countries, setCountries, onRun, busy, include, setInclude, exclude, setExclude }: {
-  opening: Opening; plan: SearchPlan | null; countries: string[]; setCountries: (c: string[]) => void;
+// Keyword steering as tokens rather than a comma-separated string: a committed
+// keyword is a thing you can see and remove, and a half-typed one is visibly not
+// yet part of the search.
+function TokenField({ tokens, onChange, tone, placeholder, help }: {
+  tokens: string[]; onChange: (t: string[]) => void;
+  tone: 'include' | 'exclude'; placeholder: string; help: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const st = tone === 'include'
+    ? { bg: NW.teal50, fg: NW.teal700 }
+    : { bg: '#FEE2E2', fg: '#B91C1C' };
+
+  const commit = () => {
+    const v = draft.trim().replace(/,+$/, '');
+    if (v && !tokens.some(t => t.toLowerCase() === v.toLowerCase())) onChange([...tokens, v]);
+    setDraft('');
+  };
+
+  return (
+    <div>
+      <div
+        style={{ border: `1px solid ${NW.gray200}`, borderRadius: 10, padding: '7px 9px', minHeight: 42, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', background: NW.white, cursor: 'text' }}
+        onClick={e => { (e.currentTarget.querySelector('input') as HTMLInputElement | null)?.focus(); }}
+      >
+        {tokens.map(t => (
+          <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: st.bg, color: st.fg, borderRadius: 7, padding: '3px 7px', fontSize: 12, fontWeight: 500 }}>
+            {t}
+            <button
+              onClick={e => { e.stopPropagation(); onChange(tokens.filter(x => x !== t)); }}
+              aria-label={`Remove ${t}`}
+              style={{ font: 'inherit', lineHeight: 1, color: 'inherit', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', opacity: 0.55 }}
+            >×</button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          // Comma commits too, so pasting a comma-separated list still works.
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(); }
+            else if (e.key === 'Backspace' && !draft && tokens.length) onChange(tokens.slice(0, -1));
+          }}
+          onBlur={commit}
+          placeholder={tokens.length ? '' : placeholder}
+          style={{ flex: 1, minWidth: 90, border: 'none', outline: 'none', font: 'inherit', fontSize: 12.5, color: NW.black, background: 'transparent', padding: '2px 0' }}
+        />
+      </div>
+      <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 5 }}>{help}</div>
+    </div>
+  );
+}
+
+// The only block on the page that PULLS people in — deliberately the most
+// prominent thing here, and visually distinct from the filter toolbar below.
+// A white card with a gradient header, not a tinted panel: the tint made the
+// whole tab read as one washed-out surface with no clear action.
+function SourcePanel({ plan, countries, setCountries, onRun, busy, include, setInclude, exclude, setExclude, onViewPlan }: {
+  plan: SearchPlan | null; countries: string[]; setCountries: (c: string[]) => void;
   onRun: (mode: 'ai' | 'more') => void; busy: false | 'ai' | 'more';
-  include: string; setInclude: (v: string) => void;
-  exclude: string; setExclude: (v: string) => void;
+  include: string[]; setInclude: (v: string[]) => void;
+  exclude: string[]; setExclude: (v: string[]) => void;
+  onViewPlan: () => void;
 }) {
   const hasPlan = !!(plan && plan.phrases && plan.phrases.length);
   const nOn = countries.length;
   const allOn = nOn === SRC_COUNTRIES.length;
-  const toggle = (code: string) => setCountries(countries.includes(code) ? countries.filter(c => c !== code) : [...countries, code]);
+  const toggle = (code: string) =>
+    setCountries(countries.includes(code) ? countries.filter(c => c !== code) : [...countries, code]);
+
+  const headerBtn: CSSProperties = {
+    font: 'inherit', fontSize: 13.5, fontWeight: 600, height: 38, padding: '0 16px',
+    borderRadius: 999, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7,
+    whiteSpace: 'nowrap',
+  };
+
   return (
-    <div style={{ border: `1px solid ${NW.teal500}`, borderRadius: 16, padding: 18, marginBottom: 16, background: `linear-gradient(180deg, ${NW.teal50}, #fff 70%)` }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+    <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
+      {/* Header — the action, stated plainly */}
+      <div style={{ background: 'linear-gradient(100deg, #0E6B58, #16A085 62%, #1ABC9C)', color: NW.white, padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: NW.black, letterSpacing: '-0.02em' }}>{hasPlan ? `Pull a fresh batch from ${nOn} countr${nOn === 1 ? 'y' : 'ies'}` : 'Set up sourcing for this opening'}</div>
-          <div style={{ fontSize: 12.5, color: NW.gray600, marginTop: 3 }}>{hasPlan ? 'Runs append candidates — nothing is ever removed.' : 'AI Search reads the job post and writes the search plan (once).'}</div>
+          <div style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            {hasPlan ? `Pull a fresh batch from ${nOn} countr${nOn === 1 ? 'y' : 'ies'}` : 'Set up sourcing for this opening'}
+          </div>
+          <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 3 }}>
+            {hasPlan ? 'Runs append candidates — nothing is ever removed.' : 'AI Search reads the job post and writes the search plan (once).'}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {hasPlan && <Button size="lg" icon="plus" disabled={!!busy || !nOn} onClick={() => onRun('more')}>{busy === 'more' ? 'Searching…' : 'Find more candidates'}</Button>}
-          <Button variant={hasPlan ? 'secondary' : 'primary'} size="lg" icon="sparkles" disabled={!!busy || !nOn} onClick={() => onRun('ai')}>{busy === 'ai' ? 'AI thinking…' : hasPlan ? 'AI Search' : 'Run AI Search'}</Button>
-        </div>
-      </div>
-      {hasPlan && <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 8 }}>AI Search rewrites the plan — only needed if the role changes. Find more reuses it at no AI cost.</div>}
-
-      <div style={{ marginTop: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={lbl}>Countries to search · {nOn} of {SRC_COUNTRIES.length}</span>
-          <button onClick={() => setCountries(allOn ? [] : SRC_COUNTRIES.map(c => c.code))} style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{allOn ? 'Clear all' : 'Select all'}</button>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {SRC_COUNTRIES.map(c => { const on = countries.includes(c.code); return (
-            <button key={c.code} onClick={() => toggle(c.code)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', borderRadius: 999, padding: '6px 12px', border: `1px solid ${on ? NW.teal500 : NW.gray200}`, background: on ? NW.teal50 : NW.white, color: on ? NW.teal700 : NW.gray600 }}>
-              {on && <Icon name="check" size={12} color={NW.teal600} />}{c.name}
+          {/* Before a plan exists the hierarchy flips: AI Search is the only way in. */}
+          <button
+            onClick={() => onRun('ai')}
+            disabled={!!busy || !nOn}
+            style={{
+              ...headerBtn,
+              background: hasPlan ? 'rgba(255,255,255,.14)' : NW.white,
+              color: hasPlan ? NW.white : NW.teal700,
+              border: `1px solid ${hasPlan ? 'rgba(255,255,255,.4)' : 'transparent'}`,
+              opacity: (!!busy || !nOn) ? 0.55 : 1,
+              cursor: (!!busy || !nOn) ? 'default' : 'pointer',
+            }}
+          >
+            <Icon name="sparkles" size={15} color={hasPlan ? NW.white : NW.teal700} />
+            {busy === 'ai' ? 'AI thinking…' : hasPlan ? 'AI Search' : 'Run AI Search'}
+          </button>
+          {hasPlan && (
+            <button
+              onClick={() => onRun('more')}
+              disabled={!!busy || !nOn}
+              style={{
+                ...headerBtn, background: NW.white, color: NW.teal700, border: '1px solid transparent',
+                opacity: (!!busy || !nOn) ? 0.55 : 1, cursor: (!!busy || !nOn) ? 'default' : 'pointer',
+              }}
+            >
+              <Icon name="plus" size={15} color={NW.teal700} />
+              {busy === 'more' ? 'Searching…' : 'Find more candidates'}
             </button>
-          ); })}
-        </div>
-        {!nOn && <div style={{ fontSize: 12, color: '#B45309', marginTop: 8 }}>Pick at least one country.</div>}
-      </div>
-
-      {/* Manual steering, on top of the AI plan. The plan reads the job post;
-          this is where a recruiter adds what the client said afterwards — e.g.
-          "CRM people are fine for the Lifecycle role". */}
-      <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-        <div>
-          <label style={lbl}>Must include</label>
-          <input
-            value={include}
-            onChange={e => setInclude(e.target.value)}
-            placeholder="CRM, Klaviyo"
-            style={{ ...field, height: 36, width: '100%' }}
-          />
-          <div style={{ fontSize: 11, color: NW.gray500, marginTop: 4 }}>Searched as well as the AI plan — widens the net.</div>
-        </div>
-        <div>
-          <label style={lbl}>Exclude</label>
-          <input
-            value={exclude}
-            onChange={e => setExclude(e.target.value)}
-            placeholder="intern, freelance"
-            style={{ ...field, height: 36, width: '100%' }}
-          />
-          <div style={{ fontSize: 11, color: NW.gray500, marginTop: 4 }}>Kept out of the query and filtered from results.</div>
+          )}
         </div>
       </div>
 
+      {/* Body */}
+      <div style={{ padding: '16px 20px 18px', display: 'grid', gap: 16 }}>
+        {hasPlan && (
+          <div style={{ fontSize: 11.5, color: NW.gray500 }}>
+            AI Search rewrites the plan — only needed if the role changes. Find more reuses it at no AI cost.
+          </div>
+        )}
+
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
+            <span style={lbl}>
+              Countries to search <span style={{ color: NW.teal600 }}>{nOn} / {SRC_COUNTRIES.length}</span>
+            </span>
+            <button
+              onClick={() => setCountries(allOn ? [] : SRC_COUNTRIES.map(c => c.code))}
+              style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}
+            >{allOn ? 'Clear all' : 'Select all'}</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {SRC_COUNTRIES.map(c => {
+              const on = countries.includes(c.code);
+              return (
+                <button key={c.code} onClick={() => toggle(c.code)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit', fontSize: 12.5,
+                  fontWeight: on ? 600 : 500, cursor: 'pointer', borderRadius: 999, padding: '6px 12px',
+                  border: `1px solid ${on ? NW.teal500 : NW.gray200}`,
+                  background: on ? NW.teal50 : NW.white,
+                  color: on ? NW.teal700 : NW.gray600,
+                }}>
+                  {on && <Icon name="check" size={11} color={NW.teal500} />}{c.name}
+                </button>
+              );
+            })}
+          </div>
+          {!nOn && <div style={{ fontSize: 12, color: '#B45309', marginTop: 8 }}>Pick at least one country.</div>}
+        </div>
+
+        {/* Manual steering, on top of the AI plan */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+          <div>
+            <label style={lbl}>Must include</label>
+            <TokenField
+              tokens={include} onChange={setInclude} tone="include"
+              placeholder="Add a keyword…"
+              help="Searched as well as the AI plan — widens the net."
+            />
+          </div>
+          <div>
+            <label style={lbl}>Exclude</label>
+            <TokenField
+              tokens={exclude} onChange={setExclude} tone="exclude"
+              placeholder="Add a keyword…"
+              help="Kept out of the query and filtered from results."
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer — what the saved plan is */}
       {hasPlan && plan && (
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${NW.teal500}22` }}>
-          {plan.aliases?.length ? (
-            <div style={{ fontSize: 11.5, color: NW.gray600, marginBottom: 3 }}>
-              <Icon name="target" size={11} color={NW.teal600} /> Read as <span style={{ fontWeight: 600, color: NW.gray800 }}>{plan.aliases.join(' · ')}</span>{plan.domain ? <span style={{ color: NW.gray400 }}> · every search anchored to <b>{plan.domain}</b></span> : null}
-            </div>
-          ) : null}
-          <div style={{ fontSize: 11.5, color: NW.gray500 }}>Search plan · {plan.runs || 0} run{plan.runs === 1 ? '' : 's'} · {(plan.phrases || []).slice(0, 3).join(' · ')}{(plan.phrases || []).length > 3 ? '…' : ''}</div>
+        <div style={{ background: NW.gray50, borderTop: `1px solid ${NW.gray100}`, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, padding: '2px 8px' }}>
+            {plan.runs || 0} run{plan.runs === 1 ? '' : 's'}
+          </span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: NW.gray500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Search plan</span>
+          <span style={{ flex: 1, minWidth: 120, fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {(plan.phrases || []).join(' · ')}
+          </span>
+          {typeof plan.kept === 'number' && (
+            <span style={{ fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap' }}>{plan.kept} kept</span>
+          )}
+          <button onClick={onViewPlan} style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: 'transparent', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            View plan
+          </button>
         </div>
       )}
     </div>
@@ -332,8 +453,8 @@ export function SourcingTab({ op }: { op: Opening }) {
   const [runNote, setRunNote] = useState('');
   // Manual steering, remembered across runs within the session so "Find more"
   // keeps whatever the recruiter dialled in.
-  const [include, setInclude] = useState('');
-  const [exclude, setExclude] = useState('');
+  const [include, setInclude] = useState<string[]>([]);
+  const [exclude, setExclude] = useState<string[]>([]);
   // Audit trail. Served by the API — searchRuns has no Firestore rule of its own.
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [fRef, setFRef] = useState('');
@@ -405,6 +526,17 @@ export function SourcingTab({ op }: { op: Opening }) {
   }, [openingId]);
 
   useEffect(() => { loadRuns(); }, [loadRuns]);
+
+  // Seed the steering from this opening's most recent run, so re-running picks
+  // up where the last one left off instead of silently dropping the keywords.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !runs.length) return;
+    seeded.current = true;
+    const last = runs[0];   // loadRuns returns newest first
+    if (last.include?.length) setInclude(last.include);
+    if (last.exclude?.length) setExclude(last.exclude);
+  }, [runs]);
 
   async function runSearch(mode: 'ai' | 'more') {
     if (!countries.length || busy) return;
@@ -525,7 +657,10 @@ export function SourcingTab({ op }: { op: Opening }) {
                 <td style={{ padding: '8px 14px' }}><SalaryCell value={r.salary} onSave={v => save(r.id, { salary: v })} /></td>
                 <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>{isApplied(r) ? <span style={{ color: NW.green600, fontWeight: 600, fontSize: 12 }}>✓ Applied</span> : <span style={{ color: NW.gray400 }}>—</span>}</td>
                 <td style={{ padding: '8px 14px', color: NW.gray500, fontSize: 12, whiteSpace: 'nowrap', width: 110 }}>{r.last || '—'}</td>
-                <td style={{ padding: '8px 14px', borderLeft: `1px solid ${NW.gray100}`, maxWidth: 200 }}>
+                {/* Pinned right: notes survive the horizontal scroll. The background
+                    must be opaque and match the row, or the scrolled columns show
+                    through underneath it. */}
+                <td style={{ padding: '8px 14px', borderLeft: `1px solid ${NW.gray100}`, width: 200, position: 'sticky', right: 0, background: NW.white, zIndex: 1 }}>
                   <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>
                 </td>
               </tr>
@@ -533,18 +668,45 @@ export function SourcingTab({ op }: { op: Opening }) {
 
   return (
     <div style={{ marginTop: 4 }}>
-      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} />
+      <SourcePanel plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} onViewPlan={() => setModal('plan')} />
       {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
       {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
 
-      {/* Pipeline counts — click to filter */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        {SRC_STATUSES.map(s => { const on = fStatus === s; const st = STATUS_STYLE[s]; return (
-          <button key={s} onClick={() => setFStatus(on ? '' : s)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5, cursor: 'pointer', borderRadius: 999, padding: '5px 12px', background: st.bg, color: st.fg, border: `1px solid ${on ? st.fg : st.fg + '22'}`, boxShadow: on ? `0 0 0 2px ${st.fg}22` : 'none' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot }} />{s}<b>{counts[s] || 0}</b>
-          </button>
-        ); })}
-        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{total} sourced</span>
+      {/* Status funnel — the shape of the pipeline, and the status filter.
+          Each card carries a track filled to its share of the total, so a
+          board that is 80% "New" reads as untouched at a glance. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {SRC_STATUSES.map(st => {
+          const c = counts[st] || 0;
+          const on = fStatus === st;
+          const style = STATUS_STYLE[st];
+          return (
+            <button
+              key={st}
+              onClick={() => setFStatus(on ? '' : st)}
+              style={{
+                flex: '1 1 0', minWidth: 150, textAlign: 'left', font: 'inherit', cursor: 'pointer',
+                background: NW.white, borderRadius: 13, padding: '12px 14px 10px',
+                border: `1px solid ${on ? style.dot : NW.gray100}`,
+                boxShadow: on ? `inset 0 0 0 1px ${style.dot}` : 'none',
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: on ? style.fg : NW.black }}>{c}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: NW.gray500, marginTop: 1 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: style.dot, flexShrink: 0 }} />
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st}</span>
+              </div>
+              <div style={{ height: 3, background: NW.gray100, borderRadius: 2, marginTop: 9, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: total ? `${(c / total) * 100}%` : '0%', background: style.dot }} />
+              </div>
+            </button>
+          );
+        })}
+        <div style={{ flex: '1 1 0', minWidth: 150, background: NW.offWhite, borderRadius: 13, padding: '12px 14px 10px', border: `1px solid ${NW.gray100}` }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: NW.black }}>{total}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: NW.gray500, marginTop: 1 }}>Sourced · kept</div>
+          <div style={{ height: 3, background: NW.gray200, borderRadius: 2, marginTop: 9 }} />
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -584,13 +746,13 @@ export function SourcingTab({ op }: { op: Opening }) {
 
       {/* Table */}
       <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
-        <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 900, fontSize: 13 }}>
+        <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 1420, fontSize: 13 }}>
           <thead>
             <tr style={{ background: NW.gray50 }}>
               {([['name', 'Candidate'], ['location', 'Location'], ['source', 'Source'], ['owner', 'Owner'], ['status', 'Status'], ['salary', 'Salary exp.'], ['applied', 'Applied'], ['last', 'Last action'], ['', 'Notes']] as const).map(([key, label], i) => {
                 const active = !!key && sort?.key === key;
                 return (
-                  <th key={label} onClick={key ? () => toggleSort(key) : undefined} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? NW.gray700 : NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>
+                  <th key={label} onClick={key ? () => toggleSort(key) : undefined} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? NW.gray700 : NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none', ...(key === 'status' ? { width: 340 } : {}), ...(i === 8 ? { width: 200, borderLeft: `1px solid ${NW.gray100}`, position: 'sticky', right: 0, background: NW.gray50, zIndex: 1 } : {}) }}>
                     {label}{active ? (sort!.dir === 1 ? ' ↑' : ' ↓') : ''}
                   </th>
                 );

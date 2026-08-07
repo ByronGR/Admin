@@ -7,7 +7,7 @@
 // Candidates + plan live in Firestore (sourcedCandidates / searchPlans).
 // ============================================================
 
-import { useState, useEffect, useMemo, useRef, useCallback, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment, type CSSProperties, type ReactNode } from 'react';
 import {
   db, auth, collection, query, where, onSnapshot, doc, updateDoc, addDoc, getDoc, serverTimestamp,
 } from '@/lib/firebase';
@@ -338,6 +338,7 @@ export function SourcingTab({ op }: { op: Opening }) {
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [fRef, setFRef] = useState('');
   const [refDetail, setRefDetail] = useState<SearchRun | null>(null);
+  const [groupByRef, setGroupByRef] = useState(false);
 
   // Filters
   const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
@@ -467,64 +468,30 @@ export function SourcingTab({ op }: { op: Opening }) {
   const pageRows = sortedFiltered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
   const toggleSort = (key: string) => setSort(prev => (prev?.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
-  return (
-    <div style={{ marginTop: 4 }}>
-      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} />
-      {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
-      {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
+  // Grouped view: which search each candidate CAME FROM. Someone can carry
+  // several refs (a later run found them again), so they're filed under the
+  // first — that's their origin. The others still show as badges on the row.
+  const groups = useMemo(() => {
+    if (!groupByRef) return null;
+    const bucket = new Map<string, SourcedCandidate[]>();
+    for (const r of pageRows) {
+      const key = (r.refs || [])[0] || '';   // '' = manual, or sourced before refs existed
+      if (!bucket.has(key)) bucket.set(key, []);
+      bucket.get(key)!.push(r);
+    }
+    return [...bucket.entries()]
+      .map(([ref, list]) => ({ ref, list, run: runs.find(x => x.ref === ref) || null }))
+      // Newest search first; the untracked bucket always sits last.
+      .sort((a, b) => {
+        if (!a.ref) return 1;
+        if (!b.ref) return -1;
+        return Number(b.ref.slice(1)) - Number(a.ref.slice(1));
+      });
+  }, [groupByRef, pageRows, runs]);
 
-      {/* Pipeline counts — click to filter */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        {SRC_STATUSES.map(s => { const on = fStatus === s; const st = STATUS_STYLE[s]; return (
-          <button key={s} onClick={() => setFStatus(on ? '' : s)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5, cursor: 'pointer', borderRadius: 999, padding: '5px 12px', background: st.bg, color: st.fg, border: `1px solid ${on ? st.fg : st.fg + '22'}`, boxShadow: on ? `0 0 0 2px ${st.fg}22` : 'none' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot }} />{s}<b>{counts[s] || 0}</b>
-          </button>
-        ); })}
-        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{total} sourced</span>
-      </div>
-
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or LinkedIn" style={{ ...field, width: 200 }} />
-        <select value={fCountry} onChange={e => setFCountry(e.target.value)} style={field}><option value="">All countries</option>{[...new Set(rows.map(r => r.country).filter(Boolean))].map(c => <option key={c}>{c}</option>)}</select>
-        <select value={fOwner} onChange={e => setFOwner(e.target.value)} style={field}><option value="">All owners</option><option value="none">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
-        <select value={fSource} onChange={e => setFSource(e.target.value)} style={field}><option value="">All sources</option><option>X-ray</option><option>Manual</option></select>
-        {runs.length > 0 && (
-          <select value={fRef} onChange={e => setFRef(e.target.value)} style={field} title="Which search surfaced them">
-            <option value="">All searches</option>
-            {runs.map(r => <option key={r.ref} value={r.ref}>{r.ref} · {r.found} found</option>)}
-          </select>
-        )}
-        {fRef && (() => {
-          const run = runs.find(r => r.ref === fRef);
-          return run ? (
-            <button onClick={() => setRefDetail(run)} style={{ ...field, cursor: 'pointer', color: NW.teal700, fontWeight: 600 }}>
-              What did {fRef} target?
-            </button>
-          ) : null;
-        })()}
-        <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>
-        {plan?.phrases?.length ? <button onClick={() => setModal('plan')} style={{ ...field, cursor: 'pointer', color: NW.gray700 }}>View plan</button> : null}
-        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{isFiltered ? `${filtered.length} of ${total}` : `${total} candidates`}</span>
-      </div>
-
-      {/* Table */}
-      <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
-        <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 900, fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: NW.gray50 }}>
-              {([['name', 'Candidate'], ['location', 'Location'], ['source', 'Source'], ['owner', 'Owner'], ['status', 'Status'], ['salary', 'Salary exp.'], ['applied', 'Applied'], ['last', 'Last action'], ['', 'Notes']] as const).map(([key, label], i) => {
-                const active = !!key && sort?.key === key;
-                return (
-                  <th key={label} onClick={key ? () => toggleSort(key) : undefined} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? NW.gray700 : NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>
-                    {label}{active ? (sort!.dir === 1 ? ' ↑' : ' ↓') : ''}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map(r => (
+  // One candidate row. Shared by the flat and grouped views so the two can never
+  // drift apart.
+  const renderRow = (r: SourcedCandidate) => (
               <tr key={r.id} style={{ borderTop: `1px solid ${NW.gray100}`, height: 56 }}>
                 <td style={{ padding: '8px 14px' }}>
                   <div style={{ maxWidth: 230, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -562,7 +529,118 @@ export function SourcingTab({ op }: { op: Opening }) {
                   <button onClick={() => setNotesRow(r)} style={{ font: 'inherit', fontSize: 12, color: r.notes ? NW.gray700 : NW.teal600, background: 'transparent', border: r.notes ? 'none' : `1px dashed ${NW.gray200}`, borderRadius: 7, cursor: 'pointer', padding: r.notes ? 0 : '3px 8px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.notes || 'Add note'}</button>
                 </td>
               </tr>
-            ))}
+  );
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <SourcePanel opening={op} plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} />
+      {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
+      {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
+
+      {/* Pipeline counts — click to filter */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {SRC_STATUSES.map(s => { const on = fStatus === s; const st = STATUS_STYLE[s]; return (
+          <button key={s} onClick={() => setFStatus(on ? '' : s)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5, cursor: 'pointer', borderRadius: 999, padding: '5px 12px', background: st.bg, color: st.fg, border: `1px solid ${on ? st.fg : st.fg + '22'}`, boxShadow: on ? `0 0 0 2px ${st.fg}22` : 'none' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot }} />{s}<b>{counts[s] || 0}</b>
+          </button>
+        ); })}
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{total} sourced</span>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or LinkedIn" style={{ ...field, width: 200 }} />
+        <select value={fCountry} onChange={e => setFCountry(e.target.value)} style={field}><option value="">All countries</option>{[...new Set(rows.map(r => r.country).filter(Boolean))].map(c => <option key={c}>{c}</option>)}</select>
+        <select value={fOwner} onChange={e => setFOwner(e.target.value)} style={field}><option value="">All owners</option><option value="none">Unassigned</option>{SRC_OWNERS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
+        <select value={fSource} onChange={e => setFSource(e.target.value)} style={field}><option value="">All sources</option><option>X-ray</option><option>Manual</option></select>
+        {runs.length > 0 && (
+          <select value={fRef} onChange={e => setFRef(e.target.value)} style={field} title="Which search surfaced them">
+            <option value="">All searches</option>
+            {runs.map(r => <option key={r.ref} value={r.ref}>{r.ref} · {r.found} found</option>)}
+          </select>
+        )}
+        {fRef && (() => {
+          const run = runs.find(r => r.ref === fRef);
+          return run ? (
+            <button onClick={() => setRefDetail(run)} style={{ ...field, cursor: 'pointer', color: NW.teal700, fontWeight: 600 }}>
+              What did {fRef} target?
+            </button>
+          ) : null;
+        })()}
+        {runs.length > 0 && (
+          <button
+            onClick={() => setGroupByRef(v => !v)}
+            title="Show candidates under the search that found them"
+            style={{ ...field, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, color: groupByRef ? NW.teal700 : NW.gray700, background: groupByRef ? NW.teal50 : NW.white, borderColor: groupByRef ? NW.teal500 : NW.gray200 }}
+          >
+            <Icon name="layers" size={14} color={groupByRef ? NW.teal600 : NW.gray600} />
+            {groupByRef ? 'Grouped by search' : 'Group by search'}
+          </button>
+        )}
+        <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>
+        {plan?.phrases?.length ? <button onClick={() => setModal('plan')} style={{ ...field, cursor: 'pointer', color: NW.gray700 }}>View plan</button> : null}
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, color: NW.gray500 }}>{isFiltered ? `${filtered.length} of ${total}` : `${total} candidates`}</span>
+      </div>
+
+      {/* Table */}
+      <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 14, overflowX: 'auto', background: NW.white }}>
+        <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: 900, fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: NW.gray50 }}>
+              {([['name', 'Candidate'], ['location', 'Location'], ['source', 'Source'], ['owner', 'Owner'], ['status', 'Status'], ['salary', 'Salary exp.'], ['applied', 'Applied'], ['last', 'Last action'], ['', 'Notes']] as const).map(([key, label], i) => {
+                const active = !!key && sort?.key === key;
+                return (
+                  <th key={label} onClick={key ? () => toggleSort(key) : undefined} style={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? NW.gray700 : NW.gray400, padding: '10px 14px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none', ...(i === 8 ? { borderLeft: `1px solid ${NW.gray100}` } : {}) }}>
+                    {label}{active ? (sort!.dir === 1 ? ' ↑' : ' ↓') : ''}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {groups
+              ? groups.map(g => (
+                  <Fragment key={g.ref || '_none'}>
+                    <tr>
+                      <td colSpan={9} style={{ background: NW.gray50, borderTop: `2px solid ${NW.gray200}`, padding: '9px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11.5, fontWeight: 800, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 6, padding: '2px 7px' }}>
+                            {g.ref || 'Not from a search'}
+                          </span>
+                          <span style={{ fontSize: 12, color: NW.gray700, fontWeight: 600 }}>
+                            {g.list.length} candidate{g.list.length === 1 ? '' : 's'}
+                          </span>
+                          {g.run ? (
+                            <>
+                              <span style={{ fontSize: 11.5, color: NW.gray500 }}>
+                                {new Date(g.run.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                {' · '}{(g.run.countries || []).length} countr{(g.run.countries || []).length === 1 ? 'y' : 'ies'}
+                                {g.run.mode === 'ai' ? ' · AI plan rewritten' : ''}
+                              </span>
+                              {g.run.include && g.run.include.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#047857', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 999, padding: '1px 8px' }}>
+                                  +{g.run.include.join(', ')}
+                                </span>
+                              )}
+                              {g.run.exclude && g.run.exclude.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 999, padding: '1px 8px' }}>
+                                  &minus;{g.run.exclude.join(', ')}
+                                </span>
+                              )}
+                              <button onClick={() => setRefDetail(g.run)} style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+                                Details
+                              </button>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 11.5, color: NW.gray500 }}>Added by hand, or sourced before search tracking existed.</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {g.list.map(renderRow)}
+                  </Fragment>
+                ))
+              : pageRows.map(renderRow)}
             {!filtered.length && (
               <tr><td colSpan={9} style={{ padding: '32px 14px', textAlign: 'center', color: NW.gray400, fontSize: 13 }}>{total ? 'No candidates match these filters.' : 'No one sourced yet — run AI Search or add manually.'}</td></tr>
             )}

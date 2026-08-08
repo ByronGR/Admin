@@ -25,7 +25,7 @@ import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { AssessmentsSection } from './assessments-section';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience, candidatePhoto } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience, candidatePhoto, workPeriod } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -1121,7 +1121,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                       <div style={{ paddingBottom: 20, flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{w.title || 'Role'}</span>
-                          {(w.from || w.to) && <span style={{ fontSize: 12, color: NW.gray400 }}>{w.from || '?'} – {w.to === 'present' ? 'Present' : (w.to || '?')}</span>}
+                          {workPeriod(w) && <span style={{ fontSize: 12, color: NW.gray400 }}>{workPeriod(w)}</span>}
                         </div>
                         {w.company && (
                           <div style={{ fontSize: 13, color: NW.teal700, fontWeight: 500, marginTop: 2 }}>

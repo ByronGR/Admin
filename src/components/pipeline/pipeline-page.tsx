@@ -46,7 +46,7 @@ import { useToast } from '@/components/ui/toast';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useAuth } from '@/hooks/use-auth';
-import { initials, snakeToTitle, fmtCurrency, fmtDate, yearsOfExperience } from '@/lib/utils';
+import { initials, snakeToTitle, fmtCurrency, fmtDate, yearsOfExperience, workPeriod } from '@/lib/utils';
 import type { Pipeline, PipelineCandidate, Candidate, CEFRLevel, DropOffReason, Timestamp, Opening } from '@/lib/types';
 import { scoreCandidate, type MatchDetail } from '@/lib/candidate-match';
 import { stagesFor, isSourcing, normalizeSourcingStage, stageLabel, type StageDef } from '@/lib/pipeline-stages';
@@ -2373,7 +2373,7 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
                       <p className="text-[11px] text-[var(--mid)]">{w.company || '—'}</p>
                       {(w.from || w.to) && (
                         <p className="mt-0.5 text-[10px] text-[var(--light)]">
-                          {w.from || '?'} → {w.to === 'present' ? 'Present' : w.to || '?'}
+                          {workPeriod(w)}
                         </p>
                       )}
                     </div>

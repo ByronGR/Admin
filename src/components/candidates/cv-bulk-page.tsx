@@ -1,4 +1,5 @@
 'use client';
+import { workPeriod } from '@/lib/utils';
 
 // ── Bulk CV parsing + review ─────────────────────────────────────────────────
 // Parses every candidate who has a CV on file, then lets staff check the result
@@ -325,7 +326,7 @@ export default function CVBulkPage() {
                         <div key={i} style={{ marginTop: 7, paddingLeft: 10, borderLeft: `2px solid ${NW.gray100}` }}>
                           <div style={{ fontWeight: 600 }}>{w.title}</div>
                           <div style={{ color: NW.gray500 }}>
-                            {[w.company, [w.from, w.to].filter(Boolean).join(' – '), w.location].filter(Boolean).join(' · ')}
+                            {[w.company, workPeriod(w), w.location].filter(Boolean).join(' · ')}
                           </div>
                           {w.accomplishments?.map((a, j) => (
                             <div key={j} style={{ color: NW.teal700, marginTop: 3 }}>★ {a}</div>

@@ -135,6 +135,132 @@ const ATT_TONE: Record<string, { fg: string; bg: string; icon: IconName }> = {
   system: { fg: '#1D4ED8', bg: NW.blue50, icon: 'info' },
 };
 
+// ── Candidate intake ─────────────────────────────────────────────────────────
+// How many candidates arrived each month, since the first one. The number that
+// says whether the top of the funnel is growing — which nothing else on this
+// page answers, since every other figure is a snapshot of right now.
+//
+// Undated records are counted separately rather than dropped or lumped into the
+// earliest month: a KPI that quietly under-reports is worse than one that says
+// what it can't see.
+
+interface IntakeMonth { key: string; label: string; n: number }
+
+function buildIntake(candidates: Candidate[]): { months: IntakeMonth[]; undated: number; total: number } {
+  const buckets = new Map<string, number>();
+  let undated = 0;
+
+  for (const c of candidates) {
+    // A bare "2026-08-01" parses as UTC midnight, which is the previous day in
+    // LATAM — bucketing it by the local calendar would file an August sign-up
+    // under July. Read date-only strings as written; everything else is a real
+    // instant and gets bucketed in local time, which is what "how many did we
+    // get in March" means to whoever is reading this.
+    const raw = c.createdAt as unknown;
+    let key = '';
+    if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      key = raw.slice(0, 7);
+    } else {
+      const ms = toMs(raw);
+      if (!ms) { undated++; continue; }
+      const d = new Date(ms);
+      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    buckets.set(key, (buckets.get(key) || 0) + 1);
+  }
+  if (!buckets.size) return { months: [], undated, total: candidates.length };
+
+  // Fill the gaps: a month with no candidates is a real, meaningful zero, and
+  // leaving it out would draw a flat line over a gap that actually happened.
+  const keys = [...buckets.keys()].sort();
+  const [fy, fm] = keys[0].split('-').map(Number);
+  const now = new Date();
+  const months: IntakeMonth[] = [];
+  const cursor = new Date(fy, fm - 1, 1);
+  while (cursor <= now) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+    months.push({
+      key,
+      label: cursor.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      n: buckets.get(key) || 0,
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return { months, undated, total: candidates.length };
+}
+
+function CandidateIntake({ candidates }: { candidates: Candidate[] }) {
+  const { months, undated, total } = buildIntake(candidates);
+  if (!months.length) {
+    return (
+      <Card>
+        <CardHead icon="trending-up" title="Candidate intake" sub="No dated candidates yet" />
+        <div style={{ padding: '18px 20px', fontSize: 13, color: NW.gray400 }}>
+          Nothing to chart yet.
+        </div>
+      </Card>
+    );
+  }
+
+  const peak = Math.max(...months.map((m) => m.n), 1);
+  const thisMonth = months[months.length - 1];
+  const lastMonth = months[months.length - 2];
+  const delta = lastMonth ? thisMonth.n - lastMonth.n : null;
+  const dated = total - undated;
+  const avg = Math.round(dated / months.length);
+
+  // Long histories get scrolled rather than squashed into unreadable slivers.
+  const recent = months.slice(-24);
+
+  return (
+    <Card>
+      <CardHead
+        icon="trending-up"
+        title="Candidate intake"
+        sub={`${dated} candidates over ${months.length} month${months.length === 1 ? '' : 's'} · ${avg}/mo average`}
+      />
+      <div style={{ padding: '14px 20px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', color: NW.black }}>{thisMonth.n}</span>
+          <span style={{ fontSize: 12.5, color: NW.gray500 }}>this month</span>
+          {delta !== null && (
+            <span style={{
+              fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '2px 8px',
+              color: delta > 0 ? '#047857' : delta < 0 ? '#B45309' : NW.gray500,
+              background: delta > 0 ? '#ECFDF5' : delta < 0 ? '#FFFBEB' : NW.gray50,
+            }}>
+              {delta > 0 ? '+' : ''}{delta} vs last month
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, overflowX: 'auto', paddingBottom: 4 }}>
+          {recent.map((m) => (
+            <div key={m.key} title={`${m.label}: ${m.n}`} style={{ flex: '1 0 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 22 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: m.n ? NW.gray600 : NW.gray300 }}>{m.n}</span>
+              <div style={{
+                width: '100%',
+                // Always a sliver for an empty month, so the axis reads as a
+                // continuous timeline rather than a gap in the data.
+                height: Math.max(3, Math.round((m.n / peak) * 82)),
+                borderRadius: 4,
+                background: m.n ? (m.key === thisMonth.key ? NW.teal500 : NW.teal100) : NW.gray100,
+              }} />
+              <span style={{ fontSize: 9, color: NW.gray400, whiteSpace: 'nowrap', transform: 'rotate(-45deg)', transformOrigin: 'center', height: 14 }}>{m.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {undated > 0 && (
+          <div style={{ marginTop: 12, fontSize: 11.5, color: NW.gray500, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '8px 11px' }}>
+            {undated} candidate{undated === 1 ? '' : 's'} have no sign-up date and aren&rsquo;t counted above — imported, or created before the field was recorded.
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function AttentionRow({ n, onOpen }: { n: AppNotification; onOpen: () => void }) {
   const t = ATT_TONE[n.type] || ATT_TONE.system;
   const [hov, setHov] = useState(false);
@@ -317,6 +443,8 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [detail, setDetail] = useState<AppNotification | null>(null);
   const [stats, setStats] = useState<DashStats | null>(null);
+  // Kept whole (not just counted) so the intake panel can bucket by month.
+  const [allCandidates, setAllCandidates] = useState<Candidate[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [bandwidth, setBandwidth] = useState<BandwidthItem[]>([]);
   const [funnel, setFunnel] = useState<FunnelItem[]>([]);
@@ -361,6 +489,7 @@ export default function DashboardPage() {
       const orgs = docsOf<Organization>(orgsRes);
       const openings = docsOf<Opening>(openingsRes);
       const candidates = docsOf<Candidate>(candidatesRes);
+      setAllCandidates(candidates);
       const pipelines = docsOf<Pipeline>(pipelinesRes);
       const placements = docsOf<Placement>(placementsRes);
       const applications = docsOf<AppDoc>(applicationsRes);
@@ -484,6 +613,12 @@ export default function DashboardPage() {
         <StatCard icon="briefcase" label="Open openings" value={stats?.activeOpenings ?? '—'} sub={`${stats?.totalOpenings ?? 0} total`} />
         <StatCard icon="users" label="Candidates in ATS" value={stats?.totalCandidates ?? '—'} sub={`${stats?.activeCandidates ?? 0} active`} />
         <StatCard icon="party-popper" label="Hires this month" value={stats?.hiresThisMonth ?? '—'} sub={stats?.recentHireNames ?? '—'} />
+      </div>
+
+      {/* Candidate intake — the only growth number on this page; everything
+          else here is a snapshot of right now. */}
+      <div style={{ marginBottom: 18 }}>
+        <CandidateIntake candidates={allCandidates} />
       </div>
 
       {/* Attention + activity */}

@@ -391,3 +391,24 @@ export function candidateJobTitle(c: {
   const recent = (c.workHistory || []).map((w) => s(w?.title)).find(Boolean);
   return recent || head || '';
 }
+
+/**
+ * Any of the timestamp shapes a Firestore record carries → milliseconds.
+ * Records reach us as Firestore Timestamps, plain {seconds} objects after a
+ * round-trip, or ISO strings written by the Talent app. Returns 0 when there's
+ * no usable date, so callers can treat "unknown" as oldest.
+ */
+export function tsToMs(v: unknown): number {
+  if (!v) return 0;
+  if (typeof v === 'object' && v !== null && 'toMillis' in v) {
+    return (v as { toMillis(): number }).toMillis();
+  }
+  if (typeof v === 'object' && v !== null && 'seconds' in v) {
+    return (v as { seconds: number }).seconds * 1000;
+  }
+  if (typeof v === 'string' || typeof v === 'number') {
+    const ms = new Date(v).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  return 0;
+}

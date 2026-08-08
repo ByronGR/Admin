@@ -18,7 +18,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName, candidatePhoto, candidateJobTitle } from '@/lib/utils';
+import { initials, sortByTimestamp, tsToMs, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName, candidatePhoto, candidateJobTitle } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
@@ -288,10 +288,17 @@ export default function CandidatesPage() {
   else if (listTab === 'inactive') rows = rows.filter((c) => !isActiveCandidate(c));
   if (roleG !== 'all') rows = rows.filter((c) => roleGroup(candRole(c)) === roleG);
   if (cityF !== 'all') rows = rows.filter((c) => candCity(c) === cityF);
+  // Newest first by default. Sorted explicitly rather than leaning on the order
+  // the snapshot happened to arrive in: `return 0` only looks sorted for as long
+  // as nothing upstream reorders, and a candidate with no createdAt would sit
+  // wherever Firestore left them. Missing dates sort last — unknown is not new.
+  const addedMs = (c: Candidate) => tsToMs(c.createdAt) || 0;
   rows = [...rows].sort((a, b) => {
     if (sortF === 'name') return (a.name || '').localeCompare(b.name || '');
     if (sortF === 'salary') return (Number(b.expectedSalaryAmount ?? b.expectedSalary ?? 0)) - (Number(a.expectedSalaryAmount ?? a.expectedSalary ?? 0));
-    return 0; // 'recent' — list is already sorted by createdAt desc
+    const d = addedMs(b) - addedMs(a);
+    // Same day (or both undated): a stable, readable tie-break beats arbitrary.
+    return d !== 0 ? d : (a.name || '').localeCompare(b.name || '');
   });
   const display = rows;
 

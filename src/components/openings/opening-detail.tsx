@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   collection,
   query,
   where,
@@ -23,7 +24,8 @@ import { StaffPicker } from '@/components/ui/staff-picker';
 import { OpeningAdminControls } from './opening-admin-controls';
 import { SourcingTab } from './sourcing-tab';
 import { MatchesTab } from './matches-tab';
-import { scoreCandidate, type MatchDetail } from '@/lib/candidate-match';
+import { scoreCandidate } from '@/lib/candidate-match';
+import { approveApplicant, rejectApplicant, type ApplicantDoc } from '@/lib/applicant-actions';
 import { fmtDate, fmtCurrency, initials } from '@/lib/utils';
 import type { Opening, Organization, WorkMode, Pipeline, PipelineCandidate, Candidate } from '@/lib/types';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
@@ -73,6 +75,113 @@ export function BriefStatusBadge({ status, loading }: { status: string | null; l
 }
 
 // ── Unified opening detail ────────────────────────────────────────────────────
+// Forward stages only — "Not Selected" is terminal and must never render as
+// the last step of a funnel. Colours follow the design tokens.
+const FORWARD_STAGES = [
+  { key: 'applied', label: 'Applied', color: '#3B82F6' },
+  { key: 'background-check', label: 'Background', color: '#EAB308' },
+  { key: 'interview', label: 'Interview', color: '#AF7AC5' },
+  { key: 'assessment', label: 'Assessment', color: '#AF7AC5' },
+  { key: 'partner-review', label: 'Client review', color: '#16A085' },
+  { key: 'partner-interview', label: 'Final round', color: '#12866E' },
+  { key: 'hired', label: 'Hired', color: '#16A34A' },
+];
+
+// ── Row-based pipeline pieces ────────────────────────────────────────────────
+
+/** A candidate row. The stage-coloured left border is the whole point: you can
+ *  read the shape of the pipeline down the left edge without reading a word. */
+function WorkRow({ accent, name, sub, right, onOpen }: {
+  accent: string; name: string; sub?: string; right?: React.ReactNode; onOpen?: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, background: NW.white, border: `1px solid ${hover ? NW.gray200 : NW.gray100}`, borderLeft: `3px solid ${accent}` }}
+    >
+      <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: onOpen ? 'pointer' : 'default' }}>
+        <NWAvatar initials={initials(name) || '—'} size={32} bg={accent} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+          {sub && <div style={{ fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>{right}</div>
+    </div>
+  );
+}
+
+/** Progress at a glance. Stages already passed sit at reduced opacity so the
+ *  current one reads as current rather than as one more filled dot. */
+function StageDots({ current }: { current: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {FORWARD_STAGES.map((s, i) => {
+        const reached = i <= current;
+        const size = i === current ? 9 : 6;
+        return (
+          <span key={s.key} title={s.label} style={{ width: size, height: size, borderRadius: '50%', background: reached ? s.color : NW.gray200, opacity: reached && i < current ? 0.45 : 1 }} />
+        );
+      })}
+    </span>
+  );
+}
+
+function ScorePill({ score }: { score: number }) {
+  const c = score >= 70 ? { bg: '#ECFDF5', fg: '#047857' }
+    : score >= 45 ? { bg: '#FFFBEB', fg: '#B45309' }
+    : { bg: '#F1F5F9', fg: '#64748B' };
+  return (
+    <span style={{ fontSize: 11.5, fontWeight: 700, color: c.fg, background: c.bg, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+      {score}<span style={{ opacity: 0.6, fontWeight: 500 }}>/100</span>
+    </span>
+  );
+}
+
+function EmptyBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ border: `1px dashed ${NW.gray200}`, borderRadius: 12, padding: 14, fontSize: 12.5, color: NW.gray400 }}>{children}</div>
+  );
+}
+
+/** Reject needs a reason, so it's a menu rather than a bare button — a rejection
+ *  with no recorded reason is a decision nobody can revisit later. */
+function RejectMenu({ onPick }: { onPick: (reason: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const REASONS = [
+    'Not enough experience', 'Wrong discipline', 'English level', 'Salary expectation',
+    'Not in LATAM', 'Applied to a better-fit role', 'Incomplete application',
+    'No CV attached', 'Duplicate application', 'Other',
+  ];
+  return (
+    <span style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ font: 'inherit', fontSize: 12, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+      >Reject ▾</button>
+      {open && (
+        <>
+          {/* Click-away layer, so the menu closes without a document listener. */}
+          <span onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+          <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 21, background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.14)', padding: 5, minWidth: 210 }}>
+            {REASONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => { setOpen(false); onPick(r); }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', fontSize: 12.5, color: NW.gray700, background: 'transparent', border: 'none', borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = NW.gray50; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >{r}</button>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 export function OpeningDetail({
   opening,
   orgs,
@@ -112,8 +221,6 @@ export function OpeningDetail({
   // ── Redesign tabs (Pipeline & sourcing | Kick-off notes | Jobs listing) ──
   const [tab, setTab] = useState<'pipeline' | 'matches' | 'sourcing' | 'notes' | 'jobs'>('pipeline');
   // Talent-pool multi-select for bulk outreach.
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const togglePick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   // Pipeline for this opening (shared code) — candidates by stage.
   const [pipeCandidates, setPipeCandidates] = useState<PipelineCandidate[]>([]);
@@ -124,20 +231,6 @@ export function OpeningDetail({
   }, [briefCode]);
 
   // Talent pool search + "add back to pipeline" (e.g. a candidate removed by mistake).
-  const [poolSearch, setPoolSearch] = useState('');
-  const [addingPipe, setAddingPipe] = useState<Set<string>>(new Set());
-  async function addToPipeline(c: Candidate) {
-    const code = opening.code ?? opening.id;
-    if (pipeCandidates.some((x) => x.candidateId === c.id)) return;
-    const stage = (opening.pipelineType === 'sourcing' ? 'sourced' : 'applied') as PipelineCandidate['stage'];
-    const newEntry: PipelineCandidate = { candidateId: c.id, name: c.name, email: c.email, stage, ...clientCandidateSnapshot(c) };
-    setAddingPipe((s) => new Set(s).add(c.id));
-    try {
-      await updateDoc(doc(db, 'pipelines', code), { candidates: [...pipeCandidates, newEntry], updatedAt: serverTimestamp() });
-      setPipeCandidates((prev) => [...prev, newEntry]);
-    } catch { /* rules / offline — surfaced by the row staying in the pool */ }
-    finally { setAddingPipe((s) => { const n = new Set(s); n.delete(c.id); return n; }); }
-  }
 
   // Pending applicants (applied via Jobs, not yet pulled into the pipeline).
   const [applicantCount, setApplicantCount] = useState(0);
@@ -150,45 +243,54 @@ export function OpeningDetail({
       .catch(() => setApplicantCount(0));
   }, [briefCode]);
 
+  // The applicants themselves, not just the count — the Pipeline tab lists them.
+  const [applicants, setApplicants] = useState<ApplicantDoc[]>([]);
+  const [applicantProfiles, setApplicantProfiles] = useState<Record<string, Candidate>>({});
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'applications'), where('openingCode', '==', briefCode));
+    const unsub = onSnapshot(q, (snap) => {
+      setApplicants(snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as ApplicantDoc & { status?: string; inPipeline?: boolean })
+        .filter((a) => !a.inPipeline && (!a.status || a.status === 'applied' || a.status === 'pending')));
+    }, () => setApplicants([]));
+    return () => unsub();
+  }, [briefCode]);
+
+  // Profiles for scoring the applicant rows. Best-effort — a row without a
+  // profile simply shows no score rather than disappearing.
+  useEffect(() => {
+    const missing = applicants.map((a) => a.candidateCode || a.candidateId).filter((id) => id && !applicantProfiles[id]);
+    if (!missing.length) return;
+    Promise.all(missing.map((id) => getDoc(doc(db, 'candidates', id)).catch(() => null))).then((snaps) => {
+      const next: Record<string, Candidate> = {};
+      snaps.forEach((sn) => { if (sn?.exists()) next[sn.id] = { id: sn.id, ...sn.data() } as Candidate; });
+      if (Object.keys(next).length) setApplicantProfiles((prev) => ({ ...prev, ...next }));
+    });
+  }, [applicants, applicantProfiles]);
+
+  async function approve(a: ApplicantDoc) {
+    setApprovingId(a.id);
+    try {
+      // The pipeline doc id IS the opening code — same convention the manual
+      // add above uses.
+      await approveApplicant(a, { id: briefCode, code: briefCode, title: opening.title, orgName: opening.orgName });
+      showToast(`${a.candidateName || 'Applicant'} approved — added to Applied`, 'success');
+      await onRefresh();
+    } catch (e) {
+      showToast('Approve failed: ' + (e instanceof Error ? e.message : 'Unknown'), 'error');
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
   // Talent pool — candidates not already in this pipeline, matched on the
   // opening's skills when set. Loaded once.
-  const [poolCandidates, setPoolCandidates] = useState<Candidate[]>([]);
-  useEffect(() => {
-    getDocs(collection(db, 'candidates'))
-      .then((snap) => setPoolCandidates(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate))))
-      .catch(() => setPoolCandidates([]));
-  }, []);
 
   // Reading the opening's requirements is the one paid step (~1c, once). It also
   // runs automatically the first time X-ray sources for this opening, so most
   // openings never need this button.
-  const [readingReqs, setReadingReqs] = useState(false);
-  // `opening` is a prop, so the freshly-read requirements live here until the
-  // parent refetches.
-  const [reqs, setReqs] = useState(opening.reqs);
-  useEffect(() => { setReqs(opening.reqs); }, [opening.reqs]);
-
-  async function readRequirements() {
-    setReadingReqs(true);
-    try {
-      const res = await fetch('/api/opening-parse', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({ openingId: opening.id }),
-      });
-      const j = await res.json();
-      if (!res.ok) { showToast(j.error || 'Could not read the requirements', 'error'); return; }
-      setReqs(j.reqs as Opening['reqs']);
-      showToast('Ranked by fit', 'success');
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), 'error');
-    } finally {
-      setReadingReqs(false);
-    }
-  }
 
   // ── Opening core edit state ──
   const [editing, setEditing] = useState(false);
@@ -543,52 +645,10 @@ export function OpeningDetail({
     : sMax ? `Up to ${fmtCurrency(sMax, sCur)}` : '—';
   const inPipelineCount = pipeCandidates.filter((c) => c.stage !== 'not-selected').length;
   const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
-  const openingSkills = (opening.skills ?? []).map((s) => s.toLowerCase());
-  const poolQuery = poolSearch.trim().toLowerCase();
-  // Ranking. Once the opening's requirements have been read, this uses the real
-  // matcher — the same scoring sourced candidates are judged by, which tolerates
-  // near misses and checks the CV's raw text before calling a skill missing.
-  // Without requirements it falls back to exact skill overlap, which is why an
-  // opening with no `skills` set used to surface candidates in arbitrary order.
-  const talentPool = (() => {
-    const available = poolCandidates.filter((c) => !pipeIds.has(c.id));
-    const base = reqs
-      ? available.map((c) => {
-          const m = scoreCandidate(c, reqs!);
-          return { c, overlap: m.matchedMustHave.length, match: m as MatchDetail | undefined };
-        })
-      : available.map((c) => ({
-          c,
-          overlap: (c.skills ?? []).filter((s) => openingSkills.includes(s.toLowerCase())).length,
-          match: undefined as MatchDetail | undefined,
-        }));
-    if (poolQuery) {
-      // Searching: match across ALL candidates by name/email (not just top matches).
-      return base.filter(({ c }) => `${c.name ?? ''} ${c.email ?? ''}`.toLowerCase().includes(poolQuery)).slice(0, 25);
-    }
-    if (reqs) {
-      return base
-        .filter((r) => (r.match?.score ?? 0) >= 25)   // below this it's noise, not a stretch
-        .sort((a, b) => (b.match?.score ?? 0) - (a.match?.score ?? 0))
-        .slice(0, 8);
-    }
-    return base.sort((a, b) => b.overlap - a.overlap).slice(0, 8);
-  })();
 
   const scoredPipe = pipeCandidates.filter((c) => typeof c.score === 'number');
   const avgScore = scoredPipe.length ? Math.round(scoredPipe.reduce((s, c) => s + (c.score ?? 0), 0) / scoredPipe.length) : null;
 
-  // Forward stages only — "Not Selected" is terminal and must never render as
-  // the last step of a funnel. Colours follow the design tokens.
-  const FORWARD_STAGES = [
-    { key: 'applied', label: 'Applied', color: '#3B82F6' },
-    { key: 'background-check', label: 'Background', color: '#EAB308' },
-    { key: 'interview', label: 'Interview', color: '#AF7AC5' },
-    { key: 'assessment', label: 'Assessment', color: '#AF7AC5' },
-    { key: 'partner-review', label: 'Client review', color: '#16A085' },
-    { key: 'partner-interview', label: 'Final round', color: '#12866E' },
-    { key: 'hired', label: 'Hired', color: '#16A34A' },
-  ];
 
   const stageCounts = pipeCandidates.reduce<Record<string, number>>((acc, c) => {
     const k = String(c.stage || 'applied');
@@ -719,169 +779,102 @@ export function OpeningDetail({
           long unbroken line (a match reason) blows the column out past the page
           instead of ellipsising inside it. */}
       {tab === 'pipeline' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-          {/* Pipeline by stage */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {applicantCount > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 14, border: `1px solid ${NW.teal500}33`, background: NW.teal50, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                  <UserCheck className="h-5 w-5" style={{ color: NW.teal600 }} />
-                  <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{applicantCount} applicant{applicantCount === 1 ? '' : 's'} to pre-qualify</div>
-                    <div style={{ fontSize: 12, color: NW.gray600 }}>Approve or reject new applicants in the pipeline board.</div>
-                  </div>
-                </div>
-                <NWButton variant="primary" size="sm" iconRight="arrow-right" onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}>Review</NWButton>
-              </div>
-            )}
-            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Pipeline for this role</div>
-                <NWButton variant="ghost" size="sm" iconRight="arrow-right" onClick={() => router.push(`/pipeline?focus=${encodeURIComponent(briefCode)}`)}>Open board</NWButton>
-              </div>
-              {inPipelineCount === 0 ? (
-                <div style={{ fontSize: 13, color: NW.gray400, padding: '12px 0' }}>No one in the pipeline yet — approve applicants to add them.</div>
-              ) : (
-                PIPELINE_STAGES.filter((st) => st.key !== 'not-selected').map((st) => {
-                  const list = pipeCandidates.filter((c) => c.stage === st.key);
-                  if (!list.length) return null;
-                  return (
-                    <div key={st.key} style={{ marginBottom: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_COLOR[st.key] }} />
-                        <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.gray500 }}>{PIPELINE_STAGE_LABELS[st.key]}</span>
-                        <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray400 }}>{list.length}</span>
-                      </div>
-                      {list.map((c) => (
-                        <div key={c.candidateId} onClick={() => router.push(`/candidates/${c.candidateId}`)} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 10px', borderRadius: 10, cursor: 'pointer' }}>
-                          <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
-                          {typeof c.score === 'number' && <span style={{ fontFamily: MONO, fontSize: 11.5, color: NW.gray500 }}>{c.score}</span>}
-                          <ChevronRight className="h-3.5 w-3.5" style={{ color: NW.gray300 }} />
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })
-              )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+          {/* ── Pre-qualify ───────────────────────────────────────────────── */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '0 2px 10px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: applicants.length ? '#E74C7C' : NW.gray300 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.black }}>Pre-qualify</span>
+              <span style={{ fontSize: 12.5, color: NW.gray500 }}>
+                {applicants.length ? `${applicants.length} applied — approve or reject` : 'Nobody waiting'}
+              </span>
             </div>
+            {applicants.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {applicants.map((a) => {
+                  // Scored only once the opening's requirements have been read
+                  // (the Talent-we-have tab or a sourcing run does that).
+                  const prof = applicantProfiles[a.candidateCode || a.candidateId];
+                  const m = opening.reqs && prof ? scoreCandidate(prof, opening.reqs) : undefined;
+                  return (
+                    <WorkRow
+                      key={a.id}
+                      accent="#E74C7C"
+                      name={a.candidateName || a.candidateEmail || 'No name'}
+                      sub={m?.reasons[0] || a.candidateEmail || ''}
+                      onOpen={() => router.push(`/candidates/${a.candidateCode || a.candidateId}`)}
+                      right={
+                        <>
+                          {m && <ScorePill score={m.score} />}
+                          <RejectMenu onPick={(reason) => rejectApplicant(a, reason).then(
+                            () => showToast(`${a.candidateName || 'Applicant'} rejected`, 'success'),
+                            (e) => showToast('Reject failed: ' + (e instanceof Error ? e.message : ''), 'error'),
+                          )} />
+                          <button
+                            onClick={() => approve(a)}
+                            disabled={approvingId === a.id}
+                            style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: '#fff', background: NW.teal500, border: 'none', borderRadius: 999, padding: '5px 14px', cursor: approvingId === a.id ? 'default' : 'pointer', opacity: approvingId === a.id ? 0.6 : 1, whiteSpace: 'nowrap' }}
+                          >{approvingId === a.id ? 'Adding…' : 'Approve'}</button>
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyBlock>No new applicants right now.</EmptyBlock>
+            )}
           </div>
 
-          {/* Talent pool */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <span style={{ width: 30, height: 30, borderRadius: 8, background: NW.gray50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: NW.gray600 }}><Radar className="h-4 w-4" /></span>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: NW.black }}>Talent pool</div>
-                  <div style={{ fontSize: 12, color: NW.gray500 }}>
-                    Candidates not in this pipeline
-                    {reqs ? ' · ranked against this role' : openingSkills.length ? ' · best skill matches first' : ''}
-                  </div>
-                </div>
-                {reqs && (
-                  <button
-                    type="button"
-                    onClick={() => setTab('matches')}
-                    style={{ marginLeft: 'auto', flexShrink: 0, background: 'transparent', border: 'none', padding: 0, fontSize: 11.5, fontWeight: 600, color: NW.teal700, cursor: 'pointer' }}
-                  >
-                    See all &amp; why →
-                  </button>
-                )}
-              </div>
-              {/* Without requirements the ordering is close to arbitrary, so say
-                  so rather than presenting an unranked list as "best first". */}
-              {!reqs && (
-                <div style={{ marginTop: 10, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: 180, fontSize: 11.5, color: NW.gray600, lineHeight: 1.45 }}>
-                    These aren&rsquo;t ranked yet — read the role&rsquo;s requirements to sort by real fit.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={readRequirements}
-                    disabled={readingReqs}
-                    style={{ flexShrink: 0, height: 28, padding: '0 12px', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, cursor: readingReqs ? 'default' : 'pointer', opacity: readingReqs ? 0.6 : 1 }}
-                  >
-                    {readingReqs ? 'Reading…' : 'Rank by fit'}
-                  </button>
-                </div>
-              )}
-              <input
-                value={poolSearch}
-                onChange={(e) => setPoolSearch(e.target.value)}
-                placeholder="Search any candidate by name or email to add…"
-                style={{ width: '100%', boxSizing: 'border-box', height: 34, marginTop: 8, border: `1px solid ${NW.gray200}`, borderRadius: 9, padding: '0 11px', fontSize: 12.5, outline: 'none', background: NW.white }}
-              />
-              <div style={{ marginTop: 10 }}>
-                {talentPool.length === 0 ? (
-                  <div style={{ fontSize: 12.5, color: NW.gray400, padding: '12px 0' }}>{poolQuery ? 'No candidates match your search.' : 'No available candidates to surface.'}</div>
-                ) : (
-                  talentPool.map(({ c, overlap, match }, i) => {
-                    const on = picked.has(c.id);
-                    const band = match
-                      ? (match.score >= 70 ? { bg: '#ECFDF5', fg: '#047857' }
-                        : match.score >= 45 ? { bg: '#FFFBEB', fg: '#B45309' }
-                        : { bg: NW.gray50, fg: NW.gray500 })
-                      : null;
-                    return (
-                      <div key={c.id} className="nw-grid-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderTop: i === 0 ? 'none' : `1px solid ${NW.gray100}`, borderRadius: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => togglePick(c.id)}
-                          style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? NW.teal500 : NW.gray300}`, background: on ? NW.teal500 : NW.white, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, padding: 0 }}
-                          aria-label={on ? 'Deselect' : 'Select'}
-                        >
-                          {on && <CheckCircle className="h-3 w-3" style={{ color: '#fff' }} />}
-                        </button>
-                        <div onClick={() => router.push(`/candidates/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                          <NWAvatar initials={initials(c.name) || '—'} size={30} bg={orgColor} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.email}</div>
-                            <div style={{ fontSize: 11, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={match ? [...match.reasons, ...match.cautions].join(' · ') : undefined}>
-                              {/* Why this person, not just who they are. */}
-                              {match?.matchedMustHave.length
-                                ? `${match.matchedMustHave.length}/${match.matchedMustHave.length + match.missingMustHave.length} must-haves · ${match.matchedMustHave.join(', ')}`
-                                : match
-                                  ? (match.cautions[0] || match.reasons[0] || (c.currentRole ?? '—'))
-                                  : ((c.skills ?? []).slice(0, 3).join(' · ') || (c.currentRole ?? '—'))}
-                            </div>
-                          </div>
-                          {band
-                            ? <span style={{ fontSize: 10.5, fontWeight: 700, color: band.fg, background: band.bg, borderRadius: 999, padding: '2px 9px' }}>{match!.score}</span>
-                            : overlap > 0 && <span style={{ fontSize: 10.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, borderRadius: 999, padding: '2px 8px' }}>{overlap} match{overlap === 1 ? '' : 'es'}</span>}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addToPipeline(c)}
-                          disabled={addingPipe.has(c.id)}
-                          title="Add to this pipeline"
-                          style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, height: 28, padding: '0 12px', fontSize: 11.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, cursor: addingPipe.has(c.id) ? 'default' : 'pointer', opacity: addingPipe.has(c.id) ? 0.6 : 1 }}
-                        >
-                          {addingPipe.has(c.id) ? 'Adding…' : '+ Add'}
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {picked.size > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-                  <a
-                    href={`mailto:?bcc=${encodeURIComponent(talentPool.filter(({ c }) => picked.has(c.id) && c.email).map(({ c }) => c.email).join(','))}&subject=${encodeURIComponent(`Opportunity: ${opening.title || 'a role'} at ${orgName || 'a Nearwork client'}`)}`}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', fontSize: 13, fontWeight: 600, color: '#fff', background: NW.teal500, borderRadius: 999, textDecoration: 'none' }}
-                  >
-                    <Mail className="h-4 w-4" /> Email {picked.size} selected
-                  </a>
-                </div>
-              )}
+          {/* ── In pipeline ───────────────────────────────────────────────── */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '0 2px 10px' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: NW.black }}>In pipeline</span>
+              <span style={{ fontSize: 12.5, color: NW.gray500 }}>{inPipelineCount} candidate{inPipelineCount === 1 ? '' : 's'}</span>
+              <button
+                onClick={() => router.push(`/pipeline?code=${encodeURIComponent(briefCode)}`)}
+                style={{ marginLeft: 'auto', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: NW.teal700, background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >Open board →</button>
             </div>
-            <div style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 16, padding: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: NW.black, marginBottom: 12 }}>Details</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Hiring manager</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.hiringManager || '—'}</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Account manager</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.accountManager || '—'}</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${NW.gray100}` }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Recruiter</span><span style={{ fontSize: 13, fontWeight: 500, color: NW.black }}>{opening.recruiter || '—'}</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0' }}><span style={{ fontSize: 12.5, color: NW.gray500 }}>Budget</span><span style={{ fontFamily: MONO, fontSize: 13, color: NW.black }}>{band}</span></div>
-            </div>
+            {inPipelineCount ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {pipeCandidates.filter((c) => c.stage !== 'not-selected').map((c) => {
+                  const idx = FORWARD_STAGES.findIndex((s) => s.key === String(c.stage));
+                  const st = FORWARD_STAGES[idx] || FORWARD_STAGES[0];
+                  return (
+                    <WorkRow
+                      key={c.candidateId}
+                      accent={st.color}
+                      name={c.name || c.email || 'No name'}
+                      sub={c.email || ''}
+                      onOpen={() => router.push(`/candidates/${c.candidateId}`)}
+                      right={
+                        <>
+                          <StageDots current={idx < 0 ? 0 : idx} />
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: NW.gray600, minWidth: 84 }}>{st.label}</span>
+                          {typeof c.score === 'number' && <ScorePill score={c.score} />}
+                          <button
+                            onClick={() => router.push(`/pipeline?code=${encodeURIComponent(briefCode)}`)}
+                            style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '5px 13px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >Move on →</button>
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyBlock>No one in the pipeline yet — approve an applicant to add them.</EmptyBlock>
+            )}
+          </div>
+
+          {/* ── Meta strip — replaces the Contacts / Details cards ────────── */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, background: NW.offWhite, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: '11px 15px', fontSize: 12.5, color: NW.gray500 }}>
+            <span>Hiring manager <b style={{ color: NW.gray700, fontWeight: 600 }}>{opening.hiringManager || '—'}</b></span>
+            <span>Recruiter <b style={{ color: NW.gray700, fontWeight: 600 }}>{opening.recruiter || '—'}</b></span>
+            <span>Account <b style={{ color: NW.gray700, fontWeight: 600 }}>{opening.accountManager || '—'}</b></span>
+            <span>{[opening.location, opening.seniority].filter(Boolean).join(' · ') || '—'}</span>
+            <span>{opening.pipelineType === 'sourcing' ? 'Sourcing only' : 'Full placement'}</span>
           </div>
         </div>
       )}

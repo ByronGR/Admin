@@ -140,6 +140,7 @@ const W = { must: 45, nice: 12, seniority: 15, years: 15, tools: 8, industry: 5 
 export function scoreCandidate(c: Candidate, reqs: OpeningReqs): MatchDetail {
   const reasons: string[] = [];
   const cautions: string[] = [];
+  let specialism = '';
 
   const must = reqs.mustHaveSkills || [];
   const nice = reqs.niceToHaveSkills || [];
@@ -186,7 +187,9 @@ export function scoreCandidate(c: Candidate, reqs: OpeningReqs): MatchDetail {
       cautions.push(`Background is ${c.function.replace(/_/g, ' ')}, not ${wantFn.replace(/_/g, ' ')}`);
     } else if (reqs.subFunction && c.subFunction === reqs.subFunction) {
       score = Math.min(100, score + 5);
-      reasons.push(`Same specialism (${reqs.subFunction.replace(/_/g, ' ')})`);
+      // Held back rather than pushed here: the must-have count is what a
+      // recruiter reads first, and in a one-line summary it has to come first.
+      specialism = `Same specialism (${reqs.subFunction.replace(/_/g, ' ')})`;
     }
   }
 
@@ -194,6 +197,7 @@ export function scoreCandidate(c: Candidate, reqs: OpeningReqs): MatchDetail {
   if (must.length && matchedMustHave.length) {
     reasons.push(`${matchedMustHave.length} of ${must.length} must-haves: ${matchedMustHave.join(', ')}`);
   }
+  if (specialism) reasons.push(specialism);
   if (matchedNiceToHave.length) reasons.push(`Also has ${matchedNiceToHave.slice(0, 4).join(', ')}`);
   if (matchedTools.length) reasons.push(`Tools: ${matchedTools.join(', ')}`);
   if (industryHit) reasons.push(`Worked in ${reqs.industries?.[0]}`);

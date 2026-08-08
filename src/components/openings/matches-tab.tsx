@@ -71,7 +71,12 @@ export function MatchesTab({ op }: { op: Opening }) {
   const filtered = (data?.matches || []).filter((m) =>
     !q.trim() || `${m.name} ${m.role || ''}`.toLowerCase().includes(q.trim().toLowerCase()));
   const strongEnough = filtered.filter((m) => m.score >= 25);
-  const shown = (strongEnough.length >= 8 ? strongEnough : filtered).slice(0, 12);
+  // Sorted here as well as server-side: the order is the whole point of the tab,
+  // and it shouldn't depend on a caller preserving it.
+  const shown = (strongEnough.length >= 8 ? strongEnough : filtered)
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
 
   async function addToPipeline(m: MatchDetail) {
     setAdding((s) => new Set(s).add(m.candidateId));

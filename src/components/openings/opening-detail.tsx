@@ -99,7 +99,16 @@ function WorkRow({ accent, name, sub, right, onOpen }: {
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, background: NW.white, border: `1px solid ${hover ? NW.gray200 : NW.gray100}`, borderLeft: `3px solid ${accent}` }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+        borderRadius: 12, background: NW.white,
+        borderStyle: 'solid',
+        borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 3,
+        borderTopColor: hover ? NW.gray200 : NW.gray100,
+        borderRightColor: hover ? NW.gray200 : NW.gray100,
+        borderBottomColor: hover ? NW.gray200 : NW.gray100,
+        borderLeftColor: accent,
+      }}
     >
       <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: onOpen ? 'pointer' : 'default' }}>
         <NWAvatar initials={initials(name) || '—'} size={32} bg={accent} />
@@ -269,6 +278,15 @@ export function OpeningDetail({
       if (Object.keys(next).length) setApplicantProfiles((prev) => ({ ...prev, ...next }));
     });
   }, [applicants, applicantProfiles]);
+
+  // Best fit first. Anyone without a score yet sorts last rather than to the
+  // top — an unscored applicant is unknown, not strong.
+  const rankedApplicants = applicants
+    .map((a) => {
+      const prof = applicantProfiles[a.candidateCode || a.candidateId];
+      return { a, m: opening.reqs && prof ? scoreCandidate(prof, opening.reqs) : undefined };
+    })
+    .sort((x, y) => (y.m?.score ?? -1) - (x.m?.score ?? -1));
 
   async function approve(a: ApplicantDoc) {
     setApprovingId(a.id);
@@ -643,6 +661,14 @@ export function OpeningDetail({
     : sMin && sMax ? `${fmtCurrency(sMin, sCur)}–${fmtCurrency(sMax, sCur)}`
     : sMin ? `${fmtCurrency(sMin, sCur)}+`
     : sMax ? `Up to ${fmtCurrency(sMax, sCur)}` : '—';
+  // Compact band for the stat card: the sub-line already says "USD · monthly",
+  // so repeating the code on both ends only made the value overflow the card.
+  const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+  const bandCompact = opening.hideSalary ? 'Hidden'
+    : sMin && sMax ? `${money(sMin)}–${money(sMax)}`
+    : sMin ? `${money(sMin)}+`
+    : sMax ? `Up to ${money(sMax)}` : '—';
+
   const inPipelineCount = pipeCandidates.filter((c) => c.stage !== 'not-selected').length;
   const pipeIds = new Set(pipeCandidates.map((c) => c.candidateId));
 
@@ -675,7 +701,7 @@ export function OpeningDetail({
       // An empty score isn't a gap — it's just that nobody has been scored yet.
       sub: avgScore == null ? 'score after pre-qualify' : 'pipeline quality',
     },
-    { label: 'Budget', value: band, sub: band === '—' ? 'not set' : 'USD · monthly', accent: '#BDBDBD' },
+    { label: 'Budget', value: bandCompact, sub: bandCompact === '—' ? 'not set' : `${sCur} · monthly`, accent: '#BDBDBD' },
   ];
 
   // ── Read-only kick-off notes (the approved brief) ──
@@ -730,7 +756,7 @@ export function OpeningDetail({
                 <span style={{ flex: 'none', whiteSpace: 'nowrap', fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: c.flag.bg, color: c.flag.fg }}>{c.flag.text}</span>
               )}
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', whiteSpace: 'nowrap', marginTop: 6, color: c.value === '—' ? NW.gray300 : NW.black }}>{c.value}</div>
+            <div title={String(c.value)} style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 6, color: c.value === '—' ? NW.gray300 : NW.black }}>{c.value}</div>
             <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 2 }}>{c.sub}</div>
             <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: c.accent }} />
           </div>
@@ -791,11 +817,7 @@ export function OpeningDetail({
             </div>
             {applicants.length ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {applicants.map((a) => {
-                  // Scored only once the opening's requirements have been read
-                  // (the Talent-we-have tab or a sourcing run does that).
-                  const prof = applicantProfiles[a.candidateCode || a.candidateId];
-                  const m = opening.reqs && prof ? scoreCandidate(prof, opening.reqs) : undefined;
+                {rankedApplicants.map(({ a, m }) => {
                   return (
                     <WorkRow
                       key={a.id}

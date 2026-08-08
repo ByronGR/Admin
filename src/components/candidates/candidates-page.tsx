@@ -1,4 +1,5 @@
 'use client';
+import { countryFlag, countryCode } from '@/lib/country-flag';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -436,6 +437,12 @@ export default function CandidatesPage() {
                               <span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{properName(c.name) || 'No name'}</span>
+                                  {/* Country at a glance. Rendered with a title so
+                                      it reads for anyone who can't tell the flags
+                                      apart, and simply absent when unknown. */}
+                                  {countryFlag(c) && (
+                                    <span title={countryCode(c)} style={{ fontSize: 14, lineHeight: 1 }}>{countryFlag(c)}</span>
+                                  )}
                                   {isEmpty(c) && <span style={{ fontSize: 9, fontWeight: 700, color: NW.rose600, background: NW.rose50, borderRadius: 999, padding: '1px 6px' }}>Empty</span>}
                                 </span>
                                 {candCity(c) && (

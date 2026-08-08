@@ -9,11 +9,11 @@
 // trusts — the matched and missing lists are the point, not the number.
 
 import { useState, useEffect, useCallback } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from '@/lib/firebase';
 import { useToast } from '@/components/ui/toast';
 import { Button, NW } from '@/components/nw/primitives';
 import { Spinner } from '@/components/ui/spinner';
-import { Sparkles, Check, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { Sparkles, Check, Minus, RefreshCw, ExternalLink, Search } from 'lucide-react';
 import type { Opening, OpeningReqs } from '@/lib/types';
 import type { MatchDetail } from '@/lib/candidate-match';
 
@@ -61,6 +61,46 @@ export function MatchesTab({ op }: { op: Opening }) {
   const [extracting, setExtracting] = useState(false);
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState('');
+  const [q, setQ] = useState('');
+  const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  // The API applies a >= 25 noise floor. Honour it only while it still leaves a
+  // screenful — on a thin bench a near-empty tab is worse than a few stretches,
+  // and every card says plainly how weak it is.
+  const filtered = (data?.matches || []).filter((m) =>
+    !q.trim() || `${m.name} ${m.role || ''}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const strongEnough = filtered.filter((m) => m.score >= 25);
+  const shown = (strongEnough.length >= 8 ? strongEnough : filtered).slice(0, 12);
+
+  async function addToPipeline(m: MatchDetail) {
+    setAdding((s) => new Set(s).add(m.candidateId));
+    try {
+      // The pipeline doc id is the opening code, same convention as everywhere else.
+      const code = op.code || op.id;
+      const snap = await getDoc(doc(db, 'candidates', m.candidateId));
+      const c = snap.exists() ? snap.data() as Record<string, unknown> : {};
+      await updateDoc(doc(db, 'pipelines', code), {
+        candidates: arrayUnion({
+          candidateId: m.candidateId,
+          candidateCode: m.candidateId,
+          name: m.name,
+          email: (c.email as string) || '',
+          stage: op.pipelineType === 'sourcing' ? 'sourced' : 'applied',
+          addedAt: new Date().toISOString(),
+          source: 'Talent we have',
+          score: m.score,
+        }),
+        updatedAt: serverTimestamp(),
+      });
+      setAdded((s) => new Set(s).add(m.candidateId));
+      showToast(`${m.name} added to the pipeline`, 'success');
+    } catch (e) {
+      showToast('Could not add: ' + (e instanceof Error ? e.message : String(e)), 'error');
+    } finally {
+      setAdding((s) => { const n = new Set(s); n.delete(m.candidateId); return n; });
+    }
+  }
 
   const token = useCallback(async () => auth.currentUser?.getIdToken(), []);
 
@@ -222,45 +262,74 @@ export function MatchesTab({ op }: { op: Opening }) {
             </div>
           </div>
 
-          {!data.matches.length && (
+          {/* Search the bench by name or role. */}
+          <div style={{ position: 'relative' }}>
+            <Search size={15} color={NW.gray400} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search these matches by name or role…"
+              style={{ width: '100%', boxSizing: 'border-box', height: 40, borderRadius: 10, border: `1px solid ${NW.gray200}`, padding: '0 12px 0 34px', font: 'inherit', fontSize: 13, color: NW.black, outline: 'none', background: NW.white }}
+            />
+          </div>
+
+          {!shown.length && (
             <div style={{ ...card, textAlign: 'center', padding: 34, color: NW.gray500, fontSize: 13.5 }}>
               Nobody in the database is a reasonable fit for this one. Worth sourcing.
             </div>
           )}
 
-          <div style={{ display: 'grid', gap: 10 }}>
-            {data.matches.map((m) => (
-              <div key={m.candidateId} style={{ ...card, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                  <div style={{
-                    minWidth: 46, height: 46, borderRadius: 11, display: 'grid', placeItems: 'center',
-                    background: BAND[m.band].bg, color: BAND[m.band].fg, fontWeight: 800, fontSize: 16,
-                  }}>{m.score}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
+            {shown.map((m) => (
+              <div key={m.candidateId} style={{ background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 14, padding: 15, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, marginBottom: 11 }}>
+                  <span style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: BAND[m.band].fg, color: '#fff', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {(m.name || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 700, color: NW.black }}>{m.name}</div>
-                    <span style={{
-                      fontSize: 10.5, fontWeight: 700, color: BAND[m.band].fg, background: BAND[m.band].bg,
-                      padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.06em',
-                    }}>{BAND[m.band].label}</span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
+                    <div style={{ fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {[m.role, m.location].filter(Boolean).join(' · ') || '—'}
+                    </div>
                   </div>
-                  <a href={`/candidates/${m.candidateId}`} target="_blank" rel="noopener noreferrer"
-                     style={{ fontSize: 12.5, color: NW.teal700, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    Open profile <ExternalLink size={12} />
-                  </a>
+                  <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: BAND[m.band].fg, background: BAND[m.band].bg, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                    {BAND[m.band].label} · {m.score}
+                  </span>
                 </div>
 
-                {m.reasons.map((r, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: NW.gray600, marginBottom: 4, lineHeight: 1.5 }}>
-                    <Check size={13} color="#047857" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span>{r}</span>
-                  </div>
-                ))}
-                {m.cautions.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: '#92400E', marginBottom: 4, lineHeight: 1.5 }}>
-                    <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span>{c}</span>
-                  </div>
-                ))}
+                <div style={{ flex: 1 }}>
+                  {m.reasons.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 7, fontSize: 11.5, color: NW.gray600, marginBottom: 4, lineHeight: 1.5 }}>
+                      <Check size={13} color="#047857" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <span>{r}</span>
+                    </div>
+                  ))}
+                  {/* Two cautions at most — a card that lists every doubt reads as
+                      a rejection, and the profile is one click away. */}
+                  {m.cautions.slice(0, 2).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 7, fontSize: 11.5, color: NW.gray500, marginBottom: 4, lineHeight: 1.5 }}>
+                      <Minus size={13} color={NW.gray400} style={{ flexShrink: 0, marginTop: 1 }} />
+                      <span>{c}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 11, borderTop: `1px solid ${NW.gray100}` }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {[m.expectedSalary, m.years != null ? `${m.years} yrs` : ''].filter(Boolean).join(' · ') || 'No salary on file'}
+                  </span>
+                  <a href={`/candidates/${m.candidateId}`} target="_blank" rel="noopener noreferrer"
+                     style={{ flexShrink: 0, fontSize: 11.5, color: NW.gray500, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Profile <ExternalLink size={11} />
+                  </a>
+                  <button
+                    onClick={() => addToPipeline(m)}
+                    disabled={adding.has(m.candidateId) || added.has(m.candidateId)}
+                    style={{ flexShrink: 0, font: 'inherit', fontSize: 11.5, fontWeight: 600, color: added.has(m.candidateId) ? NW.gray400 : NW.teal700, background: added.has(m.candidateId) ? NW.gray50 : NW.teal50, border: `1px solid ${added.has(m.candidateId) ? NW.gray200 : NW.teal500 + '33'}`, borderRadius: 999, padding: '5px 12px', cursor: adding.has(m.candidateId) || added.has(m.candidateId) ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {added.has(m.candidateId) ? 'Added' : adding.has(m.candidateId) ? 'Adding…' : 'Add to pipeline'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

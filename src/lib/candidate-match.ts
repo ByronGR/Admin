@@ -23,6 +23,12 @@ import type { Candidate, Opening, OpeningReqs } from './types';
 export interface MatchDetail {
   candidateId: string;
   name: string;
+  // Display fields, carried alongside the score so a result card doesn't need a
+  // second read of the candidate it was just scored from.
+  role?: string;
+  location?: string;
+  expectedSalary?: string;
+  years?: number;
   score: number;              // 0–100
   band: 'strong' | 'possible' | 'stretch';
   matchedMustHave: string[];
@@ -210,6 +216,10 @@ export function scoreCandidate(c: Candidate, reqs: OpeningReqs): MatchDetail {
   return {
     candidateId: c.id,
     name: c.name || '(no name)',
+    role: c.headline || c.role || '',
+    location: c.location || [c.locationCity, c.locationCountry].filter(Boolean).join(', '),
+    expectedSalary: c.expectedSalary != null ? String(c.expectedSalary) : '',
+    ...(Number.isFinite(yrs) ? { years: yrs } : {}),
     score, band,
     matchedMustHave, missingMustHave, matchedNiceToHave, matchedTools,
     reasons, cautions,

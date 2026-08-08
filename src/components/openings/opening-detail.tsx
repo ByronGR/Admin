@@ -33,7 +33,7 @@ import {
   ChevronRight, FileText, Globe, ExternalLink, Pause, Play,
   Users, UserCheck, Calendar, Banknote, Radar, Mail,
 } from 'lucide-react';
-import { NW, MONO, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
+import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
 
@@ -578,12 +578,44 @@ export function OpeningDetail({
   const scoredPipe = pipeCandidates.filter((c) => typeof c.score === 'number');
   const avgScore = scoredPipe.length ? Math.round(scoredPipe.reduce((s, c) => s + (c.score ?? 0), 0) / scoredPipe.length) : null;
 
-  const statItems = [
-    { icon: <Users className="h-3.5 w-3.5" />, label: 'In pipeline', value: inPipelineCount, sub: 'candidates' },
-    { icon: <UserCheck className="h-3.5 w-3.5" />, label: 'To pre-qualify', value: applicantCount, sub: 'new applicants' },
-    { icon: <Calendar className="h-3.5 w-3.5" />, label: 'Days open', value: daysOpen != null ? `${daysOpen}d` : '—', sub: 'since posted' },
-    { icon: <Radar className="h-3.5 w-3.5" />, label: 'Avg. score', value: avgScore ?? '—', sub: 'pipeline quality' },
-    { icon: <Banknote className="h-3.5 w-3.5" />, label: 'Budget', value: band, sub: opening.location ?? 'Remote' },
+  // Forward stages only — "Not Selected" is terminal and must never render as
+  // the last step of a funnel. Colours follow the design tokens.
+  const FORWARD_STAGES = [
+    { key: 'applied', label: 'Applied', color: '#3B82F6' },
+    { key: 'background-check', label: 'Background', color: '#EAB308' },
+    { key: 'interview', label: 'Interview', color: '#AF7AC5' },
+    { key: 'assessment', label: 'Assessment', color: '#AF7AC5' },
+    { key: 'partner-review', label: 'Client review', color: '#16A085' },
+    { key: 'partner-interview', label: 'Final round', color: '#12866E' },
+    { key: 'hired', label: 'Hired', color: '#16A34A' },
+  ];
+
+  const stageCounts = pipeCandidates.reduce<Record<string, number>>((acc, c) => {
+    const k = String(c.stage || 'applied');
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+
+  const statCards: {
+    label: string; value: string | number; sub: string; accent: string;
+    flag?: { text: string; bg: string; fg: string };
+  }[] = [
+    { label: 'In pipeline', value: inPipelineCount, sub: 'candidates active', accent: '#16A085' },
+    {
+      label: 'To pre-qualify', value: applicantCount, sub: 'new applicants', accent: '#E74C7C',
+      // Only flagged when there is actually something to do.
+      ...(applicantCount > 0 ? { flag: { text: 'Action', bg: '#FEF0F5', fg: '#CC3666' } } : {}),
+    },
+    {
+      label: 'Days open', value: daysOpen != null ? `${daysOpen}d` : '—', sub: 'since posted', accent: '#EAB308',
+      ...(daysOpen != null && daysOpen > 21 ? { flag: { text: 'Over 21d', bg: '#FEFCE8', fg: '#A16207' } } : {}),
+    },
+    {
+      label: 'Avg. score', value: avgScore ?? '—', accent: '#AF7AC5',
+      // An empty score isn't a gap — it's just that nobody has been scored yet.
+      sub: avgScore == null ? 'score after pre-qualify' : 'pipeline quality',
+    },
+    { label: 'Budget', value: band, sub: band === '—' ? 'not set' : 'USD · monthly', accent: '#BDBDBD' },
   ];
 
   // ── Read-only kick-off notes (the approved brief) ──
@@ -624,25 +656,57 @@ export function OpeningDetail({
         </div>
       </div>
 
-      {/* Stat strip */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap', border: `1px solid ${NW.gray100}`, borderRadius: 16, background: NW.white, padding: '16px 22px', marginBottom: 18 }}>
-        {statItems.map((s) => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: NW.teal50, color: NW.teal600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{s.icon}</span>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 500, color: NW.black, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: NW.gray500, marginTop: 3 }}>{s.label} · <span style={{ color: NW.gray400 }}>{s.sub}</span></div>
+      {/* Stat cards. The old strip was five identical grey numbers — nothing
+          told you which one needed doing something about. Each card now carries
+          its own accent and, where it matters, a flag. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 12 }}>
+        {statCards.map((c) => (
+          <div key={c.label} style={{ position: 'relative', overflow: 'hidden', background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 14, padding: '15px 16px 14px' }}>
+            {/* Label + flag on one flex row — a flag positioned absolutely
+                collides with the label at narrow widths. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: NW.gray400 }}>{c.label}</span>
+              {c.flag && (
+                <span style={{ flex: 'none', whiteSpace: 'nowrap', fontSize: 10, fontWeight: 700, borderRadius: 999, padding: '2px 7px', background: c.flag.bg, color: c.flag.fg }}>{c.flag.text}</span>
+              )}
             </div>
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', whiteSpace: 'nowrap', marginTop: 6, color: c.value === '—' ? NW.gray300 : NW.black }}>{c.value}</div>
+            <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 2 }}>{c.sub}</div>
+            <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: c.accent }} />
           </div>
         ))}
       </div>
 
+      {/* Stage ribbon — where the pipeline actually stands. Forward stages only:
+          a terminal rejection must not read as the last step of a funnel. */}
+      <div style={{ display: 'flex', background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 14, padding: 6, margin: '12px 0 20px', flexWrap: 'wrap' }}>
+        {FORWARD_STAGES.map((st, i) => {
+          const n = stageCounts[st.key] || 0;
+          return (
+            <div key={st.key} style={{ flex: '1 1 120px', padding: '10px 14px', borderLeft: i === 0 ? 'none' : `1px solid ${NW.gray100}`, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: n ? st.color : NW.gray200, flexShrink: 0 }} />
+              <span style={{ fontSize: 17, fontWeight: 700, color: n ? NW.black : NW.gray300 }}>{n}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: n ? NW.gray600 : NW.gray300, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${NW.gray100}`, marginBottom: 18, flexWrap: 'wrap' }}>
-        {([['pipeline', 'Pipeline & sourcing'], ['matches', 'Talent we have'], ['sourcing', 'Sourcing (X-ray)'], ['notes', 'Kick-off notes'], ['jobs', 'Jobs listing']] as const).map(([k, label]) => {
+        {([
+          ['pipeline', 'Pipeline & sourcing', 'kanban-square'],
+          ['matches', 'Talent we have', 'users'],
+          ['sourcing', 'Sourcing (X-ray)', 'radar'],
+          ['notes', 'Kick-off notes', 'clipboard-check'],
+          ['jobs', 'Jobs listing', 'megaphone'],
+        ] as const).map(([k, label, icon]) => {
           const on = tab === k;
           return (
-            <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>{label}</button>
+            <button key={k} onClick={() => setTab(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? NW.black : NW.gray500, background: 'transparent', border: 'none', borderBottom: `2px solid ${on ? NW.teal500 : 'transparent'}`, padding: '10px 14px', marginBottom: -1, cursor: 'pointer' }}>
+              <Icon name={icon} size={15} color={on ? NW.teal600 : NW.gray400} />
+              {label}
+            </button>
           );
         })}
       </div>

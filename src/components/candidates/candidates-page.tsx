@@ -17,7 +17,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName, candidatePhoto } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
@@ -429,9 +429,9 @@ export default function CandidatesPage() {
                         <tr key={c.id} onClick={() => router.push(`/candidates/${c.id}`)} className="nw-row" style={{ cursor: 'pointer' }}>
                           <td style={{ padding: '14px 16px', paddingLeft: 22, borderTop: `1px solid ${NW.gray100}`, verticalAlign: 'middle' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-                              {c.photoUrl ? (
+                              {candidatePhoto(c) ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={c.photoUrl} alt={c.name} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} />
+                                <img src={candidatePhoto(c)} alt={c.name} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} />
                               ) : (
                                 <NWAvatar initials={initials(c.name) || '—'} size={38} bg={colorFor(c.id)} />
                               )}

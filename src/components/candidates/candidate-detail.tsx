@@ -25,7 +25,7 @@ import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { AssessmentsSection } from './assessments-section';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience, candidatePhoto } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -951,9 +951,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', marginBottom: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
-          {candidate.photoUrl ? (
+          {candidatePhoto(candidate) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={candidate.photoUrl} alt={candidate.name} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+            <img src={candidatePhoto(candidate)} alt={candidate.name} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
           ) : (
             <NWAvatar initials={initials(candidate.name) || '—'} size={64} bg={NW.teal500} />
           )}

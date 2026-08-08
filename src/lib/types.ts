@@ -382,7 +382,10 @@ export interface Candidate {
   portfolio?: string;
   resumeUrl?: string;
   cvUrl?: string;             // alias written by jobs.nearwork.co — same as resumeUrl
+  // Two spellings in the wild: Admin has always written `photoUrl`, the Talent
+  // onboarding writes `photoURL`. Read both — see candidatePhoto().
   photoUrl?: string;
+  photoURL?: string;
   status?: CandidateStatus;
   source?: string;
   tags?: string[];

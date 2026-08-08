@@ -319,3 +319,14 @@ export function parseNum(val: string | number | undefined, fallback = 0): number
   const n = Number(val);
   return isNaN(n) ? fallback : n;
 }
+
+/**
+ * A candidate's profile photo, whichever spelling it was saved under.
+ * The Talent onboarding writes `photoURL`; Admin has always written `photoUrl`.
+ * Reading only one meant every photo a candidate uploaded themselves was
+ * invisible here. Read both rather than migrating: a migration would silently
+ * miss anyone who uploads during the window, and this costs nothing.
+ */
+export function candidatePhoto(c: { photoUrl?: string; photoURL?: string } | null | undefined): string {
+  return (c?.photoUrl || c?.photoURL || '').trim();
+}

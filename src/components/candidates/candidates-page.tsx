@@ -17,7 +17,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName, candidatePhoto } from '@/lib/utils';
+import { initials, sortByTimestamp, generateCandidateId, fmtRelative, fmtCurrency, candidateLocationLabel, properName, candidatePhoto, candidateJobTitle } from '@/lib/utils';
 import type { Candidate } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
@@ -226,10 +226,8 @@ export default function CandidatesPage() {
   // `role` often holds the account-type marker "candidate" (set at signup), not a
   // job title — prefer the real title fields and skip that placeholder value.
   const candRole = (c: Candidate) => {
-    const titles = [c.currentRole, c.targetRole, c.headline, c.role]
-      .map((x) => (x ?? '').trim())
-      .filter((x) => x && x.toLowerCase() !== 'candidate');
-    return titles[0] || '';
+    const t = candidateJobTitle(c);
+    return t.toLowerCase() === 'candidate' ? '' : t;
   };
   // Location label: Colombia → "City, Department"; other countries → country.
   const candCity = (c: Candidate) => candidateLocationLabel(c);

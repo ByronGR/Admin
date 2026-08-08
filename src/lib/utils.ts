@@ -357,3 +357,37 @@ export function workPeriod(w: {
   if (from && to) return `${from} – ${to}`;
   return from || to || '';
 }
+
+/**
+ * The short job title to show under a candidate's name.
+ *
+ * The CV extractor used to be asked for a "one line: discipline, years,
+ * industry" headline, so it produced things like "Digital Marketing & Growth
+ * Specialist with 16 years of experience in fintech, mobility, loyalty, and
+ * SaaS" — a summary, not a title. That reads badly in a list row and pushes
+ * everything else off screen.
+ *
+ * Prefers a real title, falls back to the most recent job title, and only uses
+ * the long headline when there's nothing else. Done here rather than by
+ * re-parsing, so the candidates already in the database read correctly without
+ * spending anything.
+ */
+export function candidateJobTitle(c: {
+  currentRole?: string; targetRole?: string; headline?: string; role?: string;
+  workHistory?: { title?: string }[];
+} | null | undefined): string {
+  if (!c) return '';
+  const s = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  // A title is short and names a job. A sentence talks about experience.
+  const isSummary = (t: string) =>
+    t.length > 55 || /\b\d+\+?\s*years?\b|\bexperience\b|\bexpertise\b/i.test(t);
+
+  for (const v of [s(c.currentRole), s(c.targetRole)]) {
+    if (v && !isSummary(v)) return v;
+  }
+  const head = s(c.headline) || s(c.role);
+  if (head && !isSummary(head)) return head;
+
+  const recent = (c.workHistory || []).map((w) => s(w?.title)).find(Boolean);
+  return recent || head || '';
+}

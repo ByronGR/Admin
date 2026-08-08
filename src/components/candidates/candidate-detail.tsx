@@ -25,7 +25,7 @@ import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { AssessmentsSection } from './assessments-section';
 import { useAuth } from '@/hooks/use-auth';
-import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience, candidatePhoto, workPeriod } from '@/lib/utils';
+import { fmtDate, fmtRelative, initials, fmtCurrency, candidateLocationLabel, properName, yearsOfExperience, candidatePhoto, workPeriod, candidateJobTitle } from '@/lib/utils';
 import { normalizeStaffRole } from '@/lib/firebase';
 import { STAFF_ROLE_LABELS, PIPELINE_STAGE_LABELS, DROP_OFF_REASON_LABELS } from '@/lib/types';
 import type {
@@ -850,9 +850,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     : null;
 
   // ── Header / quick-fact derivations ─────────────────────────────────────────
-  const jobTitle = [candidate.currentRole, candidate.targetRole, candidate.headline, candidate.role]
-    .map((x) => (x ?? '').trim())
-    .find((x) => x && x.toLowerCase() !== 'candidate') || '—';
+  const derivedTitle = candidateJobTitle(candidate);
+  const jobTitle = (derivedTitle && derivedTitle.toLowerCase() !== 'candidate') ? derivedTitle : '—';
   const cityLabel = candidateLocationLabel(candidate);
   // Derive from real work history (the stored `experience` field is ~always 0).
   const yearsExp = yearsOfExperience(candidate.workHistory) ?? (candidate.experience ?? null);

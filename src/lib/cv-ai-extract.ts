@@ -137,7 +137,7 @@ const SCHEMA = {
     linkedin: { type: 'string', description: 'Full URL. Prefer a URL from the text block over anchor text.' },
     portfolio: { type: 'string', description: 'Full URL' },
     github: { type: 'string', description: 'Full URL' },
-    headline: { type: 'string', description: 'One line: discipline, years, industry' },
+    headline: { type: 'string', description: 'Their professional TITLE only, as it would sit under their name — e.g. "Lifecycle Marketing Manager", "Financial Analyst". Two to five words. Never a sentence, never years of experience or industries; the summary field is where that belongs.' },
     summary: { type: 'string', description: '2-3 factual sentences drawn from the CV only' },
     function: { type: 'string', enum: FUNCTIONS as unknown as string[] },
     subFunction: { type: 'string', description: 'lowercase_snake, e.g. lifecycle_email, paid_performance, account_management, data_analysis' },

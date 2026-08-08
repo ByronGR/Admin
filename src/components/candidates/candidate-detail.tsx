@@ -1,4 +1,5 @@
 'use client';
+import { countryFlag, countryCode } from '@/lib/country-flag';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
@@ -959,6 +960,9 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: NW.black }}>{properName(candidate.name) || 'Unnamed candidate'}</h1>
+          {countryFlag(candidate) && (
+            <span title={countryCode(candidate)} style={{ fontSize: 20, lineHeight: 1, marginLeft: 2 }}>{countryFlag(candidate)}</span>
+          )}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: statusActive ? NW.green600 : NW.gray500, background: statusActive ? NW.green50 : NW.gray50, border: `1px solid ${(statusActive ? NW.green600 : NW.gray500)}22`, borderRadius: 999, padding: '3px 10px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusActive ? NW.green500 : NW.gray300 }} />
                 {statusActive ? 'Active' : 'Inactive'}

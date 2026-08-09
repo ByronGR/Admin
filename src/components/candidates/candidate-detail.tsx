@@ -851,6 +851,27 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     : null;
 
   // ── Header / quick-fact derivations ─────────────────────────────────────────
+  // How they signed up — Firebase Auth knows, the candidate record doesn't.
+  const [signupLabel, setSignupLabel] = useState<string>('');
+  useEffect(() => {
+    const email = (candidate.email || '').toLowerCase();
+    const uid = (candidate as { uid?: string }).uid || '';
+    if (!email && !uid) return;
+    let alive = true;
+    (async () => {
+      try {
+        const t = await auth.currentUser?.getIdToken();
+        const q = new URLSearchParams();
+        if (uid) q.set('uid', uid);
+        if (email) q.set('email', email);
+        const res = await fetch(`/api/candidate-provider?${q}`, { headers: { Authorization: `Bearer ${t}` } });
+        const j = await res.json();
+        if (alive && res.ok) setSignupLabel(j.label || '');
+      } catch { /* the row simply stays blank */ }
+    })();
+    return () => { alive = false; };
+  }, [candidate.email, candidate]);
+
   const derivedTitle = candidateJobTitle(candidate);
   const jobTitle = (derivedTitle && derivedTitle.toLowerCase() !== 'candidate') ? derivedTitle : '—';
   const cityLabel = candidateLocationLabel(candidate);
@@ -1473,7 +1494,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             {snapRow('Experience', yearsExp != null ? `${yearsExp}+ years` : '—')}
             {editableRow('availability', 'Availability', "e.g. 2 weeks' notice")}
             {editableRow('timezone', 'Timezone', 'e.g. GMT-5 (EST)')}
-            {snapRow('Source', candidate.source || '—')}
+            {snapRow('Signed up with', signupLabel || '—')}
+            {snapRow('Came from', candidate.source || '—')}
             {snapRow('Applications', `${appsCount} total`, true)}
           </div>
 

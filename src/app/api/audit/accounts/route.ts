@@ -9,11 +9,22 @@ import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 // record, which makes them invisible to staff: absent from the candidate list,
 // the intake chart, and every match. This finds them.
 //
-// A candidate is treated as ALREADY PRESENT if any of four things match, not
-// just the derived document id. Records reach the candidates collection by more
-// than one route (Talent onboarding, the job board, manual adds) and are keyed
-// differently by each, so checking one key would "find" people who are already
-// there under another and duplicate them. Duplicates are worse than the problem.
+// Who counts as a candidate is the hard part, and getting it wrong is expensive
+// in both directions:
+//   • Client users (a partner's team on their own domain) log into the client
+//     portal. Listing them here would invite turning a customer into a candidate.
+//   • Nearwork staff are not all on @nearwork.co — some sign in with personal
+//     addresses, so a domain check alone misses them.
+//   • An account with no users/{uid} document never finished signing up. That is
+//     a normal, harmless state, not a lost candidate.
+// So an account is only reported when its own profile says role: 'candidate',
+// it belongs to no organization, and it has no candidate record.
+//
+// Presence is then judged on four keys, not just the derived document id.
+// Records reach the candidates collection by more than one route (Talent
+// onboarding, the job board, manual adds) and are keyed differently by each, so
+// checking one key would "find" people already there under another and
+// duplicate them. Duplicates are worse than the problem.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,6 +54,21 @@ async function requireStaff(req: Request): Promise<string | null> {
 const codeForUid = (uid: string) =>
   `CAND-${uid.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`;
 
+const CLIENT_ROLES = new Set(['client', 'client_admin', 'client_user', 'viewer', 'user']);
+
+/** Every email that belongs to a client organization's own team. */
+async function clientEmails(): Promise<Set<string>> {
+  const out = new Set<string>();
+  const snap = await adminDb().collection('organizations').get();
+  snap.docs.forEach((d) => {
+    const org = d.data() as { orgUsers?: { email?: string }[]; pocContacts?: { email?: string }[] };
+    [...(org.orgUsers || []), ...(org.pocContacts || [])].forEach((u) => {
+      if (u?.email) out.add(String(u.email).toLowerCase().trim());
+    });
+  });
+  return out;
+}
+
 /** Everything already in `candidates`, indexed every way a record can be keyed. */
 async function buildIndex() {
   const snap = await adminDb().collection('candidates').get();
@@ -65,9 +91,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Staff only' }, { status: 401 });
   }
 
-  const index = await buildIndex();
+  const [index, clients] = await Promise.all([buildIndex(), clientEmails()]);
   const orphans: Orphan[] = [];
   let scanned = 0;
+  const skippedCounts = { noProfile: 0, client: 0, staff: 0 };
   const providerCounts: Record<string, number> = {};
 
   let pageToken: string | undefined;
@@ -79,8 +106,19 @@ export async function GET(req: Request) {
       const ids = (u.providerData || []).map((p) => p.providerId);
       const provider = ids.find((i) => i !== 'password') || ids[0] || 'password';
 
-      // Staff accounts aren't candidates.
-      if (email.endsWith('@nearwork.co')) continue;
+      if (email.endsWith('@nearwork.co')) { skippedCounts.staff++; continue; }
+      if (email && clients.has(email)) { skippedCounts.client++; continue; }
+
+      // Their own profile is the authority on what kind of account this is.
+      const profSnap = await adminDb().collection('users').doc(u.uid).get().catch(() => null);
+      if (!profSnap?.exists) { skippedCounts.noProfile++; continue; }
+      const prof = profSnap.data() as { role?: string; staffRole?: string; orgId?: string };
+      const role = String(prof.role || '').toLowerCase();
+
+      if (prof.staffRole) { skippedCounts.staff++; continue; }
+      if (prof.orgId || CLIENT_ROLES.has(role)) { skippedCounts.client++; continue; }
+      // Anything that doesn't explicitly say "candidate" is left alone.
+      if (role !== 'candidate') { skippedCounts.noProfile++; continue; }
 
       const present =
         index.byId.has(codeForUid(u.uid)) ||
@@ -108,6 +146,7 @@ export async function GET(req: Request) {
     candidateRecords: index.total,
     orphans,
     byProvider: providerCounts,
+    excluded: skippedCounts,
   });
 }
 
@@ -137,6 +176,20 @@ export async function POST(req: Request) {
     if (index.byId.has(code) || index.byOwner.has(uid) || (!!email && index.byEmail.has(email))) {
       skipped.push({ uid, why: 'already has a candidate record' });
       continue;
+    }
+
+    // Re-apply the same identity guard here. A uid arriving in this list is not
+    // permission to create a candidate from a client or a staff member.
+    if (email.endsWith('@nearwork.co')) { skipped.push({ uid, why: 'Nearwork staff' }); continue; }
+    const profSnap = await adminDb().collection('users').doc(uid).get().catch(() => null);
+    const prof = profSnap?.exists ? profSnap.data() as { role?: string; staffRole?: string; orgId?: string } : null;
+    if (!prof) { skipped.push({ uid, why: 'never finished signing up' }); continue; }
+    if (prof.staffRole) { skipped.push({ uid, why: 'Nearwork staff' }); continue; }
+    if (prof.orgId || CLIENT_ROLES.has(String(prof.role || '').toLowerCase())) {
+      skipped.push({ uid, why: 'client user' }); continue;
+    }
+    if (String(prof.role || '').toLowerCase() !== 'candidate') {
+      skipped.push({ uid, why: 'not a candidate account' }); continue;
     }
 
     const ids = (user.providerData || []).map((p) => p.providerId);

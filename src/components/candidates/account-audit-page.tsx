@@ -27,6 +27,7 @@ interface Report {
   candidateRecords: number;
   orphans: Orphan[];
   byProvider: Record<string, number>;
+  excluded: { noProfile: number; client: number; staff: number };
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -90,7 +91,7 @@ export default function AccountAuditPage() {
     <MainLayout>
       <PageHeader
         title="Accounts without a candidate record"
-        subtitle="People who can sign in but don't appear anywhere in Admin — invisible to the team, and to matching."
+        subtitle="Candidate accounts that can sign in but don't appear anywhere in Admin. Clients and staff are excluded."
       />
 
       {!report && (
@@ -126,6 +127,13 @@ export default function AccountAuditPage() {
             <div>
               <div style={{ fontSize: 26, fontWeight: 700, color: NW.gray700 }}>{report.candidateRecords}</div>
               <div style={{ fontSize: 12, color: NW.gray500 }}>candidate records</div>
+            </div>
+            {/* Say what was left out. A smaller number is only reassuring if you
+                can see it isn't smaller because something was quietly dropped. */}
+            <div style={{ fontSize: 11.5, color: NW.gray500, lineHeight: 1.6, maxWidth: 300 }}>
+              Excluded: {report.excluded.client} client user{report.excluded.client === 1 ? '' : 's'} ·{' '}
+              {report.excluded.staff} Nearwork staff ·{' '}
+              {report.excluded.noProfile} who never finished signing up
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <Button variant="secondary" size="sm" onClick={scan}>Re-check</Button>

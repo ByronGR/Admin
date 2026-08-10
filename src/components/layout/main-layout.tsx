@@ -1,4 +1,5 @@
 'use client';
+import { VersionBanner } from '@/components/version-banner';
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -36,6 +37,10 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <ToastProvider>
+      {/* Nobody should be looking at a stale build. Same behaviour as the client
+          portal: reload quietly when they come back to the tab, with a visible
+          bar as the fallback. */}
+      <VersionBanner />
       <div style={{ display: 'flex', height: '100dvh', width: '100%', background: NW.backdrop, overflow: 'hidden' }}>
         {isMobile ? (
           <>

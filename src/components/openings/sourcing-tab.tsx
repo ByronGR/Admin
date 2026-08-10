@@ -572,7 +572,9 @@ export function SourcingTab({ op }: { op: Opening }) {
     if (fRef && !(r.refs || []).includes(fRef)) return false;
     if (fSource && r.source !== fSource) return false;
     return true;
-  }), [rows, q, fCountry, fOwner, fStatus, fSource]);
+    // fRef belongs here: leaving it out meant picking a search recomputed
+    // nothing, so the filter silently did nothing at all.
+  }), [rows, q, fCountry, fOwner, fStatus, fSource, fRef]);
 
   const total = rows.length;
   const isFiltered = filtered.length !== total;
@@ -595,7 +597,7 @@ export function SourcingTab({ op }: { op: Opening }) {
     return [...filtered].sort((a, b) => { const va = val(a), vb = val(b); return va < vb ? -sort.dir : va > vb ? sort.dir : 0; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sort, appliedSlugs, appliedNames]);
-  useEffect(() => { setPageNum(1); }, [q, fCountry, fOwner, fStatus, fSource, pageSize, total]);
+  useEffect(() => { setPageNum(1); }, [q, fCountry, fOwner, fStatus, fSource, fRef, pageSize, total]);
   const pageCount = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
   const pageRows = sortedFiltered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
   const toggleSort = (key: string) => setSort(prev => (prev?.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));

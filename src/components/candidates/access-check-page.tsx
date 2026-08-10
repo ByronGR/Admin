@@ -10,7 +10,7 @@
 // This names the failing check instead.
 
 import { useState, useCallback } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db, collection, getDocs } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { PageHeader } from '@/components/nw/shell-ui';
 import { Button, NW } from '@/components/nw/primitives';
@@ -41,6 +41,11 @@ export default function AccessCheckPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [list, setList] = useState<StaffRow[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // Everything else on this page asks the SERVER, which uses admin credentials
+  // and bypasses the security rules entirely. That can say "has access" while
+  // the person's own browser is being refused — which is exactly the state
+  // that looks like an empty database.
+  const [selfTest, setSelfTest] = useState<string[] | null>(null);
 
   const token = useCallback(async () => auth.currentUser?.getIdToken(), []);
 
@@ -74,6 +79,24 @@ export default function AccessCheckPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function runSelfTest() {
+    setBusy(true);
+    setSelfTest(['Reading as ' + (auth.currentUser?.email || 'nobody') + ' …']);
+    const lines: string[] = [`Signed in as ${auth.currentUser?.email || '(nobody)'} · uid ${auth.currentUser?.uid || '—'}`];
+    for (const name of ['candidates', 'pipelines', 'openings', 'organizations']) {
+      try {
+        const snap = await getDocs(collection(db, name));
+        lines.push(`${name}: ${snap.size} document${snap.size === 1 ? '' : 's'} — allowed`);
+      } catch (e) {
+        const code = (e as { code?: string })?.code || '';
+        const msg = e instanceof Error ? e.message : String(e);
+        lines.push(`${name}: DENIED — ${code || msg}`);
+      }
+    }
+    setSelfTest(lines);
+    setBusy(false);
   }
 
   async function repair() {
@@ -114,7 +137,26 @@ export default function AccessCheckPage() {
         />
         <Button onClick={() => check()} disabled={busy}>{busy ? 'Checking…' : 'Check'}</Button>
         <Button variant="secondary" onClick={listAll} disabled={busy}>Show every Nearwork account</Button>
+        <Button variant="secondary" onClick={runSelfTest} disabled={busy}>Test THIS browser</Button>
       </div>
+
+      {selfTest && (
+        <div style={{ ...card, marginBottom: 16, background: NW.gray50 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: NW.gray500, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+            Reading Firestore from this browser
+          </div>
+          {selfTest.map((l, i) => (
+            <div key={i} style={{ fontSize: 12.5, fontFamily: 'ui-monospace, monospace', color: l.includes('DENIED') ? '#B91C1C' : NW.gray700, lineHeight: 1.7 }}>
+              {l}
+            </div>
+          ))}
+          <div style={{ fontSize: 11.5, color: NW.gray500, marginTop: 8, lineHeight: 1.5 }}>
+            Run this while signed in as the person having trouble. It reads with their own
+            credentials, so it shows what the security rules actually do for them — not what the
+            server can do on their behalf.
+          </div>
+        </div>
+      )}
 
       {list && (
         <div style={{ ...card, padding: 0, overflowX: 'auto', marginBottom: 16 }}>

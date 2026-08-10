@@ -47,8 +47,51 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Staff only' }, { status: 401 });
   }
 
-  const email = (new URL(req.url).searchParams.get('email') || '').toLowerCase().trim();
-  if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 });
+  const url = new URL(req.url);
+  const email = (url.searchParams.get('email') || '').toLowerCase().trim();
+
+  // No email → every Nearwork account and whether it passes. A single account
+  // reading "fine" proves nothing if the person is actually signing into a
+  // different one — a second account from a typo or an old address looks
+  // identical from their side, and only a full list shows it.
+  if (!email) {
+    const rows: {
+      email: string; uid: string; name: string; role: string;
+      employmentType: string; status: string; providers: string[]; passes: boolean; why: string;
+    }[] = [];
+    let pageToken: string | undefined;
+    do {
+      const page = await adminAuth().listUsers(1000, pageToken);
+      for (const u of page.users) {
+        const addr = (u.email || '').toLowerCase();
+        if (!addr.endsWith('@nearwork.co')) continue;
+        const snap = await adminDb().collection('users').doc(u.uid).get().catch(() => null);
+        const d = (snap?.exists ? snap.data() : null) as {
+          role?: string; employmentType?: string; status?: string; name?: string;
+        } | null;
+        const r = String(d?.role || '');
+        const fails: string[] = [];
+        if (!d) fails.push('no profile document');
+        if (d?.employmentType === 'placed') fails.push('marked as placed');
+        if (d?.status && ['suspended', 'inactive'].includes(String(d.status))) fails.push(`status ${d.status}`);
+        if (!STAFF_ROLES.includes(r)) fails.push(r ? `role "${r}"` : 'no role');
+        const passes = BREAK_GLASS.includes(addr) || fails.length === 0;
+        rows.push({
+          email: addr, uid: u.uid,
+          name: d?.name || u.displayName || '',
+          role: r || '—',
+          employmentType: d?.employmentType || '—',
+          status: d?.status || '—',
+          providers: (u.providerData || []).map((p) => p.providerId),
+          passes,
+          why: passes ? '' : fails.join(', '),
+        });
+      }
+      pageToken = page.pageToken;
+    } while (pageToken);
+    rows.sort((a, b) => Number(a.passes) - Number(b.passes) || a.email.localeCompare(b.email));
+    return NextResponse.json({ list: rows });
+  }
 
   let user;
   try {

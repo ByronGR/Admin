@@ -1117,3 +1117,67 @@ export interface ContractorProfile {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
+
+// ─── Vetting ──────────────────────────────────────────────────────────────────
+// The internal record of how we assessed one candidate for one opening. It is
+// staff-only and never travels to a client: presenting a candidate is vouching
+// for them, so anything that would make a client ask "why are you showing me
+// this person?" lives here and stops here.
+//
+// Distinct from two neighbours it is easy to confuse:
+//   • the MATCH score  — CV vs job post, internal, a hypothesis from the weakest
+//     evidence we hold (what the candidate wrote about themselves)
+//   • the NEARWORK SCORE — assessment · English · DISC alignment, client-facing,
+//     built only from evidence we gathered ourselves
+// Vetting is the working record that decides whether the second one ever gets
+// shown to anybody.
+
+export type Attendance = 'showed' | 'late' | 'no_show';
+export type VettingRecommendation = 'present' | 'hold' | 'reject';
+
+export interface InterviewRatings {
+  communication?: number;   // 1–5
+  depth?: number;           // 1–5, role knowledge
+  english?: number;         // 1–5, English as actually spoken — often differs from the test
+}
+
+export interface VettingRecord {
+  id: string;                     // `${openingId}_${candidateId}`
+  openingId: string;
+  openingTitle?: string;
+  candidateId: string;
+  candidateName?: string;
+
+  // Generated when the candidate is moved to Interview — deliberately not on
+  // application, or we would pay to prepare for interviews we never hold.
+  questions?: string[];
+  questionsAt?: string;
+
+  interviewedAt?: string;
+  interviewer?: string;
+  attendance?: Attendance;
+  ratings?: InterviewRatings;
+
+  notesRaw?: string;              // what the interviewer actually wrote
+  summary?: string;
+  strengths?: string[];
+  concerns?: string[];
+  recommendation?: VettingRecommendation;
+  recommendationReason?: string;
+
+  // The recruiter's own read on fit, replacing the CV-derived score. This is the
+  // answer to a good candidate with a badly written CV: once someone has met
+  // them, the CV stops being the best evidence available.
+  fitOverride?: number;           // 0–100
+  fitOverrideReason?: string;
+
+  // AI filled this from pasted notes; a human then corrected it. Once edited,
+  // a re-extraction must never overwrite — same rule as the CV parser.
+  extractedAt?: string;
+  extractedModel?: string;
+  editedBy?: string;
+  editedAt?: string;
+
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}

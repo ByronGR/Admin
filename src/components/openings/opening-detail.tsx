@@ -875,6 +875,13 @@ export function OpeningDetail({
                           <StageDots current={idx < 0 ? 0 : idx} />
                           <span style={{ fontSize: 11.5, fontWeight: 600, color: NW.gray600, minWidth: 84 }}>{st.label}</span>
                           {typeof c.score === 'number' && <ScorePill score={c.score} />}
+                          {/* Vetting opens where the work happens — a page someone
+                              has to remember to visit stays empty. */}
+                          <button
+                            onClick={() => router.push(`/vetting/${opening.id}/${c.candidateId}`)}
+                            title="Interview questions, notes and the internal record"
+                            style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: NW.teal700, background: NW.teal50, border: `1px solid ${NW.teal500}33`, borderRadius: 999, padding: '5px 13px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >Vetting</button>
                           <button
                             onClick={() => router.push(`/pipeline?code=${encodeURIComponent(briefCode)}`)}
                             style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: NW.gray700, background: NW.white, border: `1px solid ${NW.gray200}`, borderRadius: 999, padding: '5px 13px', cursor: 'pointer', whiteSpace: 'nowrap' }}

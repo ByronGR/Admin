@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 import { extractCVWithAI, cvApiKey, cvDailyCap } from '@/lib/cv-ai-extract';
+import { recordAiUsage } from '@/lib/ai-usage';
 import { aiProfileToCandidate } from '@/lib/cv-ai-to-candidate';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import type { Candidate, PipelineCandidate } from '@/lib/types';
@@ -119,6 +120,10 @@ export async function POST(req: Request) {
       const filename = ct.includes('word') || /\.docx(\?|$)/i.test(cvUrl) ? `${id}.docx` : `${id}.pdf`;
 
       const r = await extractCVWithAI(buf, filename, key, ct);
+      await recordAiUsage('cv', r.costUsd, {
+        model: r.model, inputTokens: r.usage?.input_tokens, outputTokens: r.usage?.output_tokens,
+        action: 'cv-parse-bulk',
+      });
       const patch = aiProfileToCandidate(r.profile, {
         model: r.model, schemaVersion: r.schemaVersion, rawText: r.rawText,
       });

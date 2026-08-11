@@ -37,7 +37,10 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: 'Insights',
-    items: [{ href: '/salary-rates', label: 'FX & rates', icon: 'calculator' }],
+    items: [
+      { href: '/salary-rates', label: 'FX & rates', icon: 'calculator' },
+      { href: '/ai-usage', label: 'AI usage', icon: 'sparkles' },
+    ],
   },
 ];
 

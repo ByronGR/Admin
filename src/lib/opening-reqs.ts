@@ -11,7 +11,7 @@
 
 import { adminDb, GCFieldValue } from './firebase-admin';
 import { extractOpeningRequirements } from './opening-ai-extract';
-import { cvApiKey, cvDailyCap } from './cv-ai-extract';
+import { aiKey, recordAiUsage, reserveAiCall } from './ai-usage';
 import type { Opening, OpeningReqs } from './types';
 
 export interface EnsureResult {
@@ -45,22 +45,20 @@ export async function ensureOpeningReqs(
   // A recruiter's edits outrank a re-read, always.
   if (op.reqs?.editedBy && opts.force) return { reqs: op.reqs, extracted: false };
 
-  const key = cvApiKey();
+  // Requirements describe the ROLE, not a CV — it belongs to the vetting budget.
+  const key = aiKey('vetting');
   if (!key) return { extracted: false, error: 'No API key configured' };
 
-  const day = new Date().toISOString().slice(0, 10);
-  const usageRef = db.collection('cvParseUsage').doc(day);
-  const capped = await db.runTransaction(async (tx) => {
-    const s = await tx.get(usageRef);
-    const d = (s.exists ? s.data() : {}) as { aiParses?: number };
-    if ((d.aiParses || 0) >= cvDailyCap()) return true;
-    tx.set(usageRef, { aiParses: (d.aiParses || 0) + 1, updatedAt: GCFieldValue.serverTimestamp() }, { merge: true });
-    return false;
-  });
-  if (capped) return { extracted: false, error: 'Daily parsing limit reached' };
+  // One shared meter rather than borrowing the CV parser's counter, which was
+  // making requirement extractions look like CV parses in the numbers.
+  const slot = await reserveAiCall('vetting');
+  if (!slot.ok) {
+    return { extracted: false, error: `Daily vetting limit reached (${slot.used}/${slot.cap})` };
+  }
 
   try {
     const r = await extractOpeningRequirements(op, key);
+    await recordAiUsage('vetting', r.costUsd, { model: r.model, action: 'opening-reqs' });
     const reqs: OpeningReqs = {
       ...r.requirements,
       extractedAt: new Date().toISOString(),

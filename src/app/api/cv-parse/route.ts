@@ -5,6 +5,7 @@ import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
 import { detectKind, extractCVText } from '@/lib/cv-extract-text';
 import { parseCV } from '@/lib/cv-parser';
 import { extractCVWithAI, cvApiKey, cvDailyCap } from '@/lib/cv-ai-extract';
+import { recordAiUsage } from '@/lib/ai-usage';
 
 // ── POST /api/cv-parse ────────────────────────────────────────────────────────
 // Staff upload a candidate's CV (PDF or .docx). The file is parsed IN MEMORY
@@ -85,6 +86,12 @@ export async function POST(req: Request) {
 
     try {
       const r = await extractCVWithAI(buf, file.name, key, file.type);
+      // Metered so every Claude call in Admin lands in one place, whatever
+      // feature made it.
+      await recordAiUsage('cv', r.costUsd, {
+        model: r.model, inputTokens: r.usage?.input_tokens, outputTokens: r.usage?.output_tokens,
+        action: 'cv-parse',
+      });
       return NextResponse.json({
         success: true,
         engine: 'ai',

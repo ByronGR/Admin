@@ -1465,7 +1465,21 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
                 </>
               ) : (
                 <>
-                  <span style={{ flex: 1, fontFamily: MONO, fontSize: 13, color: candidate.phone ? NW.gray800 : NW.gray400 }}>{candidate.phone || 'No phone on file'}</span>
+                  {/* A candidate reachable by WhatsApp username has no phone on
+                      file by design, and would otherwise read here as having no
+                      contact details at all. */}
+                  <span style={{ flex: 1, fontFamily: MONO, fontSize: 13, color: (candidate.phone || candidate.whatsapp) ? NW.gray800 : NW.gray400 }}>
+                    {candidate.phone
+                      || (candidate.whatsappType === 'username' && candidate.whatsapp
+                        ? `@${candidate.whatsapp.replace(/^@/, '')}`
+                        : candidate.whatsapp)
+                      || 'No phone on file'}
+                    {candidate.whatsappType === 'username' && candidate.whatsapp && (
+                      <span style={{ fontFamily: 'inherit', fontSize: 11, color: NW.gray400, marginLeft: 8 }}>
+                        WhatsApp username — search it in WhatsApp, it has no link
+                      </span>
+                    )}
+                  </span>
                   <button onClick={() => { setFieldDraft(candidate.phone || ''); setEditField('phone'); }} style={{ fontSize: 12, fontWeight: 600, color: NW.teal600, background: 'transparent', border: 'none', cursor: 'pointer' }}>{candidate.phone ? 'Edit' : '+ Add'}</button>
                 </>
               )}

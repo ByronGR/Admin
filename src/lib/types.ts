@@ -386,6 +386,11 @@ export interface Candidate {
   // onboarding writes `photoURL`. Read both — see candidatePhoto().
   photoUrl?: string;
   photoURL?: string;
+  // WhatsApp can now be reached by username instead of a number, and the two
+  // are not interchangeable: wa.me accepts digits only and there is no username
+  // deep link, so which one this is has to be recorded, not inferred.
+  whatsapp?: string;
+  whatsappType?: 'phone' | 'username';
   status?: CandidateStatus;
   source?: string;
   tags?: string[];

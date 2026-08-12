@@ -5,6 +5,18 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.28.0] — 2026-08-12
+
+### Added
+- RAIA can now build an interview brief from a candidate and an opening — comparing the CV against the job description and returning the questions worth asking, with the reason each one matters.
+- Openings without extracted requirements have them read automatically when a brief is built, so a brief is never quietly empty.
+
+### Technical
+- New `/api/raia/session` route (staff only) calling the public RAIA API.
+- Admin talks to RAIA over the same public endpoint any customer would use — no private integration path, so the integration stays honest as RAIA is sold.
+
+---
+
 ## [1.27.1] — 2026-07-25
 
 ### Fixed

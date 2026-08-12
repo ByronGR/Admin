@@ -29,3 +29,4 @@ next-env.d.ts
 
 # Local CV samples for parser tuning (never committed)
 tmp/
+.env*

@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.27.6';
+export const APP_VERSION = '1.28.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,26 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.28.0',
+    date: '2026-08-12',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'RAIA can now build an interview brief from a candidate and an opening — comparing the CV against the job description and returning the questions worth asking, with the reason each one matters.',
+          'Openings without extracted requirements now have them read automatically when a brief is built, so a brief is never quietly empty.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New /api/raia/session route (staff only) calling the public RAIA API at raia-eight.vercel.app.',
+          'Admin talks to RAIA over the same public endpoint any customer would use — no private integration path.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.27.6',
     date: '2026-07-26',

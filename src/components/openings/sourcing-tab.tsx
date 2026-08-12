@@ -640,6 +640,14 @@ export function SourcingTab({ op }: { op: Opening }) {
                       >{ref}</button>
                     ))}
                   </div>
+                  {/* Their LinkedIn headline. An X-ray only sees a result title
+                      and one line of snippet, so without this a row is a name
+                      and a country — not enough to judge anyone by. */}
+                  {r.headline && (
+                    <div style={{ maxWidth: 230, fontSize: 11.5, color: NW.gray500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }} title={r.headline}>
+                      {r.headline}
+                    </div>
+                  )}
                   <a href={r.linkedin} target="_blank" rel="noopener noreferrer" title={r.linkedin} style={{ display: 'block', maxWidth: 230, fontSize: 11.5, color: NW.teal600, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.li} ↗</a>
                   {r.dupe && <span style={{ fontSize: 10.5, color: '#B45309' }}>⚠ also in another opening</span>}
                 </td>

@@ -167,7 +167,7 @@ export async function POST(req: Request) {
     const col = db.collection('sourcedCandidates');
     for (const c of candidates) {
       batch.set(col.doc(), {
-        openingId, name: c.name, li: c.li, linkedin: c.linkedin, location: c.location, country: c.country,
+        openingId, name: c.name, headline: c.headline || '', li: c.li, linkedin: c.linkedin, location: c.location, country: c.country,
         source: 'X-ray', owner: '', status: 'New', reason: '', salary: '', applied: false,
         refs: [ref],
         last: 'just sourced', notes: '', createdAt: GCFieldValue.serverTimestamp(), updatedAt: GCFieldValue.serverTimestamp(),

@@ -4,11 +4,13 @@
 // Never import this into client code — it reads API keys from the environment.
 
 const COUNTRIES: Record<string, string> = {
+  // South America
   co: 'Colombia', ar: 'Argentina', pe: 'Peru', cl: 'Chile', ve: 'Venezuela',
-  ec: 'Ecuador', uy: 'Uruguay', bo: 'Bolivia', py: 'Paraguay', mx: 'Mexico',
-  // Brazil is Portuguese-speaking, so it sits outside the Spanish-speaking
-  // default set and is opted into per search rather than always on.
-  br: 'Brazil',
+  ec: 'Ecuador', uy: 'Uruguay', br: 'Brazil', bo: 'Bolivia', py: 'Paraguay',
+  // Mexico, Central America and the Caribbean — the other nearshore hubs.
+  // Belize is deliberately absent: it isn't one.
+  mx: 'Mexico', cr: 'Costa Rica', gt: 'Guatemala', sv: 'El Salvador',
+  hn: 'Honduras', ni: 'Nicaragua', pa: 'Panama', do: 'Dominican Republic',
 };
 
 const SUBDOMAIN_COUNTRY: Record<string, string> = {
@@ -150,6 +152,10 @@ Output JSON ONLY: {"domain":"<field>", "aliases":[equivalent titles, best first]
 
 export type XrayResult = {
   name: string; li: string; linkedin: string; location: string; country: string;
+  // What their LinkedIn headline says. An X-ray only ever sees the result title
+  // and one line of snippet, so this is the single piece of evidence about who
+  // the person actually is — without it a row is just a name and a country.
+  headline: string;
 };
 
 // Parse raw search results → net-new candidates, applying geo-lock, dedup and exclusions.
@@ -183,8 +189,18 @@ export function filterResults(
     for (const [city, c] of Object.entries(CITY_HINTS)) {
       if (c === country && new RegExp('\\b' + city + '\\b', 'i').test(text)) { loc = city + ', ' + country; break; }
     }
+    // The headline is the result title with the name and the "| LinkedIn"
+    // suffix stripped; when that leaves nothing useful, the snippet is a better
+    // description than an empty cell.
+    const nm = cleanName(it.title || '');
+    let headline = (it.title || '').replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+    const dash = headline.indexOf(' - ');
+    if (dash !== -1 && headline.slice(0, dash).trim() === nm) headline = headline.slice(dash + 3).trim();
+    if (!headline || headline === nm) headline = (it.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+
     candidates.push({
-      name: cleanName(it.title || ''),
+      name: nm,
+      headline,
       li: '/in/' + m[1].replace(/\/+$/, ''),
       linkedin: 'https://www.linkedin.com/in/' + m[1].replace(/\/+$/, ''),
       location: loc, country,

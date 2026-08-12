@@ -1002,20 +1002,28 @@ export const SRC_REASONS: SourceReason[] = ['High salary', 'Doesn’t fit the ro
 
 // 10 LATAM countries; the first 7 (South America, Spanish-speaking) on by default.
 export const SRC_COUNTRIES: { code: string; name: string; on: boolean }[] = [
+  // South America
   { code: 'co', name: 'Colombia', on: true }, { code: 'ar', name: 'Argentina', on: true },
   { code: 'pe', name: 'Peru', on: true }, { code: 'cl', name: 'Chile', on: true },
   { code: 've', name: 'Venezuela', on: true }, { code: 'ec', name: 'Ecuador', on: true },
-  { code: 'uy', name: 'Uruguay', on: true }, { code: 'bo', name: 'Bolivia', on: false },
-  { code: 'py', name: 'Paraguay', on: false }, { code: 'mx', name: 'Mexico', on: false },
-  // Off by default: Brazilian profiles are usually written in Portuguese, and
-  // the search runs with the English filter on.
-  { code: 'br', name: 'Brazil', on: false },
+  { code: 'uy', name: 'Uruguay', on: true }, { code: 'br', name: 'Brazil', on: true },
+  { code: 'bo', name: 'Bolivia', on: false }, { code: 'py', name: 'Paraguay', on: false },
+  // Mexico, Central America and the Caribbean — the other nearshore hubs.
+  // Belize is deliberately absent: it isn't one.
+  { code: 'mx', name: 'Mexico', on: true }, { code: 'cr', name: 'Costa Rica', on: true },
+  { code: 'gt', name: 'Guatemala', on: true }, { code: 'sv', name: 'El Salvador', on: true },
+  { code: 'hn', name: 'Honduras', on: true }, { code: 'ni', name: 'Nicaragua', on: true },
+  { code: 'pa', name: 'Panama', on: true }, { code: 'do', name: 'Dominican Republic', on: true },
 ];
 
 export interface SourcedCandidate {
   id: string;
   openingId: string;
   name: string;
+  // Their LinkedIn headline. An X-ray only ever sees a result title and one line
+  // of snippet, so this is the only evidence of who the person actually is —
+  // without it a row is a name and a country and nothing else.
+  headline?: string;
   li: string;                // '/in/slug' — the LinkedIn match key
   linkedin: string;          // full profile URL
   location?: string;

@@ -75,7 +75,7 @@ const EXISTING = new Set(EXISTING_RAW.map(normSlug));
 // Known Nearwork-team LinkedIn slugs — always dropped (belt-and-suspenders with NEARWORK_SELF).
 const SELF_EXCLUDE = new Set(['byron-giraldo-30513b215'].map(normSlug));
 
-function cleanName(title: string) {
+export function cleanName(title: string) {
   if (!title) return '';
   return title.split('|')[0].split(' - ')[0].split(' – ')[0].trim();
 }

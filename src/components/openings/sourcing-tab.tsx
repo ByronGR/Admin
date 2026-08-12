@@ -460,6 +460,10 @@ export function SourcingTab({ op }: { op: Opening }) {
   const [fRef, setFRef] = useState('');
   const [refDetail, setRefDetail] = useState<SearchRun | null>(null);
   const [groupByRef, setGroupByRef] = useState(false);
+  // Candidates sourced before headlines existed have none, and it can't be
+  // recovered from the database — but their LinkedIn URL can be searched for it.
+  const [missingHeadlines, setMissingHeadlines] = useState(0);
+  const [backfilling, setBackfilling] = useState('');
 
   // Filters
   const [q, setQ] = useState(''); const [fCountry, setFCountry] = useState(''); const [fOwner, setFOwner] = useState('');
@@ -526,6 +530,49 @@ export function SourcingTab({ op }: { op: Opening }) {
   }, [openingId]);
 
   useEffect(() => { loadRuns(); }, [loadRuns]);
+
+  const countMissing = useCallback(async () => {
+    try {
+      const t = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/sourcing/backfill-headlines?openingId=${encodeURIComponent(openingId)}`, {
+        headers: t ? { Authorization: `Bearer ${t}` } : {},
+      });
+      const j = await res.json();
+      if (res.ok) setMissingHeadlines(j.missing || 0);
+    } catch { /* informational only */ }
+  }, [openingId]);
+
+  useEffect(() => { countMissing(); }, [countMissing, rows.length]);
+
+  async function backfillHeadlines() {
+    if (!confirm(`Look up headlines for ${missingHeadlines} candidate${missingHeadlines === 1 ? '' : 's'}?\n\nOne search each — a few cents in total.`)) return;
+    let done = false;
+    let filled = 0;
+    // Looped client-side in small batches: 500 lookups in one request would time
+    // out, and this way progress is visible and a stop costs nothing already done.
+    while (!done) {
+      const t = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sourcing/backfill-headlines', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${t}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ openingId }),
+      });
+      const j = await res.json();
+      if (!res.ok) { setRunNote(j.error || 'Backfill failed'); break; }
+      filled += j.filled;
+      setBackfilling(`${filled} filled · ${j.remaining} to go`);
+      done = j.done || (j.filled === 0 && j.notFound === 0);
+      if (j.filled === 0 && j.notFound > 0 && j.remaining > 0) {
+        // Nothing found for a whole batch — those profiles aren't indexed any
+        // more. Stop rather than burning searches on rows that can't be filled.
+        setRunNote(`Stopped — ${j.remaining} couldn't be found by search. Those profiles are no longer indexed.`);
+        break;
+      }
+    }
+    setBackfilling('');
+    setRunNote(`Filled ${filled} headline${filled === 1 ? '' : 's'}`);
+    countMissing();
+  }
 
   // Seed the steering from this opening's most recent run, so re-running picks
   // up where the last one left off instead of silently dropping the keywords.
@@ -747,6 +794,13 @@ export function SourcingTab({ op }: { op: Opening }) {
           >
             <Icon name="layers" size={14} color={groupByRef ? NW.teal600 : NW.gray600} />
             {groupByRef ? 'Grouped by search' : 'Group by search'}
+          </button>
+        )}
+        {missingHeadlines > 0 && (
+          <button onClick={backfillHeadlines} disabled={!!backfilling}
+            title="Look up the LinkedIn headline for candidates sourced before headlines were captured"
+            style={{ ...field, cursor: backfilling ? 'default' : 'pointer', fontWeight: 600, color: '#B45309', background: '#FFFBEB', borderColor: '#FDE68A' }}>
+            {backfilling || `Get ${missingHeadlines} missing headline${missingHeadlines === 1 ? '' : 's'}`}
           </button>
         )}
         <button onClick={() => setModal('add')} style={{ ...field, cursor: 'pointer', fontWeight: 600, color: NW.black, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="plus" size={14} color={NW.gray600} />Add manually</button>

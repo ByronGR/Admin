@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
-import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug, normKw, countryNames } from '@/lib/xray';
+import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug, normKw, countryNames, cleanName } from '@/lib/xray';
 import { ensureOpeningReqs, reqsAsPlanBrief } from '@/lib/opening-reqs';
 import type { Opening } from '@/lib/types';
 
@@ -118,12 +118,15 @@ export async function POST(req: Request) {
   // every search that found them (a candidate can be S1 and S3).
   const existingSnap = await db.collection('sourcedCandidates').where('openingId', '==', openingId).get();
   const docBySlug = new Map<string, string>();
+  const existingHeadlines = new Set<string>();
   existingSnap.docs.forEach(d => {
-    const li = (d.data().li as string) || '';
+    const data = d.data() as { li?: string; headline?: string };
+    const li = data.li || '';
     if (!li) return;
     const slug = normSlug(li.replace('/in/', ''));
     pulled.add(slug);
     docBySlug.set(slug, d.id);
+    if (data.headline) existingHeadlines.add(d.id);
   });
 
   // ── Reference code for THIS run (audit trail) ──
@@ -179,17 +182,36 @@ export async function POST(req: Request) {
   // ── Tag anyone this run re-surfaced who was already on the board ──
   // They're correctly deduped out of the insert above, but "S1 and S3 both found
   // this person" is exactly the signal the audit trail exists to carry.
+  // Their headline rides along. Candidates sourced before headlines existed have
+  // none, and it cannot be backfilled — the result title was never stored. But a
+  // later search that finds them again is holding exactly that title, so the gap
+  // closes on its own for anyone the searches keep surfacing.
   const resurfaced: string[] = [];
+  const headlineById = new Map<string, string>();
   for (const it of rawItems) {
     const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(it.link || '');
     if (!m) continue;
     const id = docBySlug.get(normSlug(m[1]));
-    if (id && !resurfaced.includes(id)) resurfaced.push(id);
+    if (!id) continue;
+    if (!resurfaced.includes(id)) resurfaced.push(id);
+    if (!headlineById.has(id)) {
+      const nm = cleanName(it.title || '');
+      let h = (it.title || '').replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+      const dash = h.indexOf(' - ');
+      if (dash !== -1 && h.slice(0, dash).trim() === nm) h = h.slice(dash + 3).trim();
+      if (!h || h === nm) h = (it.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+      if (h) headlineById.set(id, h);
+    }
   }
   if (resurfaced.length) {
     const batch = db.batch();
     for (const id of resurfaced) {
-      batch.set(db.collection('sourcedCandidates').doc(id), { refs: GCFieldValue.arrayUnion(ref) }, { merge: true });
+      const h = headlineById.get(id);
+      batch.set(db.collection('sourcedCandidates').doc(id), {
+        refs: GCFieldValue.arrayUnion(ref),
+        // Only fills a gap; never overwrites one already captured.
+        ...(h && !existingHeadlines.has(id) ? { headline: h } : {}),
+      }, { merge: true });
     }
     await batch.commit();
   }

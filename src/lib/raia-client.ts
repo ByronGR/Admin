@@ -60,6 +60,26 @@ interface RaiaOpening {
   rawJdText?: string;
 }
 
+/**
+ * What the hiring manager actually wants, beyond what the job post says.
+ * A job post is written to attract people; a kickoff brief is written to filter
+ * them, and `dealBreakers` in particular almost never survives into the JD.
+ */
+interface RaiaRoleContext {
+  dealBreakers?: string[];
+  mustHave?: string[];
+  niceToHave?: string[];
+  day30?: string[];
+  day60?: string[];
+  day90?: string[];
+  teamSize?: string;
+  teamStructure?: string;
+  reportsTo?: string;
+  directReports?: string;
+  workStyle?: string;
+  notes?: string;
+}
+
 interface RaiaPipelineContext {
   name: string;
   owner: 'nearwork' | 'client';
@@ -194,11 +214,42 @@ export function toRaiaPipeline(p: Pipeline, pc: PipelineCandidate): RaiaPipeline
   };
 }
 
+/**
+ * The kickoff brief, as RAIA reads it.
+ *
+ * Nearwork already asks clients these questions on every engagement, so the
+ * highest-value input RAIA can get is one we have been collecting all along.
+ * A customer without a kickoff process fills the same fields on a form.
+ */
+export function toRaiaRoleContext(b: Record<string, unknown>): RaiaRoleContext {
+  const list = (v: unknown): string[] | undefined => {
+    const arr = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()) : [];
+    return arr.length ? arr : undefined;
+  };
+  const str = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim() ? v.trim() : undefined;
+
+  return {
+    dealBreakers: list(b.dealBreakers),
+    mustHave: list(b.mustHave),
+    niceToHave: list(b.niceToHave),
+    day30: list(b.day30),
+    day60: list(b.day60),
+    day90: list(b.day90),
+    teamSize: str(b.teamSize),
+    teamStructure: str(b.teamStructure),
+    reportsTo: str(b.reportsTo),
+    directReports: str(b.directReports),
+    workStyle: str(b.workStyle),
+  };
+}
+
 // ─── The call ────────────────────────────────────────────────────────────────
 
 export interface CreateSessionInput {
   candidate: Candidate;
   opening: Opening;
+  roleContext?: RaiaRoleContext;
   pipeline?: { pipeline: Pipeline; pipelineCandidate: PipelineCandidate };
   disc?: 'D' | 'I' | 'S' | 'C';
   meetingUrl?: string;
@@ -225,6 +276,7 @@ export async function createRaiaSession(input: CreateSessionInput): Promise<Raia
   const body = {
     candidate: toRaiaCandidate(input.candidate, input.disc),
     opening: toRaiaOpening(input.opening),
+    ...(input.roleContext ? { roleContext: input.roleContext } : {}),
     ...(input.pipeline
       ? { pipeline: toRaiaPipeline(input.pipeline.pipeline, input.pipeline.pipelineCandidate) }
       : {}),

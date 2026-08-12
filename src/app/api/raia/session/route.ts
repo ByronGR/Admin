@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { ensureOpeningReqs } from '@/lib/opening-reqs';
-import { createRaiaSession } from '@/lib/raia-client';
+import { createRaiaSession, toRaiaRoleContext } from '@/lib/raia-client';
 import type { Candidate, Opening, Pipeline, PipelineCandidate } from '@/lib/types';
 
 // ── /api/raia/session ─────────────────────────────────────────────────────────
@@ -80,6 +80,21 @@ export async function POST(req: Request) {
   }
   opening.reqs = reqs.reqs;
 
+  // The kickoff brief, when the opening has one. This is the highest-value
+  // thing we can hand RAIA and we have been collecting it all along: a job post
+  // is written to attract people, a kickoff brief is written to filter them,
+  // and a stated deal-breaker almost never survives into the JD.
+  let roleContext: ReturnType<typeof toRaiaRoleContext> | undefined;
+  if (opening.code) {
+    try {
+      const briefSnap = await db.collection('kickoffBriefs').doc(opening.code).get();
+      if (briefSnap.exists) roleContext = toRaiaRoleContext(briefSnap.data() ?? {});
+    } catch {
+      // A missing kickoff brief is normal, not an error — RAIA falls back to
+      // reading the job post alone.
+    }
+  }
+
   // Pipeline context is optional — a brief is useful before anyone has been put
   // on a board — but when it exists it tells the recruiter whose process this
   // is, which changes what the next step means.
@@ -96,6 +111,7 @@ export async function POST(req: Request) {
   const result = await createRaiaSession({
     candidate,
     opening,
+    roleContext,
     pipeline: pipelineCtx,
     meetingUrl: body.meetingUrl,
     scheduledAt: body.scheduledAt,

@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.29.1] — 2026-08-12
+
+### Removed
+- The RAIA page has been removed from Admin. RAIA has its own app — Admin only supplies it with the candidate, the opening and the kickoff brief, and never draws its screens.
+
+---
+
 ## [1.29.0] — 2026-08-12
 
 ### Added

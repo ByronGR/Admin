@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.30.0] — 2026-08-12
+
+### Added
+- **RAIA button** on every pipeline candidate card. It builds an interview brief from the CV against the job description — plus the questions to ask everyone for that role, including the client's deal-breakers from the kickoff brief — and opens it in RAIA.
+
+### Technical
+- `/api/raia/session` now accepts a pipeline code and resolves the opening from it, so the board doesn't have to thread an opening id through every level.
+
+---
+
 ## [1.29.1] — 2026-08-12
 
 ### Removed

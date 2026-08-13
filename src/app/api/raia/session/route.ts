@@ -39,6 +39,8 @@ export async function POST(req: Request) {
     candidateId?: string;
     openingId?: string;
     pipelineId?: string;
+    /** The board only knows the pipeline code, so accept that and resolve it. */
+    pipelineCode?: string;
     meetingUrl?: string;
     scheduledAt?: string;
   };
@@ -48,12 +50,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Body must be JSON' }, { status: 400 });
   }
 
-  const { candidateId, openingId, pipelineId } = body;
-  if (!candidateId || !openingId) {
-    return NextResponse.json({ error: 'candidateId and openingId are required' }, { status: 400 });
+  const { candidateId } = body;
+  if (!candidateId) {
+    return NextResponse.json({ error: 'candidateId is required' }, { status: 400 });
   }
 
   const db = adminDb();
+
+  // A pipeline code is enough to find both the pipeline and its opening, which
+  // keeps the caller down to two ids it already has. The alternative was
+  // threading an openingId through every level of the board.
+  let openingId = body.openingId;
+  let pipelineId = body.pipelineId;
+  if (!openingId && body.pipelineCode) {
+    const pipeSnap = await db
+      .collection('pipelines')
+      .where('code', '==', body.pipelineCode)
+      .limit(1)
+      .get();
+    if (!pipeSnap.empty) {
+      pipelineId = pipeSnap.docs[0].id;
+      openingId = (pipeSnap.docs[0].data() as Pipeline).openingId;
+    }
+  }
+  if (!openingId) {
+    return NextResponse.json(
+      { error: 'This pipeline has no opening linked, so there is nothing to compare the CV against.' },
+      { status: 400 },
+    );
+  }
   const [candSnap, openSnap] = await Promise.all([
     db.collection('candidates').doc(candidateId).get(),
     db.collection('openings').doc(openingId).get(),
@@ -125,6 +150,8 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ...result.session,
+    // Where to send the recruiter. Admin triggers the brief; RAIA shows it.
+    url: `${(process.env.RAIA_API_URL || '').replace(/\/$/, '')}/raia/interviews/${result.session.sessionId}`,
     // Surfaced so the caller can tell a thin brief from a broken one.
     reqsExtractedNow: reqs.extracted,
     mustHaveCount: opening.reqs.mustHaveSkills?.length ?? 0,

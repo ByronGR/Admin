@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.29.1';
+export const APP_VERSION = '1.30.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,19 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.30.0',
+    date: '2026-08-12',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'RAIA button on every pipeline candidate card. It builds an interview brief from the CV against the job description — plus the questions to ask everyone for that role, including the client\u2019s deal-breakers from the kickoff brief — and opens it in RAIA.',
+        ],
+      },
+      { title: 'Technical', items: ['/api/raia/session now accepts a pipeline code and resolves the opening from it.'] },
+    ],
+  },
   {
     version: '1.29.1',
     date: '2026-08-12',

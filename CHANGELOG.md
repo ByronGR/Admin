@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.30.1] — 2026-08-12
+
+### Removed
+- RAIA has been taken back out of Admin entirely. It is its own product with its own app, and it now reads what it needs directly rather than having Admin fetch and forward it — so a change to RAIA can never touch Admin.
+
+---
+
 ## [1.30.0] — 2026-08-12
 
 ### Added

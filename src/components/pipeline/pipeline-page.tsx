@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DndContext,
@@ -60,7 +60,6 @@ import {
   Trash2,
   Edit3,
   ClipboardList,
-  Sparkles,
   X,
   Languages,
   LayoutGrid,
@@ -1850,37 +1849,6 @@ function CandidateCard({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  // ── RAIA ──────────────────────────────────────────────────────────────────
-  // Admin triggers the brief; RAIA shows it. This opens a tab immediately and
-  // navigates it when the brief is ready — a tab opened later, inside an await,
-  // is a popup as far as the browser is concerned and gets blocked.
-  const [raiaBusy, setRaiaBusy] = useState(false);
-  const openRaia = useCallback(async () => {
-    if (raiaBusy) return;
-    setRaiaBusy(true);
-    const tab = window.open('', '_blank');
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/raia/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ candidateId: candidate.candidateId, pipelineCode }),
-      });
-      const json = (await res.json()) as { url?: string; error?: string };
-      if (res.ok && json.url) {
-        if (tab) tab.location.href = json.url;
-      } else {
-        tab?.close();
-        alert(json.error || `RAIA could not build a brief (${res.status}).`);
-      }
-    } catch (e) {
-      tab?.close();
-      alert(e instanceof Error ? e.message : 'RAIA is unreachable.');
-    } finally {
-      setRaiaBusy(false);
-    }
-  }, [candidate.candidateId, pipelineCode, raiaBusy]);
-
   const score = nearworkScore ?? candidate.score ?? 0;
   const engLevel = candidate.englishScore?.level;
   const cardInitials = (candidate.name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
@@ -1922,15 +1890,6 @@ function CandidateCard({
             className="hover:bg-[var(--bg)] hover:text-[var(--green)]"
           >
             <ClipboardList className="h-2.5 w-2.5" /> Brief
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); void openRaia(); }}
-            disabled={raiaBusy}
-            title="Build an interview brief in RAIA — CV against the job description"
-            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 7, padding: '5px 0', fontSize: 10.5, fontWeight: 600, color: raiaBusy ? NW.gray400 : NW.gray600, background: 'transparent', border: 'none', cursor: raiaBusy ? 'wait' : 'pointer' }}
-            className="hover:bg-[var(--bg)] hover:text-[var(--green)]"
-          >
-            <Sparkles className="h-2.5 w-2.5" /> {raiaBusy ? '…' : 'RAIA'}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(candidate.candidateId, pipelineCode); }}

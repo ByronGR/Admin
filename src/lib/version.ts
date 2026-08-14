@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.30.0';
+export const APP_VERSION = '1.30.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.30.1',
+    date: '2026-08-12',
+    sections: [
+      {
+        title: 'Removed',
+        items: [
+          'RAIA has been taken back out of Admin entirely. It is its own product with its own app, and it now reads what it needs directly rather than having Admin fetch and forward it — so a change to RAIA can never touch Admin.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.30.0',
     date: '2026-08-12',

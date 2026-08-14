@@ -554,6 +554,7 @@ export interface PipelineCandidate {
   role?: string;                 // target/current job title
   location?: string;             // candidate location label
   phone?: string;                // candidate phone (sourcing — client contacts directly)
+  linkedIn?: string;             // candidate LinkedIn (sourcing — same reasoning as phone)
   experience?: number;           // years of experience
   expectedSalaryAmount?: number;
   expectedSalaryCurrency?: string;

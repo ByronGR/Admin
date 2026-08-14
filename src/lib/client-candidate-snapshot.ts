@@ -9,7 +9,7 @@
 import type { Candidate, PipelineCandidate } from './types';
 
 export type ClientCandidateSnapshot = Partial<Pick<PipelineCandidate,
-  | 'role' | 'location' | 'phone' | 'skills' | 'tools' | 'experience' | 'expectedSalary'
+  | 'role' | 'location' | 'phone' | 'linkedIn' | 'skills' | 'tools' | 'experience' | 'expectedSalary'
   | 'expectedSalaryAmount' | 'expectedSalaryCurrency' | 'english'
   | 'availability' | 'timezone' | 'workHistory' | 'education' | 'resumeUrl' | 'cvUrl'>>;
 
@@ -24,6 +24,10 @@ export function clientCandidateSnapshot(c: Partial<Candidate>): ClientCandidateS
   set('role', c.role || c.targetRole || c.currentRole || undefined);
   set('location', c.location || c.locationCity || undefined);
   set('phone', c.phone || undefined);
+  // Shown to sourcing clients only, under the same gate as the phone — on those
+  // engagements they do the contacting, so withholding the profile while showing
+  // the phone number would be a distinction without a difference.
+  set('linkedIn', c.linkedIn || undefined);
   set('skills', Array.isArray(c.skills) ? c.skills : undefined);
   set('tools', Array.isArray(c.tools) ? c.tools : undefined);
   set('education', Array.isArray(c.education) ? c.education : undefined);

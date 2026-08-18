@@ -1,16 +1,36 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { revokeOrgAccess } from '@/lib/revoke-org-access';
 
 // POST /api/remove-member
-// Revokes a client teammate's access to a company workspace. This is a
-// REVERSIBLE access revoke, not an account deletion: we remove the person from
-// the organization's `orgUsers` array (and mark any `orgMembers` doc as
-// 'removed'), but we deliberately leave their Firebase Auth account and
-// users/{uid} profile doc intact so access can be restored later.
+// Revokes a client teammate's access to a company workspace.
 //
-// Body: { orgId: string, email?: string, uid?: string } — at least one of
-// email / uid must be present. Mirrors send-invite's conventions: nodejs
-// runtime, force-dynamic, CORS-limited (no staff-token check).
+// WHAT MAKES ACCESS REAL: the Firestore rules decide whether someone is a client
+// by reading users/{uid}.orgId / .orgIds — nothing else. The organization's
+// `orgUsers` array and the `orgMembers` collection are bookkeeping for the UI;
+// no rule consults either. So removing someone from those lists takes them off
+// the screen in Admin while leaving every door open: they keep reading the
+// portal, and signing out and back in works fine, because their own user
+// document still says which org they belong to.
+//
+// This therefore revokes in the only place that counts — the user document —
+// and then closes the session:
+//   1. org.orgUsers / orgMembers  (what staff see)
+//   2. users/{uid} org fields     (what the rules enforce)
+//   3. refresh tokens revoked     (kills the session they're in right now)
+//   4. Auth account disabled      (stops them signing back in)
+//
+// Steps 3 and 4 are skipped for anyone who still has a reason to log in — staff,
+// candidates, and members of another organization — because disabling those
+// accounts would lock a person out of a product they're entitled to use. For a
+// pure client contact, being unable to log back in is exactly the ask.
+//
+// Reversible by design: nothing is deleted. Re-inviting restores the org fields,
+// and a disabled account is re-enabled by the same endpoint's counterpart in the
+// Firebase console. Deleting the Auth account would also free the email for a
+// fresh signup, which is not a decision a "remove teammate" click should make.
+//
+// Body: { orgId: string, email?: string, uid?: string }
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,12 +40,14 @@ const ALLOWED_ORIGINS = [
   'https://admin.nearwork.co',
 ];
 
+const CLIENT_ADMIN_ROLES = ['admin_client', 'client_admin', 'admin'];
+
 function corsHeaders(origin: string | null) {
   const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Internal-Secret',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 
@@ -33,9 +55,39 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get('origin')) });
 }
 
+type Caller = { uid: string; email: string; staff: boolean };
+
+// CORS is a browser convention, not an access control — curl ignores it entirely.
+// This endpoint can disable an account, so it verifies who is asking.
+async function authenticate(req: Request, orgId: string): Promise<Caller | null> {
+  const authz = req.headers.get('authorization') || '';
+  const token = authz.startsWith('Bearer ') ? authz.slice(7) : '';
+  if (!token) return null;
+
+  let decoded;
+  try {
+    decoded = await adminAuth().verifyIdToken(token);
+  } catch {
+    return null;
+  }
+
+  const email = String(decoded.email || '').toLowerCase();
+  if (email.endsWith('@nearwork.co')) return { uid: decoded.uid, email, staff: true };
+
+  // A client admin may remove teammates, but only inside their own organization.
+  const snap = await adminDb().collection('users').doc(decoded.uid).get().catch(() => null);
+  const d = (snap?.exists ? snap.data() : null) as
+    { orgId?: string; organizationId?: string; orgIds?: string[]; portalRole?: string; role?: string } | null;
+  if (!d) return null;
+
+  const orgs = Array.isArray(d.orgIds) ? d.orgIds : [d.orgId || d.organizationId].filter(Boolean) as string[];
+  const isAdminOfOrg = orgs.includes(orgId)
+    && (CLIENT_ADMIN_ROLES.includes(String(d.portalRole || '')) || String(d.role || '') === 'client_admin');
+  return isAdminOfOrg ? { uid: decoded.uid, email, staff: false } : null;
+}
+
 export async function POST(req: Request) {
-  const origin = req.headers.get('origin');
-  const cors = corsHeaders(origin);
+  const cors = corsHeaders(req.headers.get('origin'));
 
   let body: { orgId?: string; email?: string; uid?: string };
   try {
@@ -44,7 +96,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400, headers: cors });
   }
 
-  const { orgId } = body;
+  const orgId = body.orgId;
   const email = body.email?.trim().toLowerCase() || undefined;
   const uid = body.uid?.trim() || undefined;
 
@@ -55,65 +107,16 @@ export async function POST(req: Request) {
     );
   }
 
+  const caller = await authenticate(req, orgId);
+  if (!caller) {
+    return NextResponse.json({ ok: false, error: 'Not authorized to remove members from this organization' }, { status: 401, headers: cors });
+  }
+
   try {
-    const db = adminDb();
-
-    // 1) Remove the person from organizations/{orgId}.orgUsers. Match by uid
-    // (if given) OR by email (case-insensitive, if given). Missing doc or
-    // missing array is treated as success — nothing to remove.
-    const orgRef = db.collection('organizations').doc(orgId);
-    const orgSnap = await orgRef.get();
-    if (orgSnap.exists) {
-      const data = orgSnap.data() || {};
-      const orgUsers = Array.isArray(data.orgUsers) ? data.orgUsers : [];
-      if (orgUsers.length > 0) {
-        const filtered = orgUsers.filter((u: { uid?: string; email?: string }) => {
-          const matchesUid = uid && u?.uid === uid;
-          const matchesEmail = email && typeof u?.email === 'string' && u.email.trim().toLowerCase() === email;
-          // keep the entry only if it does NOT match the target
-          return !(matchesUid || matchesEmail);
-        });
-        if (filtered.length !== orgUsers.length) {
-          await orgRef.update({ orgUsers: filtered });
-        }
-      }
-    }
-
-    // 2) If a separate `orgMembers` collection exists, soft-revoke matching
-    // docs (status: 'removed' + removedAt) rather than hard-deleting, so the
-    // revoke stays reversible. Query by orgId, then by uid and/or email
-    // (case-insensitive on email). Firestore has no case-insensitive query, so
-    // we filter emails in-memory after the orgId scope.
-    try {
-      const membersCol = db.collection('orgMembers');
-      const byOrg = await membersCol.where('orgId', '==', orgId).get();
-      if (!byOrg.empty) {
-        const removedAt = new Date().toISOString();
-        const updates = byOrg.docs
-          .filter((d) => {
-            const m = d.data() || {};
-            const matchesUid = uid && m.uid === uid;
-            const matchesEmail =
-              email && typeof m.email === 'string' && m.email.trim().toLowerCase() === email;
-            return matchesUid || matchesEmail;
-          })
-          .map((d) => d.ref.update({ status: 'removed', removedAt }));
-        await Promise.all(updates);
-      }
-    } catch (e) {
-      // The collection may not exist / be empty — that's fine, skip silently.
-      console.warn('[remove-member] orgMembers soft-revoke skipped:', e);
-    }
-
-    // NOTE: intentionally NOT deleting the Firebase Auth account or the
-    // users/{uid} doc — this is a reversible access revoke.
-
-    return NextResponse.json({ ok: true }, { headers: cors });
+    const result = await revokeOrgAccess({ orgId, uid, email, byEmail: caller.email });
+    return NextResponse.json({ ok: true, ...result }, { headers: cors });
   } catch (e) {
     console.error('[remove-member] failed:', e);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to revoke member access' },
-      { status: 500, headers: cors },
-    );
+    return NextResponse.json({ ok: false, error: 'Failed to revoke member access' }, { status: 500, headers: cors });
   }
 }

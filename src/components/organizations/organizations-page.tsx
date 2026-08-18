@@ -1617,11 +1617,37 @@ function OrgDetail({
   }
 
   async function removeUser(email: string) {
+    // Goes through /api/remove-member rather than editing the array here. The
+    // security rules grant client access from the person's own user document,
+    // not from this list — editing it alone took them off this screen while
+    // leaving them able to use the portal and sign back in.
+    if (!confirm(`Remove ${email} from ${org.name}?\n\nThey lose access immediately and won't be able to sign in.`)) return;
     try {
+      const res = await fetch('/api/remove-member', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
+        body: JSON.stringify({ orgId: org.id, email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        showToast(data?.error || `Remove failed (${res.status})`, 'error');
+        return;
+      }
       const updatedUsers = orgUsers.filter((u) => u.email !== email);
-      await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
-      showToast('User removed', 'success');
+      // Say which of the two happened. "Removed" reading the same way whether
+      // the account was closed or merely detached is how this went unnoticed.
+      showToast(
+        data?.disabled
+          ? 'Removed — their account is disabled and they cannot sign in'
+          : data?.reason
+            ? `Access revoked (account kept — ${data.reason})`
+            : 'Access revoked',
+        'success',
+      );
     } catch {
       showToast('Failed to remove user', 'error');
     }

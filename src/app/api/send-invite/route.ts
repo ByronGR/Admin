@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { senderFields } from '@/lib/email-sender';
 import { buildInviteEmail } from '@/components/organizations/invite-email';
 import { adminDb } from '@/lib/firebase-admin';
 
@@ -68,9 +69,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
-  const replyTo = process.env.RESEND_REPLY_TO_EMAIL;
+  const sender = senderFields('client');
   const html = buildInviteEmail(firstName || 'there', orgName, setupLink);
 
   try {
@@ -81,9 +80,8 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        from,
+        ...sender,
         to: [email],
-        ...(replyTo ? { reply_to: replyTo } : {}),
         subject: `Set up your Nearwork account — ${orgName}`,
         html,
       }),

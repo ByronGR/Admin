@@ -181,11 +181,24 @@ export function adminDb(): ReturnType<typeof getFirestore> {
         projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
         auth: authClient as unknown as import('@google-cloud/firestore').Settings['auth'],
         preferRest: true,
+        // An undefined value anywhere in a document — including inside an array
+        // element — otherwise rejects the ENTIRE write. A single optional field
+        // that happened to be absent took down a whole kick-off approval, and
+        // the failure surfaced as a raw SDK error on top of the client's page.
+        // Omitting the key is what every call site here already intends.
+        ignoreUndefinedProperties: true,
       }) as ReturnType<typeof getFirestore>;
       return cachedFirestore;
     }
   }
 
   cachedFirestore = getFirestore(adminApp());
+  try {
+    cachedFirestore.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // settings() throws if the instance has already been used or configured.
+    // Not worth failing a request over — the explicit guards at the call sites
+    // still hold.
+  }
   return cachedFirestore;
 }

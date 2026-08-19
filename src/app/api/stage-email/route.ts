@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { senderFields } from '@/lib/email-sender';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { STAGE_TEMPLATES, SOURCING_SUBMITTED } from './templates';
 
@@ -223,13 +224,12 @@ export async function POST(req: Request) {
     if (!key) {
       return NextResponse.json({ ok: false, error: 'RESEND_API_KEY not configured' }, { status: 500, headers: cors });
     }
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-    const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+    const sender = senderFields('client');
     const { subject, html } = template.build(data);
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ from, to: [email], subject, html, scheduled_at: sendAt }),
+      body: JSON.stringify({ ...sender, to: [email], subject, html, scheduled_at: sendAt }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

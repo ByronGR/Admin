@@ -3,6 +3,7 @@ import * as jobApplied from './templates/job_applied';
 import * as accountCreated from './templates/account_created';
 import * as similarRoleAlert from './templates/similar_role_alert';
 import * as candidatePasswordReset from './templates/candidate_password_reset';
+import { senderFields } from '@/lib/email-sender';
 
 // ─── POST /api/send-email ────────────────────────────────────────────────────
 // Generic branded email sender used by all Nearwork services.
@@ -97,8 +98,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+  // Every template in this route is candidate-facing. A client-facing template
+  // added here must route through senderFields('client') instead.
+  const sender = senderFields('candidate');
 
   const { subject, html } = template.build(data);
 
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({ from, to: [to], subject, html }),
+      body: JSON.stringify({ ...sender, to: [to], subject, html }),
     });
 
     if (!res.ok) {

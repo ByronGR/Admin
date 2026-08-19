@@ -15,6 +15,7 @@
 
 import { adminDb } from '@/lib/firebase-admin';
 import { NOTIFICATION_DIGEST_HTML } from '@/lib/notification-digest-template';
+import { senderFields } from '@/lib/email-sender';
 
 // Rolling window (minutes) added on each new item; env-overridable like
 // STAGE_EMAIL_DELAY_MINUTES.
@@ -159,14 +160,13 @@ async function scheduleDigestEmail(opts: {
       ? opts.items[0].title
       : `You have ${opts.items.length} Nearwork updates`;
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+  const sender = senderFields('client');
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.key}` },
     body: JSON.stringify({
-      from,
+      ...sender,
       to: [opts.recipientEmail],
       subject,
       html,

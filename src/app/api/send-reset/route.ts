@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { senderFields } from '@/lib/email-sender';
 import { adminAuth } from '@/lib/firebase-admin';
 import { buildResetEmail } from '@/lib/reset-email';
 
@@ -99,9 +100,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true }, { headers: cors});
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@nearwork.co';
-  const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
-  const replyTo = process.env.RESEND_REPLY_TO_EMAIL;
+  const sender = senderFields('client');
   const html = buildResetEmail(firstName, resetLink);
 
   try {
@@ -109,9 +108,8 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        from,
+        ...sender,
         to: [email],
-        ...(replyTo ? { reply_to: replyTo } : {}),
         subject: 'Reset your Nearwork password',
         html,
       }),

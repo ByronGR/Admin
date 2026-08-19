@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { senderFields } from '@/lib/email-sender';
 import { adminAuth, adminDb, GCFieldValue as FieldValue } from '@/lib/firebase-admin';
 import { build } from '../send-email/templates/similar_role_alert';
 
@@ -297,15 +298,14 @@ export async function POST(req: Request) {
     const key = process.env.RESEND_API_KEY;
     let sent = 0;
     if (key && matches.length) {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Nearwork <noreply@nearwork.co>';
-      const from = fromEmail.includes('<') ? fromEmail : `Nearwork <${fromEmail}>`;
+      const sender = senderFields('candidate');
       for (const m of matches) {
         try {
           const { subject, html } = build({ firstName: m.firstName, roleTitle: title, jobUrl });
           const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-            body: JSON.stringify({ from, to: [m.email], subject, html, scheduled_at: sendAt.toISOString() }),
+            body: JSON.stringify({ ...sender, to: [m.email], subject, html, scheduled_at: sendAt.toISOString() }),
           });
           if (res.ok) sent++;
           else console.error('[job-match-alert] Resend failed:', await res.json().catch(() => ({})));

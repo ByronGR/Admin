@@ -414,7 +414,11 @@ export async function POST(req: Request) {
         action: onBehalf ? 'approved_offline' : 'approved',
         by: actorName,
         byRole: onBehalf ? 'nearwork' : (isNearwork ? 'nearwork' : 'client'),
-        note: onBehalf ? 'Client approved offline; recorded by Nearwork' : undefined,
+        // Spread, not `: undefined`. Firestore rejects an undefined value
+        // anywhere in the document, including inside an array element — so
+        // writing the key with no value failed the ENTIRE approval, and the
+        // ordinary path (not on behalf) was the one that always had no note.
+        ...(onBehalf ? { note: 'Client approved offline; recorded by Nearwork' } : {}),
         timestamp: now,
       });
       await ref.set({

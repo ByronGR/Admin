@@ -28,14 +28,14 @@ export async function POST(req: Request) {
   const origin = req.headers.get('origin');
   const cors = corsHeaders(origin);
 
-  let body: { email?: string; firstName?: string; orgName?: string; setupLink?: string; orgId?: string; token?: string; inviteeName?: string; businessRole?: string };
+  let body: { email?: string; firstName?: string; orgName?: string; setupLink?: string; orgId?: string; token?: string; inviteeName?: string; businessRole?: string; portalRole?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: cors });
   }
 
-  const { email, firstName, orgName, setupLink, orgId, token: inviteToken, inviteeName, businessRole } = body;
+  const { email, firstName, orgName, setupLink, orgId, token: inviteToken, inviteeName, businessRole, portalRole } = body;
   if (!email || !orgName || !setupLink) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: cors });
   }
@@ -51,6 +51,10 @@ export async function POST(req: Request) {
         orgName,
         inviteeName: inviteeName || '',
         businessRole: businessRole || '',
+        // What the invited person may DO, as opposed to their job title. The
+        // accept endpoint reads it from here rather than from the invite URL,
+        // where anyone could have raised it to admin on the way in.
+        portalRole: portalRole || 'viewer_client',
         status: 'pending',
         createdAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),

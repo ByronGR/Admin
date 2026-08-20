@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.30.1';
+export const APP_VERSION = '1.31.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.31.0',
+    date: '2026-08-18',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Automated email now sends from mail.nearwork.co instead of the main nearwork.co domain. Password resets, application confirmations, portal invites and stage updates no longer share a sending reputation with cold outreach \u2014 which was what pushed them into junk folders. Replies still come back to support@nearwork.co, so nothing changes for the person receiving them.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'Added src/lib/email-sender.ts. Every Resend send now picks its from-address by audience \u2014 candidate or client \u2014 via RESEND_FROM_CANDIDATE and RESEND_FROM_CLIENT. The hardcoded @nearwork.co fallbacks were removed from all eight send sites, so a missing variable now fails loudly instead of quietly sending from the root domain again.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.30.1',
     date: '2026-08-12',

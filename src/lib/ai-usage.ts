@@ -105,10 +105,34 @@ export async function recordAiUsage(
   }
 }
 
-/** Sonnet 5 pricing, $/MTok. Kept here so every feature costs the same way. */
-export const PRICE = { in: 2, out: 10 };
+// ── Pricing ──────────────────────────────────────────────────────────────────
+// This was a single `PRICE = { in: 2, out: 10 }`. That is Sonnet 5's *introductory*
+// rate, and it ends on 2026-08-31 — after which every cost recorded here would have
+// been 33% low, silently and indefinitely, because nothing in the number says which
+// model or which date it came from.
 
-export function costOf(usage: { input_tokens?: number; output_tokens?: number } | undefined): number {
+/** $/MTok, per model. `promo` is a rate that expires on its own. */
+const MODEL_PRICE: Record<string, { in: number; out: number; promo?: { in: number; out: number; until: string } }> = {
+  'claude-opus-5': { in: 5, out: 25 },
+  'claude-sonnet-5': { in: 3, out: 15, promo: { in: 2, out: 10, until: '2026-08-31' } },
+  'claude-haiku-4-5-20251001': { in: 1, out: 5 },
+};
+
+/** Unknown models bill at Opus rates, so a typo over-reports rather than under-reports. */
+const FALLBACK_PRICE = { in: 5, out: 25 };
+
+export function priceOf(model: string, on: Date = new Date()): { in: number; out: number } {
+  const p = MODEL_PRICE[model];
+  if (!p) return FALLBACK_PRICE;
+  if (p.promo && on.toISOString().slice(0, 10) <= p.promo.until) return { in: p.promo.in, out: p.promo.out };
+  return { in: p.in, out: p.out };
+}
+
+export function costOf(
+  usage: { input_tokens?: number; output_tokens?: number } | undefined,
+  model = 'claude-sonnet-5',
+): number {
   if (!usage) return 0;
-  return ((usage.input_tokens || 0) * PRICE.in + (usage.output_tokens || 0) * PRICE.out) / 1e6;
+  const price = priceOf(model);
+  return ((usage.input_tokens || 0) * price.in + (usage.output_tokens || 0) * price.out) / 1e6;
 }

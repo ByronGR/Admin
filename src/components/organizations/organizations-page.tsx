@@ -218,11 +218,19 @@ function HealthGrade({ grade, size = 'md' }: { grade?: AccountHealthGrade; size?
 
 // ─── Resend invite ────────────────────────────────────────────────────────────
 
+// Maps the Access tab's wording to the portal roles the accept endpoint knows.
+function portalRoleFor(role?: string): string {
+  const r = (role || '').toLowerCase();
+  if (r.includes('admin')) return 'admin_client';
+  if (r.includes('view')) return 'viewer_client';
+  return 'client_user';
+}
+
 async function sendInviteEmail(
   email: string,
   orgId: string,
   orgName: string,
-  details?: { firstName?: string; lastName?: string; jobTitle?: string }
+  details?: { firstName?: string; lastName?: string; jobTitle?: string; role?: string }
 ): Promise<{ token: string; emailSent: boolean; stored: boolean }> {
   const token = crypto.randomUUID();
   const fallback = email.split('@')[0].split('.')[0];
@@ -240,39 +248,39 @@ async function sendInviteEmail(
     + (jobTitle ? `&title=${encodeURIComponent(jobTitle)}` : '');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Store invite in Firestore — never throws, failures are logged only
-  let stored = false;
-  try {
-    await setDoc(doc(db, 'org_invites', token), {
-      token,
-      email,
-      orgId,
-      orgName,
-      status: 'pending',
-      createdAt: serverTimestamp(),
-      expiresAt,
-      setupLink,
-    });
-    stored = true;
-  } catch (e) {
-    console.warn('[Nearwork] Could not store org_invite:', e);
-  }
+  // The invite record is written by the server, not here. This used to be a
+  // client-side setDoc to 'org_invites' — a collection the security rules have
+  // no match for (they cover 'orgInvites'), so it was denied every time and the
+  // catch below logged it and reported success anyway. It went unnoticed because
+  // nothing read the record: acceptance took the company straight from the
+  // invite URL. Now that acceptance verifies against the record, an invite
+  // without one cannot be accepted at all.
 
   // Send via our server-side API route (uses RESEND_API_KEY, never exposed to browser)
   try {
     const res = await fetch('/api/send-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, firstName: greetingName, orgName, setupLink }),
+      body: JSON.stringify({
+        email, firstName: greetingName, orgName, setupLink,
+        // With these present the endpoint writes the invite record with the
+        // Admin SDK — the same call that sends the email, so an invite can no
+        // longer go out without the record that makes it redeemable.
+        orgId,
+        token,
+        inviteeName: [providedFirst, lastName].filter(Boolean).join(' '),
+        businessRole: jobTitle,
+        portalRole: portalRoleFor(details?.role),
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.warn('[Nearwork] /api/send-invite failed:', err);
     }
-    return { token, emailSent: res.ok, stored };
+    return { token, emailSent: res.ok, stored: res.ok };
   } catch (e) {
     console.warn('[Nearwork] /api/send-invite fetch failed:', e);
-    return { token, emailSent: false, stored };
+    return { token, emailSent: false, stored: false };
   }
 }
 
@@ -1521,9 +1529,13 @@ function OrgDetail({
 
     // Step 2: send invite — separate try/catch so it never blocks step 1
     try {
-      const { emailSent } = await sendInviteEmail(email, org.id, org.name);
-      if (emailSent) {
+      const { emailSent, stored } = await sendInviteEmail(email, org.id, org.name, { role: addUserRole });
+      if (emailSent && stored) {
         showToast(`Invite email sent to ${email} ✓`, 'success');
+      } else if (emailSent) {
+        // Say so. An invite that sends but stores nothing cannot be redeemed,
+        // and reporting it as sent is how that stayed hidden for months.
+        showToast('Email sent, but the invite could not be saved — they will not be able to accept it', 'error');
       } else {
         showToast('User added — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails', 'info');
       }

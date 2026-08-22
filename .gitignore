@@ -30,3 +30,8 @@ next-env.d.ts
 # Local CV samples for parser tuning (never committed)
 tmp/
 .env*
+
+# Firebase service-account keys — NEVER commit. Full read/write on the whole database.
+*firebase-adminsdk*.json
+serviceAccount*.json
+*-service-account.json

@@ -542,10 +542,24 @@ export function OpeningDetail({
         updatedAt:   serverTimestamp(),
       });
       updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: 'active', updatedAt: serverTimestamp() }).catch(() => {});
+      // Refresh before claiming success, and keep the two failures apart: a
+      // refresh that throws is not a write that failed, and reporting it as one
+      // sends you looking in the wrong place.
+      await onRefresh().catch(() => {});
       showToast('Opening active again on the job board', 'success');
-      await onRefresh();
-    } catch {
-      showToast('Failed to activate opening', 'error');
+    } catch (e) {
+      // The bare catch here reported "Failed to activate opening" and threw the
+      // reason away, which left no way to tell a permission refusal from a
+      // missing document.
+      const code = (e as { code?: string })?.code || '';
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[opening] activate failed', code || msg, e);
+      showToast(
+        code === 'permission-denied'
+          ? 'Not allowed to activate this opening — your account lacks the permission'
+          : `Failed to activate opening — ${code || msg}`,
+        'error',
+      );
     } finally {
       setApprovalSaving(false);
     }
@@ -572,7 +586,20 @@ export function OpeningDetail({
         hideLocation:   editForm.hideLocation,
         hideBenefits:   editForm.hideBenefits,
         notifyCandidatesOnPublish: editForm.notifyCandidatesOnPublish,
-        ...(goneFromJobs && opening.published ? { published: false } : {}),
+        // Publishing was one-way: setting the status to paused took the role off
+        // the board, but setting it back to open never put it back — `published`
+        // could only ever be written false here. The status said open, the job
+        // board query looks at `published`, and the role stayed invisible with
+        // nothing on screen to explain why.
+        //
+        // Only ever re-publish something that was published before. A draft that
+        // has never been through the brief is not made live by editing a
+        // dropdown; that is what the approval flow is for.
+        ...(goneFromJobs
+          ? (opening.published ? { published: false } : {})
+          : (opening.approvalStatus === 'published' && !opening.published
+              ? { published: true, publishedAt: serverTimestamp() }
+              : {})),
         updatedAt: serverTimestamp(),
       });
       // Mirror the opening status onto the pipeline so its list badge stays accurate.

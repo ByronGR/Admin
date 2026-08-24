@@ -709,12 +709,54 @@ export default function PipelinePage() {
     }
   }
 
+  // A role lives in two documents: the pipeline (the work) and the opening (the
+  // advert). This wrote only the pipeline, so "Resume pipeline" left the header
+  // reading Active while the openings list still said Paused and the job board —
+  // which filters on the opening's `published` flag — kept ignoring the role.
+  // Three screens, three answers, and nothing on any of them explaining why.
+  //
+  // The opening now follows the pipeline, the same way pausing an opening
+  // already mirrors onto its pipeline.
   async function updatePipelineStatus(pipelineId: string, status: string) {
     try {
       await updateDoc(doc(db, 'pipelines', pipelineId), { status, updatedAt: serverTimestamp() });
-      showToast('Pipeline status updated', 'success');
-    } catch {
-      showToast('Failed to update status', 'error');
+
+      const openingRef = doc(db, 'openings', pipelineId);
+      const openingSnap = await getDoc(openingRef).catch(() => null);
+      if (openingSnap?.exists()) {
+        const o = openingSnap.data() as { approvalStatus?: string; published?: boolean };
+        if (status === 'active') {
+          await updateDoc(openingRef, {
+            status: 'open',
+            // Only a role that has been published before goes back up. One still
+            // in draft is published by the approval flow, not by resuming work.
+            ...(o.approvalStatus === 'published' && !o.published
+              ? { published: true, publishedAt: serverTimestamp() }
+              : {}),
+            updatedAt: serverTimestamp(),
+          });
+        } else if (status === 'paused' || status === 'cancelled') {
+          await updateDoc(openingRef, {
+            status,
+            ...(o.published ? { published: false } : {}),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // Say what actually happened to the advert, since that is the part people
+      // go looking for on the job board afterwards.
+      showToast(
+        status === 'active' ? 'Pipeline resumed — the role is back on the job board'
+          : status === 'paused' ? 'Pipeline paused — the role is off the job board'
+          : 'Pipeline cancelled — the role is off the job board',
+        'success',
+      );
+    } catch (e) {
+      const code = (e as { code?: string })?.code || '';
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[pipeline] status update failed', code || msg, e);
+      showToast(`Failed to update status — ${code || msg}`, 'error');
     }
   }
 

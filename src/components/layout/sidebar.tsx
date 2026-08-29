@@ -47,7 +47,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     // two databases.
     label: 'Products',
     items: [
-      { href: 'https://vera-ruddy-three.vercel.app/console', label: 'Vera', icon: 'headphones', external: true },
+      { href: '/vera', label: 'Vera', icon: 'headphones' },
     ],
   },
   {

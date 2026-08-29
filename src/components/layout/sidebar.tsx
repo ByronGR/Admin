@@ -11,7 +11,12 @@ import { type IconName } from 'lucide-react/dynamic';
 import { NW, Icon, MONO } from '@/components/nw/primitives';
 import { APP_VERSION } from '@/lib/version';
 
-type NavItem = { href: string; label: string; icon: IconName; count?: number; dot?: boolean };
+type NavItem = {
+  href: string; label: string; icon: IconName; count?: number; dot?: boolean;
+  /** Opens in a new tab. Vera is a separate product on its own domain, and
+   *  replacing this tab with it would lose whatever the person was doing here. */
+  external?: boolean;
+};
 
 const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
@@ -36,6 +41,16 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    // Nearwork 365's other products. Separate deployments with their own consoles,
+    // linked rather than embedded — Vera owns its data and its screens, and Admin
+    // is a client of them. See the Vera repo for why nothing is synced between the
+    // two databases.
+    label: 'Products',
+    items: [
+      { href: 'https://vera-ruddy-three.vercel.app/console', label: 'Vera', icon: 'headphones', external: true },
+    ],
+  },
+  {
     label: 'Insights',
     items: [
       { href: '/salary-rates', label: 'FX & rates', icon: 'calculator' },
@@ -52,9 +67,16 @@ const FOOTER_ITEMS: NavItem[] = [
 
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const [hov, setHov] = useState(false);
+
+  // An external product opens in its own tab, so a half-finished pipeline edit is
+  // still here when they come back. Next's Link would prefetch a cross-origin URL
+  // it cannot route to, so those use a plain anchor.
+  const Tag = (item.external ? 'a' : Link) as typeof Link;
+
   return (
-    <Link
+    <Tag
       href={item.href}
+      {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
       onClick={onNavigate}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
@@ -98,7 +120,12 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
         </span>
       )}
       {item.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: NW.rose500 }} />}
-    </Link>
+      {/* Says where it goes before it is clicked. A sidebar item that silently
+          opens a different product in a new tab reads as a bug the first time. */}
+      {item.external && (
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: NW.gray400 }} aria-label="opens in a new tab">↗</span>
+      )}
+    </Tag>
   );
 }
 

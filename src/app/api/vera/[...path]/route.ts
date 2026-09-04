@@ -22,8 +22,10 @@ const VERA = (process.env.VERA_API_URL || '').replace(/\/$/, '');
  *  spend money. */
 const ALLOWED = [
   /^console$/,
+  /^support$/,
   /^credits$/,
   /^assessments$/,
+  /^assessments\/resend$/,
   /^client-questions$/,
   /^config$/,
   /^report$/,

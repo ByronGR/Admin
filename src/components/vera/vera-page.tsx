@@ -28,9 +28,10 @@ interface Candidate {
   createdAt: number; sentAt: number | null; completedAt: number | null;
   expiresAt: number | null; reissuedAt: number | null;
 }
+interface Bank { id: string; title: string; lengths: number[]; createdAt: number }
 interface Opening {
   openingId: string; title: string; seniority: string | null;
-  configured: boolean; version: number | null; candidates: Candidate[];
+  configured: boolean; version: number | null; banks: Bank[]; candidates: Candidate[];
   counts: { total: number; sent: number; started: number; completed: number; expired: number };
 }
 interface Org {
@@ -53,6 +54,123 @@ function when(t: number | null) {
   return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+/**
+ * Send one candidate an assessment, without leaving Admin.
+ *
+ * A real form rather than a chain of prompts: this has six fields, and a prompt
+ * chain gives no way back from the third one. It also cannot show the thing that
+ * actually matters here — that sending is free, and the credit is only spent when
+ * the candidate starts.
+ */
+function SendForm({ org, opening, onSend, busy }: {
+  org: Org; opening: Opening;
+  onSend: (body: Record<string, unknown>) => Promise<void>;
+  busy: boolean;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [company, setCompany] = useState(org.name);
+  const [bankId, setBankId] = useState(opening.banks[0]?.id ?? '');
+  const bank = opening.banks.find((b) => b.id === bankId) ?? opening.banks[0];
+  // The longest the chosen set can actually support. Offering 6 when the bank has
+  // four situations produces a refusal at the end of the form rather than the start.
+  const lengths = bank?.lengths ?? [];
+  const [length, setLength] = useState<number>(lengths[lengths.length - 1] ?? 4);
+  const [expiryDays, setExpiryDays] = useState(14);
+  const [send, setSend] = useState(true);
+
+  useEffect(() => {
+    const ls = opening.banks.find((b) => b.id === bankId)?.lengths ?? [];
+    if (ls.length && !ls.includes(length)) setLength(ls[ls.length - 1]);
+  }, [bankId, opening.banks, length]);
+
+  const field: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', fontSize: 14, borderRadius: 8,
+    border: `1px solid ${NW.gray200}`, background: NW.white, color: NW.black,
+  };
+  const label: React.CSSProperties = { fontSize: 12, color: NW.gray500, marginBottom: 4, display: 'block' };
+  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) && !!bankId;
+
+  return (
+    <div style={{
+      background: NW.white, border: `1px solid ${NW.gray100}`,
+      borderRadius: 12, padding: 20, marginBottom: 16,
+    }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Send this assessment</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <label style={label}>Their name</label>
+          <input style={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Diego Ramirez" />
+        </div>
+        <div>
+          <label style={label}>Their email</label>
+          <input style={field} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="diego@example.com" />
+        </div>
+        <div>
+          <label style={label}>Company they applied to</label>
+          <input style={field} value={company} onChange={(e) => setCompany(e.target.value)} />
+        </div>
+        <div>
+          <label style={label}>Question set</label>
+          <select style={field} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+            {opening.banks.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={label}>How many situations</label>
+          <select style={field} value={length} onChange={(e) => setLength(Number(e.target.value))}>
+            {lengths.map((n) => <option key={n} value={n}>{n} situations</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={label}>Link expires in</label>
+          <select style={field} value={expiryDays} onChange={(e) => setExpiryDays(Number(e.target.value))}>
+            {[7, 14, 30].map((n) => <option key={n} value={n}>{n} days</option>)}
+          </select>
+        </div>
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 14 }}>
+        <input type="checkbox" checked={send} onChange={(e) => setSend(e.target.checked)} />
+        Email it to them now
+        <span style={{ color: NW.gray500, fontSize: 13 }}>
+          — otherwise the link is made and you send it yourself
+        </span>
+      </label>
+
+      {/* Sending is free; the credit goes when they start. Somebody with an empty
+          balance can still send, and would find out only when the candidate hits a
+          wall — so say it here instead. */}
+      {org.balance < 1 && (
+        <div style={{
+          background: NW.rose50, color: NW.rose600, border: '1px solid #E74C7C40',
+          borderRadius: 8, padding: '10px 12px', fontSize: 13, marginBottom: 14,
+        }}>
+          {org.name} has no credits left. The link will be created and sent, but they
+          will not be able to start until you add some.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Button
+          disabled={!valid || busy}
+          onClick={() => void onSend({
+            bankId, candidateName: name.trim(), candidateEmail: email.trim(),
+            companyName: company.trim() || org.name,
+            length, expiryDays, send,
+          })}
+        >
+          {send ? 'Create and send' : 'Create the link'}
+        </Button>
+        <span style={{ fontSize: 13, color: NW.gray500 }}>
+          Free to send. One credit is spent only when they start.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function VeraPage() {
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +182,7 @@ export default function VeraPage() {
   // you back on the same screen with new numbers instead of a stale snapshot.
   const [orgId, setOrgId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const call = useCallback(async (path: string, init?: RequestInit) => {
     const token = await auth.currentUser?.getIdToken();
@@ -126,6 +245,19 @@ export default function VeraPage() {
     return `${o.name} now has ${d.balance ?? '—'} credits.`;
   });
 
+  const sendAssessment = (body: Record<string, unknown>) => act(async () => {
+    const d = await call('assessments', { method: 'POST', body: JSON.stringify(body) });
+    setSending(false);
+    await navigator.clipboard.writeText(d.link).catch(() => {});
+    // The email result is reported separately from the link being made, because
+    // they fail separately: a link that exists and an email that did not go out is
+    // a recoverable situation, and one you can only recover from if you are told.
+    const mail = d.email
+      ? (d.email.sent ? 'The invitation went out.' : `The email did NOT go out: ${d.email.error}`)
+      : 'No email was sent — hand them the link yourself.';
+    return `Link created and copied to your clipboard. ${mail}`;
+  });
+
   const copyLink = (c: Candidate) => act(async () => {
     await navigator.clipboard.writeText(c.link);
     return `Link for ${c.name} copied. It is the same link they already have.`;
@@ -186,8 +318,8 @@ export default function VeraPage() {
   return (
     <div style={{ padding: 32, background: NW.offWhite, minHeight: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6, fontSize: 14 }}>
-        {crumb('Organizations', orgId ? () => { setOrgId(null); setOpeningId(null); } : null)}
-        {org && <><span style={{ color: NW.gray300 }}>/</span>{crumb(org.name, openingId ? () => setOpeningId(null) : null)}</>}
+        {crumb('Organizations', orgId ? () => { setOrgId(null); setOpeningId(null); setSending(false); } : null)}
+        {org && <><span style={{ color: NW.gray300 }}>/</span>{crumb(org.name, openingId ? () => { setOpeningId(null); setSending(false); } : null)}</>}
         {opening && <><span style={{ color: NW.gray300 }}>/</span>{crumb(opening.title, null)}</>}
       </div>
       <h1 style={{ fontSize: 26, fontWeight: 600, margin: '0 0 20px' }}>
@@ -276,6 +408,23 @@ export default function VeraPage() {
       )}
 
       {/* ── level 3: the person who is stuck ───────────────────────────────── */}
+      {opening && org && (
+        <div style={{ marginBottom: 16 }}>
+          {opening.banks.length === 0 ? (
+            <div style={{ ...card, color: NW.gray500 }}>
+              There is no finished question set for this opening, so nothing can be
+              sent for it yet.
+            </div>
+          ) : sending ? (
+            <SendForm org={org} opening={opening} busy={busy} onSend={sendAssessment} />
+          ) : (
+            <Button onClick={() => { setSending(true); setNote(''); setError(''); }}>
+              Send this assessment to someone
+            </Button>
+          )}
+        </div>
+      )}
+
       {opening && (
         opening.candidates.length === 0
           ? <div style={{ ...card, color: NW.gray500 }}>Nobody has been sent this one yet.</div>

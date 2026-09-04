@@ -258,6 +258,23 @@ export default function VeraPage() {
     return `Link created and copied to your clipboard. ${mail}`;
   });
 
+  const charge = (o: Org) => act(async () => {
+    const credits = Number(window.prompt(`How many credits is ${o.name} buying?`));
+    if (!Number.isFinite(credits) || credits <= 0) return null;
+    const amountUsd = Number(window.prompt(`What are they paying, in USD, for ${credits} credits?`));
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) return null;
+    const note = window.prompt('Anything to put on the invoice? (optional)') ?? '';
+    const d = await call('credits/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ org: o.slug ?? o.id, credits, amountUsd, note }),
+    });
+    await navigator.clipboard.writeText(d.url).catch(() => {});
+    // Prompted as well as copied, because this link is the thing being sent to a
+    // paying client and losing it to a clipboard that did not take is expensive.
+    window.prompt('Payment link — copied, send it to them:', d.url);
+    return d.note;
+  });
+
   const copyLink = (c: Candidate) => act(async () => {
     await navigator.clipboard.writeText(c.link);
     return `Link for ${c.name} copied. It is the same link they already have.`;
@@ -379,7 +396,10 @@ export default function VeraPage() {
                 {org.balance} left · {org.used} used
               </div>
             </div>
-            <Button size="sm" disabled={busy} onClick={() => void addCredits(org)}>Add or remove credits</Button>
+            <Button size="sm" disabled={busy} onClick={() => void charge(org)}>Charge for credits</Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void addCredits(org)}>
+              Add by hand
+            </Button>
           </div>
 
           {org.openings.length === 0

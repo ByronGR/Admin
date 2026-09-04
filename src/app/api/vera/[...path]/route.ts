@@ -24,6 +24,7 @@ const ALLOWED = [
   /^console$/,
   /^support$/,
   /^credits$/,
+  /^credits\/checkout$/,
   /^assessments$/,
   /^assessments\/resend$/,
   /^client-questions$/,

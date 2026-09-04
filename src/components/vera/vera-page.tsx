@@ -34,9 +34,13 @@ interface Opening {
   configured: boolean; version: number | null; banks: Bank[]; candidates: Candidate[];
   counts: { total: number; sent: number; started: number; completed: number; expired: number };
 }
+interface OpenOrder {
+  id: string; credits: number; amount: number; currency: string;
+  note: string | null; link: string | null; createdBy: string; createdAt: number;
+}
 interface Org {
   id: string; name: string; slug: string | null; balance: number; used: number;
-  openings: Opening[];
+  openings: Opening[]; openOrders: OpenOrder[];
   counts: { openings: number; candidates: number; completed: number; stuck: number };
 }
 
@@ -275,6 +279,20 @@ export default function VeraPage() {
     return d.note;
   });
 
+  const cancelOrder = (o: OpenOrder) => act(async () => {
+    if (!window.confirm(
+      `Cancel the ${o.currency} ${o.amount.toFixed(2)} invoice for ${o.credits} credit${o.credits === 1 ? '' : 's'}?\n\nThe link stops working. Nobody has been charged.`
+    )) return null;
+    const d = await call(`credits/checkout?order=${o.id}`, { method: 'DELETE' });
+    return d.note;
+  });
+
+  const copyOrderLink = (o: OpenOrder) => act(async () => {
+    if (!o.link) return 'That order has no link — it never reached Stripe.';
+    await navigator.clipboard.writeText(o.link);
+    return 'Payment link copied.';
+  });
+
   const copyLink = (c: Candidate) => act(async () => {
     await navigator.clipboard.writeText(c.link);
     return `Link for ${c.name} copied. It is the same link they already have.`;
@@ -401,6 +419,40 @@ export default function VeraPage() {
               Add by hand
             </Button>
           </div>
+
+          {org.openOrders.length > 0 && (
+            <div style={{ ...card, marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                Waiting to be paid
+              </div>
+              <div style={{ fontSize: 13, color: NW.gray500, marginBottom: 12 }}>
+                Sent, not paid. No credits have been added and nobody has been charged.
+              </div>
+              {org.openOrders.map((o) => (
+                <div key={o.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 0', borderTop: `1px solid ${NW.gray100}`,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14 }}>
+                      {o.credits} credit{o.credits === 1 ? '' : 's'} — {o.currency} {o.amount.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 12, color: NW.gray500 }}>
+                      {o.note ? `${o.note} · ` : ''}sent {new Date(o.createdAt).toLocaleDateString()} by {o.createdBy}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="secondary" disabled={busy || !o.link}
+                    onClick={() => void copyOrderLink(o)}>
+                    Copy link
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy}
+                    onClick={() => void cancelOrder(o)}>
+                    Cancel
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {org.openings.length === 0
             ? <div style={{ ...card, color: NW.gray500 }}>Nothing has been set up for {org.name} yet.</div>

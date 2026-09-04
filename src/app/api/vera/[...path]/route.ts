@@ -24,7 +24,7 @@ const ALLOWED = [
   /^console$/,
   /^support$/,
   /^credits$/,
-  /^credits\/checkout$/,
+  /^credits\/checkout$/,   // POST creates, DELETE withdraws
   /^assessments$/,
   /^assessments\/resend$/,
   /^client-questions$/,

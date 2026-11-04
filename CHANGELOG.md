@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.34.1] — 2026-11-04
+
+### Removed
+- The **Fill from web** button and window. Company details fill in automatically only (on create, on a new website, or once for companies never looked up).
+
+---
+
 ## [1.34.0] — 2026-11-04
 
 ### Added

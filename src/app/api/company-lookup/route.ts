@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
-import { lookupCompany, fillOrgFromWeb } from '@/lib/company-lookup';
+import { fillOrgFromWeb } from '@/lib/company-lookup';
 
 // ─── /api/company-lookup ──────────────────────────────────────────────────────
-// GET  ?website=<domain>  → what People Data Labs knows (or ?name=&country= when
-//                           there's no website) (the "Fill from web"
-//                           window shows it next to what's saved; nothing written).
 // POST { orgId, force? }  → look the organization up and fill ONLY its empty
 //                           fields. Called automatically when a company is
-//                           created or gets a website.
+//                           created, gets a website, or was never looked up.
 //
 // Staff-only: requires a valid Firebase ID token (Authorization: Bearer …) from a
 // @nearwork.co account. Needs PDL_API_KEY in Vercel.
@@ -26,13 +23,6 @@ async function requireStaff(req: Request): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function GET(req: Request) {
-  if (!(await requireStaff(req))) return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  const q = new URL(req.url).searchParams;
-  const res = await lookupCompany({ website: q.get('website') || '', name: q.get('name') || '', country: q.get('country') || '' });
-  return NextResponse.json(res);
 }
 
 export async function POST(req: Request) {

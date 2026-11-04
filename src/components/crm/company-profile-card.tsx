@@ -6,8 +6,8 @@
 // Writes straight onto the organization document.
 // ============================================================
 
-import { useEffect, useRef, useState } from 'react';
-import { db, auth, doc, getDoc, updateDoc, serverTimestamp } from '@/lib/firebase';
+import { useState } from 'react';
+import { db, doc, getDoc, updateDoc, serverTimestamp } from '@/lib/firebase';
 import { autoFillFromWeb } from '@/lib/crm';
 import { NW, Button } from '@/components/nw/primitives';
 import { Card, CardHead } from '@/components/nw/shell-ui';
@@ -39,7 +39,6 @@ function sizeLabel(org: Organization): string {
 
 export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUpdated: (o: Organization) => void }) {
   const [editing, setEditing] = useState(false);
-  const [lookingUp, setLookingUp] = useState(false);
   const stage = org.companyStage;
   const web = new Set(org.enrichedFields || []);
   const fromWeb = (...keys: string[]) => keys.some((k) => web.has(k));
@@ -75,9 +74,6 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
         action={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {stage && <Pill fg={STAGE_STYLE[stage].fg} bg={STAGE_STYLE[stage].bg}>{COMPANY_STAGE_LABELS[stage]}</Pill>}
-            <span title={org.website ? 'Look this company up by its website' : 'Look this company up by its name'}>
-              <Button variant="secondary" size="sm" icon="globe" onClick={() => setLookingUp(true)}>Fill from web</Button>
-            </span>
             <Button variant="secondary" size="sm" icon="pencil" onClick={() => setEditing(true)}>Edit</Button>
           </div>
         }
@@ -105,7 +101,6 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
         </div>
       )}
       {editing && <ProfileModal org={org} onClose={() => setEditing(false)} onSaved={(o) => { setEditing(false); onUpdated(o); }} />}
-      {lookingUp && <LookupModal org={org} onClose={() => setLookingUp(false)} onSaved={(o) => { setLookingUp(false); onUpdated(o); }} onLooked={onUpdated} />}
     </Card>
   );
 }
@@ -190,151 +185,6 @@ function ProfileModal({ org, onClose, onSaved }: { org: Organization; onClose: (
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-      </div>
-    </Modal>
-  );
-}
-
-// ── Fill from web (People Data Labs) ──────────────────────────────────────────
-type Found = {
-  name?: string; website?: string; description?: string; headline?: string; employeeCount?: number; sizeRange?: string;
-  industry?: string; city?: string; region?: string; country?: string; companyType?: string; founded?: number;
-  fundingStage?: string; totalFunding?: number; lastFundingDate?: string; fundingRounds?: number;
-  linkedin?: string; twitter?: string; facebook?: string; tags?: string[]; ticker?: string;
-};
-const LOOKUP_FIELDS: { key: keyof Found & keyof Organization; label: string }[] = [
-  { key: 'website', label: 'Website' },
-  { key: 'headline', label: 'Headline' },
-  { key: 'description', label: 'Description' },
-  { key: 'employeeCount', label: 'Employees' },
-  { key: 'sizeRange', label: 'Size range' },
-  { key: 'industry', label: 'Industry' },
-  { key: 'city', label: 'HQ city' },
-  { key: 'region', label: 'HQ state / region' },
-  { key: 'country', label: 'HQ country' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'companyType', label: 'Company type' },
-  { key: 'ticker', label: 'Ticker' },
-  { key: 'fundingStage', label: 'Funding stage' },
-  { key: 'totalFunding', label: 'Total raised (USD)' },
-  { key: 'fundingRounds', label: 'Funding rounds' },
-  { key: 'lastFundingDate', label: 'Last funding' },
-  { key: 'founded', label: 'Founded' },
-  { key: 'twitter', label: 'X / Twitter' },
-  { key: 'facebook', label: 'Facebook' },
-  { key: 'tags', label: 'Tags' },
-];
-const REASONS: Record<string, string> = {
-  not_configured: 'The company lookup isn\u2019t switched on yet: the People Data Labs key hasn\u2019t been added to Vercel.',
-  not_found: 'No match for this website. Nothing was charged. Check the website, or fill the details in by hand.',
-  out_of_credits: 'This month\u2019s 100 free lookups are used up. They reset next month.',
-  bad_key: 'People Data Labs rejected the key. Check PDL_API_KEY in Vercel.',
-  rate_limited: 'Too many lookups in the last minute (free plan: 10 a minute). Try again shortly.',
-  no_website: 'Add the company\u2019s website first.',
-  unauthorized: 'Your sign-in expired. Refresh the page and try again.',
-};
-
-function LookupModal({ org, onClose, onSaved, onLooked }: { org: Organization; onClose: () => void; onSaved: (o: Organization) => void; onLooked: (o: Organization) => void }) {
-  const { showToast } = useToast();
-  const [state, setState] = useState<'loading' | 'found' | 'error'>('loading');
-  const [message, setMessage] = useState('');
-  const [found, setFound] = useState<Found | null>(null);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
-  const ran = useRef(false);
-
-  // Run the lookup exactly once when the window opens (the ref stops React's
-  // development double-run from spending a second lookup).
-  useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-    (async () => {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const q = org.website
-          ? `website=${encodeURIComponent(org.website)}`
-          : `name=${encodeURIComponent(org.name)}&country=${encodeURIComponent(org.country || '')}`;
-        const r = await fetch(`/api/company-lookup?${q}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        const j = await r.json().catch(() => ({ ok: false, reason: 'error' }));
-        if (!j.ok) {
-          setMessage(REASONS[j.reason] || 'The lookup failed. Try again in a minute.');
-          setState('error');
-          if (j.reason === 'not_found') {
-            const lastLookup = { at: new Date().toISOString(), result: 'not_found' as const };
-            await updateDoc(doc(db, 'organizations', org.id), { lastLookup }).catch(() => null);
-            onLooked({ ...org, lastLookup });
-          }
-          return;
-        }
-        const c = j.company as Found;
-        setFound(c);
-        // Pre-tick what fills a gap; leave anything staff already typed unticked.
-        setPicked(new Set(LOOKUP_FIELDS.filter(({ key }) => c[key] != null && c[key] !== '' && (org[key] == null || org[key] === '')).map(({ key }) => key)));
-        setState('found');
-      } catch {
-        setMessage('The lookup failed. Check your connection and try again.');
-        setState('error');
-      }
-    })();
-  }, [org, onLooked]);
-
-  async function apply() {
-    if (!found) return;
-    setSaving(true);
-    const at = new Date().toISOString();
-    const patch: Record<string, unknown> = {
-      lastLookup: { at, result: 'found' },
-      ...(picked.size ? { enrichedAt: at, enrichedFields: Array.from(new Set([...(org.enrichedFields || []), ...picked])) } : {}),
-    };
-    for (const k of picked) patch[k] = found[k as keyof Found];
-    try {
-      await updateDoc(doc(db, 'organizations', org.id), { ...patch, updatedAt: serverTimestamp() });
-      onSaved({ ...org, ...patch } as Organization);
-      showToast(picked.size ? `Updated ${picked.size} field${picked.size === 1 ? '' : 's'}` : 'Lookup saved');
-    } catch (e) {
-      showToast(saveErrorMessage(e), 'error');
-      setSaving(false);
-    }
-  }
-
-  const rows = found ? LOOKUP_FIELDS.filter(({ key }) => found[key] != null && found[key] !== '') : [];
-  return (
-    <Modal open onClose={onClose} title="Fill from web" size="lg">
-      {state === 'loading' && <div style={{ fontSize: 13.5, color: NW.gray600, padding: '10px 0' }}>Looking up {org.website}…</div>}
-      {state === 'error' && <div style={{ fontSize: 13.5, color: NW.gray700, background: NW.gray50, borderRadius: 10, padding: '12px 14px' }}>{message}</div>}
-      {state === 'found' && found && (
-        <>
-          <div style={{ fontSize: 13, color: NW.gray600, marginBottom: 12 }}>
-            Found <strong style={{ color: NW.black }}>{found.name || org.website}</strong> on People Data Labs. Tick what to save.
-          </div>
-          {rows.length === 0 ? (
-            <div style={{ fontSize: 13, color: NW.gray500 }}>The match had no profile details to add.</div>
-          ) : (
-            <div style={{ border: `1px solid ${NW.gray100}`, borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '28px 130px 1fr 1fr', gap: 10, padding: '8px 12px', background: NW.gray50, fontSize: 11, fontWeight: 600, color: NW.gray500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                <span /><span>Field</span><span>Now</span><span>Found</span>
-              </div>
-              {rows.map(({ key, label }) => {
-                const now = org[key];
-                const val = found[key];
-                const on = picked.has(key);
-                return (
-                  <label key={key} style={{ display: 'grid', gridTemplateColumns: '28px 130px 1fr 1fr', gap: 10, padding: '9px 12px', borderTop: `1px solid ${NW.gray100}`, fontSize: 13, alignItems: 'center', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={on} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(key); else n.delete(key); return n; })} />
-                    <span style={{ color: NW.gray600 }}>{label}</span>
-                    <span style={{ color: now != null && now !== '' ? NW.black : NW.gray400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{now != null && now !== '' ? String(now) : 'Empty'}</span>
-                    <span style={{ color: NW.black, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{key === 'employeeCount' ? Number(val).toLocaleString('en-US') : String(val)}</span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 10 }}>Free plan: 100 lookups a month; a lookup only counts when a company is found.</div>
-        </>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-        <Button variant="secondary" onClick={onClose}>{state === 'found' ? 'Cancel' : 'Close'}</Button>
-        {state === 'found' && <Button onClick={apply} disabled={saving}>{saving ? 'Saving…' : picked.size ? `Save ${picked.size} field${picked.size === 1 ? '' : 's'}` : 'Save'}</Button>}
       </div>
     </Modal>
   );

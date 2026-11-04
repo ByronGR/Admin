@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.34.0';
+export const APP_VERSION = '1.34.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.34.1',
+    date: '2026-11-04',
+    sections: [
+      {
+        title: 'Removed',
+        items: [
+          'The Fill from web button on the Company profile card. Company details now fill in automatically only: when a company is created, gets a website, or has never been looked up.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.34.0',
     date: '2026-11-04',

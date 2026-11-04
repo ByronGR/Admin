@@ -1018,6 +1018,13 @@ export type CrmSource = 'radar' | 'bookings' | 'manual' | 'hubspot';
 export type DealStage = 'Prospect' | 'Meeting booked' | 'Proposal' | 'Contract sent' | 'Client' | 'Lost';
 export const DEAL_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Proposal', 'Contract sent', 'Client', 'Lost'];
 
+export interface DealStageChange { stage: DealStage; at: string; by?: string }
+
+// Chance each stage closes — drives the weighted pipeline, like HubSpot's deal probability.
+export const DEAL_STAGE_PROBABILITY: Record<DealStage, number> = {
+  Prospect: 0.1, 'Meeting booked': 0.2, Proposal: 0.4, 'Contract sent': 0.7, Client: 1, Lost: 0,
+};
+
 export interface Deal {
   id: string;
   orgId: string;
@@ -1032,11 +1039,21 @@ export interface Deal {
   source?: CrmSource;
   engagementId?: string;           // set when the deal is won and its Engagement is opened
   lostReason?: string;
+  contactIds?: string[];           // people on this deal
+  priority?: CrmPriority;
+  dealType?: 'new' | 'existing';   // new business vs more work from an existing client
+  stageHistory?: DealStageChange[];
   stageChangedAt?: Timestamp;
   createdAt?: Timestamp;
   createdBy?: string;
   updatedAt?: Timestamp;
 }
+
+// HubSpot-style lifecycle stage for a person.
+export type LifecycleStage = 'lead' | 'sql' | 'opportunity' | 'customer' | 'other';
+export const LIFECYCLE_LABELS: Record<LifecycleStage, string> = {
+  lead: 'Lead', sql: 'Sales qualified lead', opportunity: 'Opportunity', customer: 'Customer', other: 'Other',
+};
 
 // A person at a client company. Replaces Organization.pocContacts over time.
 export interface Contact {
@@ -1050,6 +1067,7 @@ export interface Contact {
   linkedin?: string;
   isPoc?: boolean;                 // main point of contact
   isDecisionMaker?: boolean;
+  lifecycleStage?: LifecycleStage;
   source?: CrmSource;
   createdAt?: Timestamp;
   createdBy?: string;
@@ -1093,30 +1111,58 @@ export interface ServiceOrder {
 }
 
 export type CrmActivityKind = 'note' | 'call' | 'meeting' | 'email';
+export type CallOutcome = 'Connected' | 'No answer' | 'Left voicemail' | 'Left live message' | 'Busy' | 'Wrong number';
+export const CALL_OUTCOMES: CallOutcome[] = ['Connected', 'No answer', 'Left voicemail', 'Left live message', 'Busy', 'Wrong number'];
+export type MeetingOutcome = 'Scheduled' | 'Completed' | 'Rescheduled' | 'No show' | 'Canceled';
+export const MEETING_OUTCOMES: MeetingOutcome[] = ['Scheduled', 'Completed', 'Rescheduled', 'No show', 'Canceled'];
+export type ActivityDirection = 'outbound' | 'inbound';
+
+// One logged activity can sit on a company, several deals and several contacts
+// at once (like HubSpot associations): it shows on every record it is linked to.
 export interface CrmActivity {
   id: string;
   orgId: string;
+  orgName?: string;
   kind: CrmActivityKind;
   body: string;
+  subject?: string;                // emails and meetings
   at: string;                      // ISO date-time it happened
-  contactId?: string;
-  dealId?: string;
+  dealIds?: string[];
+  contactIds?: string[];
+  callOutcome?: CallOutcome;
+  meetingOutcome?: MeetingOutcome;
+  direction?: ActivityDirection;   // calls and emails
+  durationMin?: number;            // calls and meetings
+  contactId?: string;              // legacy single link (pre-1.33)
+  dealId?: string;                 // legacy single link (pre-1.33)
   createdBy?: string;              // display name
   createdByEmail?: string;
   createdAt?: Timestamp;
 }
+
+export type CrmTaskType = 'todo' | 'call' | 'email';
+export const CRM_TASK_TYPE_LABELS: Record<CrmTaskType, string> = { todo: 'To-do', call: 'Call', email: 'Email' };
+export type CrmPriority = 'none' | 'low' | 'medium' | 'high';
+export const CRM_PRIORITY_LABELS: Record<CrmPriority, string> = { none: 'None', low: 'Low', medium: 'Medium', high: 'High' };
 
 export interface CrmTask {
   id: string;
   orgId: string;
   orgName?: string;
   title: string;
+  notes?: string;
+  type?: CrmTaskType;              // defaults to 'todo'
+  priority?: CrmPriority;          // defaults to 'none'
   dueDate?: string;                // YYYY-MM-DD
+  dueTime?: string;                // HH:MM, optional
   ownerName?: string;
   ownerEmail?: string;
   done: boolean;
   doneAt?: Timestamp;
   dealId?: string;
+  dealTitle?: string;
+  contactId?: string;
+  contactName?: string;
   createdAt?: Timestamp;
   createdBy?: string;
 }

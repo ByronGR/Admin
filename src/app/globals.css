@@ -254,6 +254,15 @@ body {
   max-width: 100%;
 }
 
+@media (max-width: 1180px) {
+  .nw-grid-3col {
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+  }
+  .nw-grid-3col > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 768px) {
   /* Grey canvas + white cards so sections regain visible framing on mobile,
      and clip any stray-wide element so the page never needs pinch/pan. */
@@ -275,6 +284,10 @@ body {
   }
   /* Two-column content rows (e.g. dashboard) stack */
   .nw-grid-2col {
+    grid-template-columns: 1fr !important;
+  }
+  /* Three-column record pages (deal, contact) stack */
+  .nw-grid-3col {
     grid-template-columns: 1fr !important;
   }
   /* Top bar tightens up and hides the long user name */

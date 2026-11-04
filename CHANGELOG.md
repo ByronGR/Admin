@@ -5,6 +5,18 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.33.0] — 2026-11-04
+
+### Added
+- **Deal pages**: details and stage history, the activity timeline, and the company, people and Engagement, all on one page per deal.
+- **HubSpot-style logging**: calls (outcome, direction, duration), meetings (outcome, attendees), emails (sent/received) and notes, each linkable to several deals and contacts at once.
+- **Tasks page**: Overdue / Due today / Upcoming / No due date, mine or everyone's. Tasks gain type, priority, due time, and deal and contact links.
+- **Contacts page** and a page per contact, with lifecycle stage, timeline and deals.
+- **Create deal** picks people, deal type, priority and an optional first task.
+- **Deal tracking**: stage history, next step on board and list, "no next step" warnings, weighted pipeline MRR.
+
+---
+
 ## [1.32.0] — 2026-11-03
 
 ### Added

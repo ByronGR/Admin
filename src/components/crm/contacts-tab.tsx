@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   db, collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from '@/lib/firebase';
@@ -16,10 +17,11 @@ import { Modal } from '@/components/ui/modal';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
 import { actorName } from '@/lib/crm';
-import type { Contact, Organization } from '@/lib/types';
+import { LIFECYCLE_LABELS, type Contact, type LifecycleStage, type Organization } from '@/lib/types';
 import { crmField, Field, Pill, Empty, saveErrorMessage } from './ui';
+import { contactHref } from '@/lib/crm';
 
-const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
+export const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
 
 export function useContacts(orgId: string) {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -45,6 +47,7 @@ export function useContacts(orgId: string) {
 }
 
 export function ContactsTab({ org }: { org: Organization }) {
+  const router = useRouter();
   const { showToast } = useToast();
   const { contacts, loading, reload } = useContacts(org.id);
   const [editing, setEditing] = useState<Contact | 'new' | null>(null);
@@ -98,13 +101,14 @@ export function ContactsTab({ org }: { org: Organization }) {
           <Empty icon="user-plus" title="No contacts yet" sub="Add the point of contact and anyone else involved in the deal." />
         ) : (
           contacts.map((c) => (
-            <div key={c.id} onClick={() => setEditing(c)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 4px', borderTop: `1px solid ${NW.gray100}`, cursor: 'pointer' }}>
+            <div key={c.id} onClick={() => router.push(contactHref(c.id))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 4px', borderTop: `1px solid ${NW.gray100}`, cursor: 'pointer' }}>
               <Avatar initials={initialsOf(c.name)} size={34} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: NW.black }}>{c.name}</span>
                   {c.isPoc && <Pill fg={NW.teal700} bg={NW.teal50}>Point of contact</Pill>}
                   {c.isDecisionMaker && <Pill fg="#7C3AED" bg={NW.violet50}>Decision-maker</Pill>}
+                  {c.lifecycleStage && <Pill fg={NW.gray600} bg={NW.gray50}>{LIFECYCLE_LABELS[c.lifecycleStage]}</Pill>}
                 </div>
                 <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>
                   {[c.title, c.email, c.phone].filter(Boolean).join(' · ') || 'No details yet'}
@@ -132,7 +136,7 @@ export function ContactsTab({ org }: { org: Organization }) {
   );
 }
 
-function ContactModal({ org, contact, onClose, onDone }: { org: Organization; contact: Contact | null; onClose: () => void; onDone: () => void }) {
+export function ContactModal({ org, contact, onClose, onDone }: { org: Pick<Organization, 'id' | 'name'>; contact: Contact | null; onClose: () => void; onDone: (deleted?: boolean) => void }) {
   const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -140,6 +144,7 @@ function ContactModal({ org, contact, onClose, onDone }: { org: Organization; co
     name: contact?.name ?? '', title: contact?.title ?? '', email: contact?.email ?? '',
     phone: contact?.phone ?? '', linkedin: contact?.linkedin ?? '',
     isPoc: contact?.isPoc ?? false, isDecisionMaker: contact?.isDecisionMaker ?? false,
+    lifecycleStage: (contact?.lifecycleStage ?? 'lead') as LifecycleStage,
   });
 
   async function save() {
@@ -148,7 +153,7 @@ function ContactModal({ org, contact, onClose, onDone }: { org: Organization; co
     const data = {
       name: f.name.trim(), title: f.title.trim() || null, email: f.email.trim().toLowerCase() || null,
       phone: f.phone.trim() || null, linkedin: f.linkedin.trim() || null,
-      isPoc: f.isPoc, isDecisionMaker: f.isDecisionMaker,
+      isPoc: f.isPoc, isDecisionMaker: f.isDecisionMaker, lifecycleStage: f.lifecycleStage,
     };
     try {
       if (contact) {
@@ -171,7 +176,7 @@ function ContactModal({ org, contact, onClose, onDone }: { org: Organization; co
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'contacts', contact.id));
-      onDone();
+      onDone(true);
     } catch (e) {
       showToast(saveErrorMessage(e), 'error');
       setDeleting(false);
@@ -192,7 +197,12 @@ function ContactModal({ org, contact, onClose, onDone }: { org: Organization; co
         <Field label="Title"><input style={crmField} value={f.title} placeholder="VP of Operations" onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
         <Field label="Email"><input style={crmField} value={f.email} type="email" onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         <Field label="Phone"><input style={crmField} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
-        <Field label="LinkedIn" span><input style={crmField} value={f.linkedin} placeholder="https://www.linkedin.com/in/…" onChange={(e) => setF({ ...f, linkedin: e.target.value })} /></Field>
+        <Field label="Lifecycle stage">
+          <select style={crmField} value={f.lifecycleStage} onChange={(e) => setF({ ...f, lifecycleStage: e.target.value as LifecycleStage })}>
+            {(Object.keys(LIFECYCLE_LABELS) as LifecycleStage[]).map((k) => <option key={k} value={k}>{LIFECYCLE_LABELS[k]}</option>)}
+          </select>
+        </Field>
+        <Field label="LinkedIn"><input style={crmField} value={f.linkedin} placeholder="https://www.linkedin.com/in/…" onChange={(e) => setF({ ...f, linkedin: e.target.value })} /></Field>
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 22 }}>
           {check('isPoc', 'Point of contact')}
           {check('isDecisionMaker', 'Decision-maker')}

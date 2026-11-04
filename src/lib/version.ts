@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.32.0';
+export const APP_VERSION = '1.33.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,23 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.33.0',
+    date: '2026-11-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Deal pages. Click any deal to open its own page: details and stage history on the left, the activity timeline in the middle, and the company, the people on the deal and its Engagement on the right.',
+          'HubSpot-style logging. Log a call (outcome, direction, duration), a meeting (outcome, attendees, duration), an email (sent or received) or a note, and link it to any of the company\u2019s deals and contacts. It then shows on every one of them.',
+          'Tasks page (sidebar \u2192 Tasks): Overdue, Due today, Upcoming and No due date, for you or the whole team. Tasks now have a type (To-do, Call, Email), a priority, a due time, and can be linked to a deal and a contact.',
+          'Contacts page (sidebar \u2192 Contacts) and a page for each contact, with lifecycle stage (Lead to Customer), their timeline and their deals.',
+          'Create deal now picks the people on the deal, deal type (new or existing business), priority, and an optional first follow-up task.',
+          'Deal tracking: every stage move is recorded with who and when; the board and list show each deal\u2019s next step, flag open deals with no next step, and the Deals page shows weighted pipeline MRR.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.32.0',
     date: '2026-11-03',

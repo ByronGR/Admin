@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.33.1] — 2026-11-04
+
+### Added
+- Hold-to-delete on an engagement page. Only allowed when it has no documents or payments; any deal that opened it is unlinked.
+
+---
+
 ## [1.33.0] — 2026-11-04
 
 ### Added

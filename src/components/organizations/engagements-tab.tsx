@@ -18,6 +18,7 @@ import {
 import { NW, Icon, Button } from '@/components/nw/primitives';
 import { Card, CardHead } from '@/components/nw/shell-ui';
 import { Modal } from '@/components/ui/modal';
+import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { fmtDate } from '@/lib/utils';
 import {
   ENG_STAGES,
@@ -442,6 +443,27 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
     rows: t === 'MSA' ? (msa ? [{ ...msa, linkedFromOrg: true }] : []) : docs.filter(d => d.type === t),
   })).filter(g => g.rows.length || g.type !== 'Other');
 
+  // Deleting an engagement is only allowed once it holds no documents or
+  // payments, so a signed contract can never disappear by accident. Any deal
+  // that opened it is unlinked (it can open a fresh one if won again).
+  const [deleting, setDeleting] = useState(false);
+  const canDelete = docs.length === 0 && payments.length === 0;
+  async function removeEngagement() {
+    if (!canDelete) return;
+    setDeleting(true);
+    try {
+      const linkedDeals = await getDocs(query(collection(db, 'deals'), where('engagementId', '==', eng.id)));
+      await Promise.all(linkedDeals.docs.map(d => updateDoc(d.ref, { engagementId: null })));
+      await deleteDoc(doc(db, 'engagements', eng.id));
+      onBack();
+      reload();
+    } catch (e) {
+      console.error('[engagements] delete failed', e);
+      alert('Could not delete — check permissions.');
+      setDeleting(false);
+    }
+  }
+
   async function removeDoc(id: string) {
     try { await deleteDoc(doc(db, 'engagementDocuments', id)); reload(); }
     catch (e) { console.error('[engagements] remove failed', e); alert('Could not remove — check permissions.'); }
@@ -461,7 +483,12 @@ function EngagementDetail({ eng, org, openings, docs, msa, payments, onBack, rel
             </div>
             <div style={{ fontSize: 12, color: NW.gray500, marginTop: 5 }}>{org.name} · created {fmtDate(eng.createdAt)}{eng.createdBy ? ` by ${eng.createdBy}` : ''}</div>
           </div>
-          <Button variant="secondary" size="sm" icon="pencil" onClick={() => setModal('edit')}>Edit deal</Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {canDelete
+              ? <HoldToDelete onConfirm={removeEngagement} busy={deleting} size="sm" label="Hold to delete" title="Delete this engagement" />
+              : <span title="Remove its documents and payments first" style={{ fontSize: 11.5, color: NW.gray400 }}>Has documents · can’t delete</span>}
+            <Button variant="secondary" size="sm" icon="pencil" onClick={() => setModal('edit')}>Edit deal</Button>
+          </div>
         </div>
 
         <div style={{ marginTop: 16, paddingTop: 15, borderTop: `1px solid ${NW.gray100}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>

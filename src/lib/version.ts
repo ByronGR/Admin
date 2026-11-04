@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.33.0';
+export const APP_VERSION = '1.33.1';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.33.1',
+    date: '2026-11-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Engagements can be deleted (hold to delete on the engagement page). Only engagements with no documents or payments can be deleted, so a signed contract can never be removed by accident. A deal that opened it is unlinked.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.33.0',
     date: '2026-11-04',

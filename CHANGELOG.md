@@ -5,6 +5,16 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.34.0] — 2026-11-04
+
+### Added
+- **Fill from web** on the Company profile card: People Data Labs lookup by website (employees, size, industry, HQ, LinkedIn, funding stage, founded). Shows found vs saved; tick what to keep.
+
+### Technical
+- Staff-only `/api/company-lookup`; needs `PDL_API_KEY` in Vercel.
+
+---
+
 ## [1.33.1] — 2026-11-04
 
 ### Added

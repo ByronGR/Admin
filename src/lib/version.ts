@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.33.1';
+export const APP_VERSION = '1.34.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,24 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.34.0',
+    date: '2026-11-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Fill from web on the Company profile card. It looks the company up by its website on People Data Labs and shows employees, size range, industry, HQ, LinkedIn, funding stage and founded year next to what is saved; tick what to keep. Gaps are pre-ticked, anything staff typed is left alone. Free plan: 100 lookups a month, and a lookup only counts when a company is found.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New staff-only route /api/company-lookup (Firebase ID token, @nearwork.co). Needs PDL_API_KEY in Vercel; without it the button explains the lookup is not switched on yet.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.33.1',
     date: '2026-11-04',

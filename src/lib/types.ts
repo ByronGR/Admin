@@ -174,6 +174,9 @@ export interface Organization {
   timeZone?: string;                      // HQ time zone, e.g. "America/New_York"
   linkedin?: string;                      // company LinkedIn URL
   fundingStage?: string;                  // e.g. "Series A"
+  region?: string;                        // HQ state / region, e.g. "Texas"
+  founded?: number;                       // year founded
+  enrichedAt?: string;                    // ISO time of the last "Fill from web" lookup
   crmSource?: CrmSource;                  // how the company reached Atlas
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

@@ -74,6 +74,7 @@ export async function GET(req: Request) {
   }
 
   // PDL: 404 no match, 402 out of monthly matches, 401 bad key, 429 rate limit.
+  console.log(`[company-lookup] ${website} -> PDL ${r.status}`);
   if (r.status === 404) return NextResponse.json({ ok: false, reason: 'not_found' });
   if (r.status === 402) return NextResponse.json({ ok: false, reason: 'out_of_credits' });
   if (r.status === 401 || r.status === 403) return NextResponse.json({ ok: false, reason: 'bad_key' });

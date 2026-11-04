@@ -37,23 +37,28 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
   const [editing, setEditing] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const stage = org.companyStage;
-  const rows: [string, React.ReactNode][] = [
-    ['Company size', sizeLabel(org)],
-    ['Headquarters', [org.city, org.region, org.country].filter(Boolean).join(', ') || '—'],
+  const web = new Set(org.enrichedFields || []);
+  const fromWeb = (...keys: string[]) => keys.some((k) => web.has(k));
+  const rows: [string, React.ReactNode, boolean?][] = [
+    ['Company size', sizeLabel(org), fromWeb('employeeCount', 'sizeRange')],
+    ['Headquarters', [org.city, org.region, org.country].filter(Boolean).join(', ') || '—', fromWeb('city', 'region', 'country')],
     ['Time zone', org.timeZone || '—'],
-    ['Industry', org.industry || '—'],
-    ['Funding stage', org.fundingStage || '—'],
-    ['Founded', org.founded ? String(org.founded) : '—'],
+    ['Industry', org.industry || '—', fromWeb('industry')],
+    ['Funding stage', org.fundingStage || '—', fromWeb('fundingStage')],
+    ['Founded', org.founded ? String(org.founded) : '—', fromWeb('founded')],
     ['Website', org.website ? <a href={org.website.startsWith('http') ? org.website : `https://${org.website}`} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>{org.website.replace(/^https?:\/\//, '')}</a> : '—'],
-    ['LinkedIn', org.linkedin ? <a href={org.linkedin} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>Open profile</a> : '—'],
+    ['LinkedIn', org.linkedin ? <a href={org.linkedin} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>Open profile</a> : '—', fromWeb('linkedin')],
   ];
+  const lookupLine = org.lastLookup
+    ? `Web lookup ${new Date(org.lastLookup.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: ${org.lastLookup.result === 'found' ? (org.enrichedFields?.length ? `filled ${org.enrichedFields.length} field${org.enrichedFields.length === 1 ? '' : 's'}` : 'found, nothing saved') : 'no match found'}`
+    : null;
 
   return (
     <Card pad={18}>
       <CardHead
         icon="building"
         title="Company profile"
-        sub={[org.crmSource ? SOURCE_LABELS[org.crmSource] : null, org.enrichedAt ? `Filled from web ${new Date(org.enrichedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : null].filter(Boolean).join(' · ') || undefined}
+        sub={[org.crmSource ? SOURCE_LABELS[org.crmSource] : null, lookupLine].filter(Boolean).join(' · ') || undefined}
         action={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {stage && <Pill fg={STAGE_STYLE[stage].fg} bg={STAGE_STYLE[stage].bg}>{COMPANY_STAGE_LABELS[stage]}</Pill>}
@@ -65,15 +70,18 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
         }
       />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px 22px' }}>
-        {rows.map(([k, v]) => (
+        {rows.map(([k, v, w]) => (
           <div key={k} style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: NW.gray500 }}>{k}</div>
+            <div style={{ fontSize: 11, color: NW.gray500, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {k}
+              {w && <span title="Filled from the web lookup" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: NW.teal700, background: NW.teal50, borderRadius: 4, padding: '1px 5px' }}>web</span>}
+            </div>
             <div style={{ fontSize: 13.5, fontWeight: 500, color: NW.black, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div>
           </div>
         ))}
       </div>
       {editing && <ProfileModal org={org} onClose={() => setEditing(false)} onSaved={(o) => { setEditing(false); onUpdated(o); }} />}
-      {lookingUp && <LookupModal org={org} onClose={() => setLookingUp(false)} onSaved={(o) => { setLookingUp(false); onUpdated(o); }} />}
+      {lookingUp && <LookupModal org={org} onClose={() => setLookingUp(false)} onSaved={(o) => { setLookingUp(false); onUpdated(o); }} onLooked={onUpdated} />}
     </Card>
   );
 }
@@ -180,7 +188,7 @@ const REASONS: Record<string, string> = {
   unauthorized: 'Your sign-in expired. Refresh the page and try again.',
 };
 
-function LookupModal({ org, onClose, onSaved }: { org: Organization; onClose: () => void; onSaved: (o: Organization) => void }) {
+function LookupModal({ org, onClose, onSaved, onLooked }: { org: Organization; onClose: () => void; onSaved: (o: Organization) => void; onLooked: (o: Organization) => void }) {
   const { showToast } = useToast();
   const [state, setState] = useState<'loading' | 'found' | 'error'>('loading');
   const [message, setMessage] = useState('');
@@ -199,7 +207,16 @@ function LookupModal({ org, onClose, onSaved }: { org: Organization; onClose: ()
         const token = await auth.currentUser?.getIdToken();
         const r = await fetch(`/api/company-lookup?website=${encodeURIComponent(org.website || '')}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         const j = await r.json().catch(() => ({ ok: false, reason: 'error' }));
-        if (!j.ok) { setMessage(REASONS[j.reason] || 'The lookup failed. Try again in a minute.'); setState('error'); return; }
+        if (!j.ok) {
+          setMessage(REASONS[j.reason] || 'The lookup failed. Try again in a minute.');
+          setState('error');
+          if (j.reason === 'not_found') {
+            const lastLookup = { at: new Date().toISOString(), result: 'not_found' as const };
+            await updateDoc(doc(db, 'organizations', org.id), { lastLookup }).catch(() => null);
+            onLooked({ ...org, lastLookup });
+          }
+          return;
+        }
         const c = j.company as Found;
         setFound(c);
         // Pre-tick what fills a gap; leave anything staff already typed unticked.
@@ -210,12 +227,16 @@ function LookupModal({ org, onClose, onSaved }: { org: Organization; onClose: ()
         setState('error');
       }
     })();
-  }, [org]);
+  }, [org, onLooked]);
 
   async function apply() {
     if (!found) return;
     setSaving(true);
-    const patch: Record<string, unknown> = { enrichedAt: new Date().toISOString() };
+    const at = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      lastLookup: { at, result: 'found' },
+      ...(picked.size ? { enrichedAt: at, enrichedFields: Array.from(new Set([...(org.enrichedFields || []), ...picked])) } : {}),
+    };
     for (const k of picked) patch[k] = found[k as keyof Found];
     try {
       await updateDoc(doc(db, 'organizations', org.id), { ...patch, updatedAt: serverTimestamp() });

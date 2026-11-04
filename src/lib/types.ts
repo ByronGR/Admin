@@ -176,7 +176,9 @@ export interface Organization {
   fundingStage?: string;                  // e.g. "Series A"
   region?: string;                        // HQ state / region, e.g. "Texas"
   founded?: number;                       // year founded
-  enrichedAt?: string;                    // ISO time of the last "Fill from web" lookup
+  enrichedAt?: string;                    // ISO time fields were last saved from "Fill from web"
+  enrichedFields?: string[];              // which profile fields came from the web lookup
+  lastLookup?: { at: string; result: 'found' | 'not_found' }; // most recent lookup and what it returned
   crmSource?: CrmSource;                  // how the company reached Atlas
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

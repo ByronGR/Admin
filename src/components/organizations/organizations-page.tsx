@@ -45,6 +45,12 @@ import { PageHeader, Card as NWCard, StatusBadge as NWStatusBadge } from '@/comp
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { StaffPicker } from '@/components/ui/staff-picker';
 import { EngagementsTab } from './engagements-tab';
+import { CompanyProfileCard } from '@/components/crm/company-profile-card';
+import { RevenueCard } from '@/components/crm/revenue-card';
+import { ContactsTab } from '@/components/crm/contacts-tab';
+import { ServiceOrdersTab, useServiceOrders } from '@/components/crm/service-orders-tab';
+import { ActivityTab } from '@/components/crm/activity-tab';
+import { OrgDealsTab } from '@/components/crm/deals';
 
 // Engagement-type colours (shared with the Hired module)
 const ENGAGEMENT_STYLE: Record<EngagementType, { color: string; bg: string }> = {
@@ -739,7 +745,9 @@ export default function OrganizationsPage() {
     if (org) {
       // Use shortId in URL so the ID in the header matches the shareable link
       const urlId = org.shortId ?? org.id;
-      window.history.pushState(null, '', `/organizations?id=${urlId}`);
+      // Keep a deep-linked ?tab= (e.g. from the Deals page) so the detail opens on it.
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      window.history.pushState(null, '', `/organizations?id=${urlId}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`);
     } else {
       window.history.pushState(null, '', '/organizations');
     }
@@ -948,6 +956,13 @@ export default function OrganizationsPage() {
 
 // ─── Org detail ───────────────────────────────────────────────────────────────
 
+const ORG_TABS = [
+  ['overview', 'Overview'], ['activity', 'Activity'], ['contacts', 'Contacts'], ['deals', 'Deals'],
+  ['orders', 'Service orders'], ['hiring', 'Active roles'], ['engagements', 'Engagements'],
+  ['team', 'Managed team'], ['people', 'Access'], ['billing', 'Billing'],
+] as const;
+type OrgTab = (typeof ORG_TABS)[number][0];
+
 function OrgDetail({
   org,
   allOrgs,
@@ -1026,7 +1041,14 @@ function OrgDetail({
   const [savingAction, setSavingAction] = useState(false);
 
   // Detail tab navigation
-  const [tab, setTab] = useState<'overview' | 'hiring' | 'engagements' | 'team' | 'people' | 'billing'>('overview');
+  // `?tab=` lets other pages (e.g. Deals) link straight to a tab.
+  const [tab, setTab] = useState<OrgTab>(() => {
+    if (typeof window === 'undefined') return 'overview';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return (ORG_TABS.some(([k]) => k === t) ? t : 'overview') as OrgTab;
+  });
+  // Service orders drive the Revenue card on Overview and the Service orders tab.
+  const serviceOrders = useServiceOrders(org.id);
   // Inline status dropdown (redesign header)
   const [statusOpen, setStatusOpen] = useState(false);
 
@@ -2067,7 +2089,7 @@ function OrgDetail({
 
       {/* Tab nav — underline */}
       <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${NW.gray100}`, flexWrap: 'wrap' }}>
-        {([['overview', 'Overview'], ['hiring', 'Active roles'], ['engagements', 'Engagements'], ['team', 'Managed team'], ['people', 'Access'], ['billing', 'Billing']] as const).map(([key, label]) => {
+        {ORG_TABS.map(([key, label]) => {
           const on = tab === key;
           return (
             <button
@@ -2082,7 +2104,7 @@ function OrgDetail({
                 color: on ? NW.black : NW.gray500,
                 padding: '10px 2px',
                 position: 'relative',
-                marginRight: 26,
+                marginRight: 20,
               }}
             >
               {label}
@@ -2095,10 +2117,18 @@ function OrgDetail({
       {/* ── Engagements tab ── */}
       {tab === 'engagements' && <EngagementsTab org={org} openings={openings} />}
 
+      {/* ── Atlas CRM tabs ── */}
+      {tab === 'activity' && <ActivityTab org={org} />}
+      {tab === 'contacts' && <ContactsTab org={org} />}
+      {tab === 'deals' && <OrgDealsTab org={org} onChanged={onRefresh} />}
+      {tab === 'orders' && <ServiceOrdersTab org={org} {...serviceOrders} />}
+
       {/* ── Overview tab ── */}
       {tab === 'overview' && (
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-5">
+          <CompanyProfileCard org={org} onUpdated={onUpdated} />
+          <RevenueCard orders={serviceOrders.orders} loading={serviceOrders.loading} onOpenOrders={() => setTab('orders')} />
           {/* Package card */}
           {pkg ? (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">

@@ -27,6 +27,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Partners',
     items: [
       { href: '/organizations', label: 'Organizations', icon: 'building-2' },
+      { href: '/deals', label: 'Deals', icon: 'handshake' },
       { href: '/spp', label: 'SPP', icon: 'git-merge' },
     ],
   },

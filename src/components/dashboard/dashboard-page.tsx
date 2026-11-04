@@ -74,6 +74,7 @@ type AppDoc = Application & {
 import { type IconName } from 'lucide-react/dynamic';
 import { NW, MONO, Icon, Avatar, Button, Chip } from '@/components/nw/primitives';
 import { PageHeader, Card, CardHead, FilterButton } from '@/components/nw/shell-ui';
+import { RevenueSummary } from '@/components/crm/revenue-summary';
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
@@ -613,6 +614,11 @@ export default function DashboardPage() {
         <StatCard icon="briefcase" label="Open openings" value={stats?.activeOpenings ?? '—'} sub={`${stats?.totalOpenings ?? 0} total`} />
         <StatCard icon="users" label="Candidates in ATS" value={stats?.totalCandidates ?? '—'} sub={`${stats?.activeCandidates ?? 0} active`} />
         <StatCard icon="party-popper" label="Hires this month" value={stats?.hiresThisMonth ?? '—'} sub={stats?.recentHireNames ?? '—'} />
+      </div>
+
+      {/* Recurring revenue — Nearwork's MRR/ARR from client service orders. */}
+      <div style={{ marginBottom: 18 }}>
+        <RevenueSummary />
       </div>
 
       {/* Candidate intake — the only growth number on this page; everything

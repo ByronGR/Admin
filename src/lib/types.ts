@@ -167,6 +167,14 @@ export interface Organization {
   isStrategicPartner?: boolean;           // this org is an SPP parent with sub-client orgs
   parentOrgId?: string;                   // if set, this org is a sub-client under a parent SPP org
   parentOrgName?: string;                 // denormalized parent name for display
+  // ─── Company profile (Atlas CRM) ────────────────────────────────────────────
+  companyStage?: CompanyStage;            // where the relationship is (separate from portal `status`)
+  employeeCount?: number;                 // headcount, from People Data Labs or typed in
+  sizeRange?: string;                     // e.g. "51-200" when only a range is known
+  timeZone?: string;                      // HQ time zone, e.g. "America/New_York"
+  linkedin?: string;                      // company LinkedIn URL
+  fundingStage?: string;                  // e.g. "Series A"
+  crmSource?: CrmSource;                  // how the company reached Atlas
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -989,6 +997,128 @@ export interface EngagementPayment {
   status: DealPaymentStatus;
   date?: string;
   externalId?: string;
+}
+
+// ─── Atlas CRM add-ons ────────────────────────────────────────────────────────
+// The client HQ: deals, people, service orders (which drive MRR/ARR), activity
+// and tasks. Every record hangs off an Organization by its Firestore doc id.
+// Firestore: deals / contacts / serviceOrders / crmActivities / crmTasks.
+
+export type CompanyStage = 'prospect' | 'client' | 'past_client';
+export const COMPANY_STAGE_LABELS: Record<CompanyStage, string> = {
+  prospect: 'Prospect',
+  client: 'Client',
+  past_client: 'Past client',
+};
+
+// How a company reached Atlas: handed over from Radar, booked through
+// Microsoft Bookings, typed in by staff, or imported from HubSpot.
+export type CrmSource = 'radar' | 'bookings' | 'manual' | 'hubspot';
+
+export type DealStage = 'Prospect' | 'Meeting booked' | 'Proposal' | 'Contract sent' | 'Client' | 'Lost';
+export const DEAL_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Proposal', 'Contract sent', 'Client', 'Lost'];
+
+export interface Deal {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  title: string;
+  stage: DealStage;
+  value?: number;                  // one-time value (fees, setup)
+  mrr?: number;                    // expected monthly recurring revenue
+  ownerName?: string;
+  ownerEmail?: string;
+  closeDate?: string;              // YYYY-MM-DD
+  source?: CrmSource;
+  engagementId?: string;           // set when the deal is won and its Engagement is opened
+  lostReason?: string;
+  stageChangedAt?: Timestamp;
+  createdAt?: Timestamp;
+  createdBy?: string;
+  updatedAt?: Timestamp;
+}
+
+// A person at a client company. Replaces Organization.pocContacts over time.
+export interface Contact {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+  isPoc?: boolean;                 // main point of contact
+  isDecisionMaker?: boolean;
+  source?: CrmSource;
+  createdAt?: Timestamp;
+  createdBy?: string;
+  updatedAt?: Timestamp;
+}
+
+export type ServiceKind = 'managed' | 'eor' | 'spp' | 'direct_hire' | 'sourcing' | 'vera_credits' | 'other';
+export const SERVICE_LABELS: Record<ServiceKind, string> = {
+  managed: 'Managed team',
+  eor: 'Contractor / EOR',
+  spp: 'Strategic Partner (SPP)',
+  direct_hire: 'Direct hire',
+  sourcing: 'Sourcing',
+  vera_credits: 'Vera credits',
+  other: 'Other',
+};
+
+export type BillingType = 'monthly' | 'one_time';
+export type ServiceOrderStatus = 'draft' | 'active' | 'paused' | 'ended';
+export const SERVICE_ORDER_STATUSES: ServiceOrderStatus[] = ['draft', 'active', 'paused', 'ended'];
+
+// What a client bought. Active monthly orders make up MRR; one-time orders
+// (placement fees, credits) count as one-time revenue.
+export interface ServiceOrder {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  service: ServiceKind;
+  description?: string;            // e.g. "2 × Senior Accountant"
+  billing: BillingType;
+  amount: number;                  // USD per unit — per month when billing is monthly
+  quantity?: number;               // units (e.g. headcount); defaults to 1
+  status: ServiceOrderStatus;
+  startDate?: string;              // YYYY-MM-DD
+  endDate?: string;
+  dealId?: string;
+  engagementId?: string;
+  createdAt?: Timestamp;
+  createdBy?: string;
+  updatedAt?: Timestamp;
+}
+
+export type CrmActivityKind = 'note' | 'call' | 'meeting' | 'email';
+export interface CrmActivity {
+  id: string;
+  orgId: string;
+  kind: CrmActivityKind;
+  body: string;
+  at: string;                      // ISO date-time it happened
+  contactId?: string;
+  dealId?: string;
+  createdBy?: string;              // display name
+  createdByEmail?: string;
+  createdAt?: Timestamp;
+}
+
+export interface CrmTask {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  title: string;
+  dueDate?: string;                // YYYY-MM-DD
+  ownerName?: string;
+  ownerEmail?: string;
+  done: boolean;
+  doneAt?: Timestamp;
+  dealId?: string;
+  createdAt?: Timestamp;
+  createdBy?: string;
 }
 
 // ─── Sourcing (X-ray) ──────────────────────────────────────────────────────────

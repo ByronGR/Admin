@@ -5,6 +5,22 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.32.0] — 2026-11-03
+
+### Added
+- **Deals page** (sidebar → Deals). Every deal from first meeting to signed client, as a board you drag between stages (Prospect, Meeting booked, Proposal, Contract sent, Client, Lost) or as a list. Shows open pipeline MRR and win rate, with an All / My deals switch.
+- Moving a deal to Client opens its Engagement automatically and marks the company a client.
+- Four new tabs on every company: **Activity** (notes, calls, meetings, emails, plus follow-up tasks), **Contacts** (each person their own record), **Deals**, and **Service orders**.
+- Service orders record what a client buys and whether it bills monthly or once. They drive the new **Revenue** card on the company Overview: MRR, ARR, one-time revenue and a Recurring / One-time badge.
+- **Company profile** card on the Overview: stage, size, HQ, time zone, industry, funding stage, website and LinkedIn.
+- **Recurring revenue** strip on the Dashboard: Nearwork-wide MRR, ARR, one-time revenue, recurring client count, and open pipeline MRR.
+
+### Technical
+- New Firestore collections `deals`, `contacts`, `serviceOrders`, `crmActivities`, `crmTasks`. Rules must be published in the Firebase console before saving works (see `docs/atlas-crm-firestore-rules.md`).
+- Company pages accept `?tab=` so other pages can link straight to a tab.
+
+---
+
 ## [1.30.1] — 2026-08-12
 
 ### Removed

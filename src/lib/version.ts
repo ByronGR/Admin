@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.31.0';
+export const APP_VERSION = '1.32.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,30 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.32.0',
+    date: '2026-11-03',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'Deals page (sidebar \u2192 Deals). Every deal from first meeting to signed client, as a board you drag between stages (Prospect, Meeting booked, Proposal, Contract sent, Client, Lost) or as a list. Shows open pipeline MRR and win rate, with an All / My deals switch.',
+          'Moving a deal to Client opens its Engagement automatically and marks the company a client.',
+          'Four new tabs on every company: Activity (log notes, calls, meetings and emails, plus follow-up tasks with owners and due dates), Contacts (each person their own record, with point-of-contact and decision-maker flags), Deals, and Service orders.',
+          'Service orders record what a client buys and whether it bills monthly or once. They drive the new Revenue card on the company Overview: MRR, ARR, one-time revenue and a Recurring / One-time badge.',
+          'Company profile card on the Overview: stage (Prospect / Client / Past client), company size, HQ, time zone, industry, funding stage, website and LinkedIn.',
+          'Recurring revenue strip on the Dashboard: Nearwork-wide MRR, ARR, one-time revenue, how many clients are recurring, and the MRR still open in the pipeline.',
+        ],
+      },
+      {
+        title: 'Technical',
+        items: [
+          'New Firestore collections deals, contacts, serviceOrders, crmActivities and crmTasks. Their rules must be published in the Firebase console before saving works; until then saves show a clear permission message.',
+          'Company pages accept ?tab= in the URL, so the Deals page can link straight to a company\u2019s Deals tab.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.31.0',
     date: '2026-08-18',

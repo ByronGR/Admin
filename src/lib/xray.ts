@@ -11,7 +11,24 @@ const COUNTRIES: Record<string, string> = {
   // Belize is deliberately absent: it isn't one.
   mx: 'Mexico', cr: 'Costa Rica', gt: 'Guatemala', sv: 'El Salvador',
   hn: 'Honduras', ni: 'Nicaragua', pa: 'Panama', do: 'Dominican Republic',
+  // United States has no LinkedIn country subdomain: its profiles live on
+  // www.linkedin.com alongside every other country, so it is searched and
+  // geo-checked differently (see US_CODE below).
+  us: 'United States',
 };
+
+const US_CODE = 'us';
+
+// Evidence a www.linkedin.com result is someone in the US: the country, a state,
+// a US metro area, or a "City, ST" location.
+const US_STATES = 'alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming';
+const US_LOC_WORDS = new RegExp(`(\\bunited states\\b|\\bu\\.?s\\.?a\\.?\\b|\\b(${US_STATES})\\b|\\bbay area\\b|\\bgreater [a-z .]+ area\\b|metropolitan area)`, 'i');
+const US_STATE_CODE = /, (A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|V[AT]|W[AIVY])\b/;
+const looksUs = (t: string) => US_LOC_WORDS.test(t) || US_STATE_CODE.test(t);
+// For US results: drop people the snippet places outside the US.
+const NON_US_LOC = /(\bspain\b|\bespa[ñn]a\b|\bmadrid\b|\bbarcelona\b|\blondon\b|\bunited kingdom\b|\bcanada\b|\btoronto\b|\bvancouver\b|\bportugal\b|\bgermany\b|\bfrance\b|\bitaly\b|\baustralia\b|\bindia\b|\bphilippines\b|\bcolombia\b|(?<!new )\bmexico\b|\bargentina\b|\bbrazil\b)/i;
+// Best guess at a readable US location from the snippet ("Austin, Texas", "Greater Boston Area").
+const US_PLACE = /([Gg]reater [A-Za-z .]+ [Aa]rea|[A-Za-z .]+ [Bb]ay [Aa]rea|[A-Za-z .]+ [Mm]etropolitan [Aa]rea|[A-Z][a-zA-Z .]+, (?:[A-Z]{2}|[A-Z][a-z]+(?: [A-Z][a-z]+)?))/;
 
 const SUBDOMAIN_COUNTRY: Record<string, string> = {
   co: 'Colombia', ar: 'Argentina', mx: 'Mexico', pe: 'Peru', ve: 'Venezuela',
@@ -91,10 +108,22 @@ export function normKw(v: unknown): string[] {
 // exclude keywords appended as Google negatives. Excludes are ALSO post-filtered
 // in filterResults — the negative alone isn't reliable, since the term can sit
 // in profile text Google didn't index as a match.
+//
+// LATAM countries are pinned by LinkedIn's country subdomains (co., mx., …).
+// The US has none, so when it is picked each phrase gets a second query on
+// www.linkedin.com narrowed to US locations.
 export function buildQueriesFromPhrases(phrases: string[], codes: string[], excludeKeywords: string[] = []) {
-  const site = '(' + codes.filter(c => COUNTRIES[c]).map(c => `site:${c}.linkedin.com/in`).join(' OR ') + ')';
   const neg = excludeKeywords.map((k) => ` -"${k}"`).join('');
-  return phrases.map(p => `${site} ${p}${neg}`);
+  const subs = codes.filter(c => COUNTRIES[c] && c !== US_CODE);
+  const queries: string[] = [];
+  if (subs.length) {
+    const site = '(' + subs.map(c => `site:${c}.linkedin.com/in`).join(' OR ') + ')';
+    queries.push(...phrases.map(p => `${site} ${p}${neg}`));
+  }
+  if (codes.includes(US_CODE)) {
+    queries.push(...phrases.map(p => `site:www.linkedin.com/in ${p} ("United States" OR "Metropolitan Area" OR "Bay Area")${neg}`));
+  }
+  return queries;
 }
 
 type RawItem = { title?: string; link?: string; snippet?: string };
@@ -170,7 +199,11 @@ export function filterResults(
   for (const it of rawItems) {
     const host = (() => { try { return new URL(it.link || '').host; } catch { return ''; } })();
     const sub = host.split('.')[0];
-    if (!codeSet.has(sub)) { droppedGeo++; continue; }
+    const text0 = (it.title || '') + ' ' + (it.snippet || '');
+    // www.linkedin.com (or bare linkedin.com) results only count as US, and only
+    // when the snippet actually places the person in the US.
+    const isUs = (sub === 'www' || sub === 'linkedin') && codeSet.has(US_CODE) && looksUs(text0) && !NON_US_LOC.test(text0);
+    if (!isUs && (sub === US_CODE || !codeSet.has(sub))) { droppedGeo++; continue; }
     const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(it.link || '');
     if (!m) continue;
     const slug = normSlug(m[1]);
@@ -179,15 +212,20 @@ export function filterResults(
     const text = (it.title || '') + ' ' + (it.snippet || '');
     if (SELF_EXCLUDE.has(slug) || NEARWORK_SELF.test(text)) { droppedInternal++; continue; }  // never source our own team
     if (excludeOwners && EXCLUDE_OWNER.test(it.title || '')) { droppedOwner++; continue; }
-    if (NON_LATAM_LOC.test(text)) { droppedOffshore++; continue; }
+    if (!isUs && NON_LATAM_LOC.test(text)) { droppedOffshore++; continue; }
     // Post-filter the excludes: the Google negative catches most of them, but a
     // term can still sit in text the query didn't match on.
     if (exc.length && exc.some((k) => text.toLowerCase().includes(k))) { droppedExcluded++; continue; }
     pulled.add(slug);
-    const country = SUBDOMAIN_COUNTRY[sub] || COUNTRIES[sub] || '';
+    const country = isUs ? 'United States' : SUBDOMAIN_COUNTRY[sub] || COUNTRIES[sub] || '';
     let loc = country;
-    for (const [city, c] of Object.entries(CITY_HINTS)) {
-      if (c === country && new RegExp('\\b' + city + '\\b', 'i').test(text)) { loc = city + ', ' + country; break; }
+    if (isUs) {
+      const place = US_PLACE.exec(it.snippet || '');
+      if (place) loc = place[1].trim();
+    } else {
+      for (const [city, c] of Object.entries(CITY_HINTS)) {
+        if (c === country && new RegExp('\\b' + city + '\\b', 'i').test(text)) { loc = city + ', ' + country; break; }
+      }
     }
     // The headline is the result title with the name and the "| LinkedIn"
     // suffix stripped; when that leaves nothing useful, the snippet is a better

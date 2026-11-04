@@ -5,6 +5,13 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ---
 
+## [1.35.0] — 2026-11-04
+
+### Added
+- **United States** in the Sourcing (X-ray) countries (off by default). Extra per-phrase query on www.linkedin.com narrowed to US locations; only results showing a US location are kept. LATAM searches unchanged.
+
+---
+
 ## [1.34.1] — 2026-11-04
 
 ### Removed

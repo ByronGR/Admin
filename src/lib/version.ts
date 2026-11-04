@@ -4,7 +4,7 @@
 // MINOR = new feature sprint completed
 // PATCH = bug fixes and tweaks
 
-export const APP_VERSION = '1.34.1';
+export const APP_VERSION = '1.35.0';
 
 // ─── Changelog data ───────────────────────────────────────────────────────────
 // Add new releases at the TOP. Never delete old entries.
@@ -21,6 +21,18 @@ interface ChangelogRelease {
 }
 
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '1.35.0',
+    date: '2026-11-04',
+    sections: [
+      {
+        title: 'Added',
+        items: [
+          'United States in Sourcing (X-ray) country picker (off by default). US LinkedIn profiles have no country subdomain, so each search phrase gets an extra query on www.linkedin.com narrowed to US locations, and a result only counts when it shows a US location (country, state, "City, ST" or a US metro area). People located elsewhere are still dropped, and LATAM searches work exactly as before.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.34.1',
     date: '2026-11-04',

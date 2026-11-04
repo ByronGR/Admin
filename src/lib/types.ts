@@ -1207,6 +1207,8 @@ export const SRC_COUNTRIES: { code: string; name: string; on: boolean }[] = [
   { code: 'gt', name: 'Guatemala', on: true }, { code: 'sv', name: 'El Salvador', on: true },
   { code: 'hn', name: 'Honduras', on: true }, { code: 'ni', name: 'Nicaragua', on: true },
   { code: 'pa', name: 'Panama', on: true }, { code: 'do', name: 'Dominican Republic', on: true },
+  // Onshore. Off by default: picked per opening when a client wants US candidates.
+  { code: 'us', name: 'United States', on: false },
 ];
 
 export interface SourcedCandidate {

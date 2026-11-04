@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb, GCFieldValue } from '@/lib/firebase-admin';
-import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug, normKw, countryNames, cleanName } from '@/lib/xray';
+import { serperSearch, googleSearch, writePlan, buildQueriesFromPhrases, filterResults, normSlug, normKw, countryNames, cleanName, parseUsPlaces } from '@/lib/xray';
 import { ensureOpeningReqs, reqsAsPlanBrief } from '@/lib/opening-reqs';
 import type { Opening } from '@/lib/types';
 
@@ -42,6 +42,8 @@ export async function POST(req: Request) {
     // Manual steering on top of the AI plan. Array or comma-separated string,
     // matching the brain's runSearch contract.
     includeKeywords?: string[] | string; excludeKeywords?: string[] | string;
+    // Where in the US (city, state or "City, ST"); empty = the whole country.
+    usLocations?: string[];
   } = {};
   try { body = await req.json(); } catch { /* noop */ }
   const inc = normKw(body.includeKeywords);   // extra search phrases
@@ -51,6 +53,7 @@ export async function POST(req: Request) {
   const english = body.english !== false;
   const excludeOwners = body.excludeOwners !== false;
   const codes = (Array.isArray(body.countries) ? body.countries : []).filter(Boolean);
+  const usPlaces = codes.includes('us') ? parseUsPlaces(Array.isArray(body.usLocations) ? body.usLocations : []) : [];
   if (!openingId) return NextResponse.json({ ok: false, reason: 'missing_opening' }, { status: 400 });
   if (!codes.length) return NextResponse.json({ ok: false, reason: 'no_countries', message: 'Pick at least one country.' }, { status: 400 });
 
@@ -142,7 +145,7 @@ export async function POST(req: Request) {
   // ── Run the searches ──
   // Job-post plan phrases + any manual must-include keywords = what we search.
   const phrasesForRun = [...phrases, ...inc];
-  const queries = buildQueriesFromPhrases(phrasesForRun, codes, exc);
+  const queries = buildQueriesFromPhrases(phrasesForRun, codes, exc, usPlaces);
   const serperKey = process.env.SERPER_API_KEY;
   const gKey = process.env.GOOGLE_API_KEY, gCx = process.env.GOOGLE_CX;
   const rawItems: { title?: string; link?: string; snippet?: string }[] = [];
@@ -162,7 +165,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: 'not_configured', message: 'No SERPER_API_KEY or Google key configured.' }, { status: 500 });
   }
 
-  const { candidates, stats } = filterResults(rawItems, { codes, pulled, excludeOwners, excludeKeywords: exc });
+  const { candidates, stats } = filterResults(rawItems, { codes, pulled, excludeOwners, excludeKeywords: exc, usPlaces });
 
   // ── Append net-new candidates, tagged with this run's ref ──
   if (candidates.length) {
@@ -224,6 +227,7 @@ export async function POST(req: Request) {
     aliases: planAliases,
     include: inc,
     exclude: exc,
+    usLocations: usPlaces.map((p) => p.label),
     found: candidates.length,
     resurfaced: resurfaced.length,
     by: email,

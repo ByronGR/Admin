@@ -30,6 +30,65 @@ const NON_US_LOC = /(\bspain\b|\bespa[ñn]a\b|\bmadrid\b|\bbarcelona\b|\blondon\
 // Best guess at a readable US location from the snippet ("Austin, Texas", "Greater Boston Area").
 const US_PLACE = /([Gg]reater [A-Za-z .]+ [Aa]rea|[A-Za-z .]+ [Bb]ay [Aa]rea|[A-Za-z .]+ [Mm]etropolitan [Aa]rea|[A-Z][a-zA-Z .]+, (?:[A-Z]{2}|[A-Z][a-z]+(?: [A-Z][a-z]+)?))/;
 
+// ── Narrowing the US search to a city or state ────────────────────────────────
+const US_STATE_LIST: [string, string][] = [
+  ['Alabama', 'AL'], ['Alaska', 'AK'], ['Arizona', 'AZ'], ['Arkansas', 'AR'], ['California', 'CA'], ['Colorado', 'CO'],
+  ['Connecticut', 'CT'], ['Delaware', 'DE'], ['District of Columbia', 'DC'], ['Florida', 'FL'], ['Georgia', 'GA'],
+  ['Hawaii', 'HI'], ['Idaho', 'ID'], ['Illinois', 'IL'], ['Indiana', 'IN'], ['Iowa', 'IA'], ['Kansas', 'KS'],
+  ['Kentucky', 'KY'], ['Louisiana', 'LA'], ['Maine', 'ME'], ['Maryland', 'MD'], ['Massachusetts', 'MA'],
+  ['Michigan', 'MI'], ['Minnesota', 'MN'], ['Mississippi', 'MS'], ['Missouri', 'MO'], ['Montana', 'MT'],
+  ['Nebraska', 'NE'], ['Nevada', 'NV'], ['New Hampshire', 'NH'], ['New Jersey', 'NJ'], ['New Mexico', 'NM'],
+  ['New York', 'NY'], ['North Carolina', 'NC'], ['North Dakota', 'ND'], ['Ohio', 'OH'], ['Oklahoma', 'OK'],
+  ['Oregon', 'OR'], ['Pennsylvania', 'PA'], ['Rhode Island', 'RI'], ['South Carolina', 'SC'], ['South Dakota', 'SD'],
+  ['Tennessee', 'TN'], ['Texas', 'TX'], ['Utah', 'UT'], ['Vermont', 'VT'], ['Virginia', 'VA'], ['Washington', 'WA'],
+  ['West Virginia', 'WV'], ['Wisconsin', 'WI'], ['Wyoming', 'WY'],
+];
+const STATE_BY_KEY = new Map<string, [string, string]>();
+for (const st of US_STATE_LIST) { STATE_BY_KEY.set(st[0].toLowerCase(), st); STATE_BY_KEY.set(st[1].toLowerCase(), st); }
+
+export type UsPlace = { label: string; city?: string; state?: string; code?: string };
+
+// "Austin, TX" → city + state · "Florida" / "FL" → state · "Denver" → city.
+// "United States" / "USA" / empty → null (the whole country).
+export function parseUsPlace(raw: string): UsPlace | null {
+  const t = raw.trim().replace(/\s+/g, ' ');
+  if (!t || /^(united states|usa|u\.s\.a?\.?|us|whole (us|country))$/i.test(t)) return null;
+  const parts = t.split(',').map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const st = STATE_BY_KEY.get(parts[parts.length - 1].toLowerCase());
+    const city = parts.slice(0, -1).join(', ');
+    return st ? { label: `${city}, ${st[1]}`, city, state: st[0], code: st[1] } : { label: t, city: t };
+  }
+  const st = STATE_BY_KEY.get(t.toLowerCase());
+  return st ? { label: st[0], state: st[0], code: st[1] } : { label: t, city: t };
+}
+
+export const MAX_US_PLACES = 5;
+export function parseUsPlaces(raw: string[]): UsPlace[] {
+  const out: UsPlace[] = [];
+  for (const r of raw) {
+    const p = parseUsPlace(r);
+    if (p && !out.some((o) => o.label.toLowerCase() === p.label.toLowerCase())) out.push(p);
+  }
+  return out.slice(0, MAX_US_PLACES);
+}
+
+// The location part of a Google query for one place.
+function placeQuery(p: UsPlace): string {
+  if (p.city && p.state) return `"${p.city}" ("${p.state}" OR "${p.code}")`;
+  if (p.state) return `"${p.state}"`;
+  return `"${p.city}"`;
+}
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Does this result's text place the person in one of the chosen places?
+function inPlace(text: string, p: UsPlace): boolean {
+  const cityOk = !p.city || new RegExp(`\\b${esc(p.city)}\\b`, 'i').test(text);
+  const stateOk = !p.state || new RegExp(`\\b${esc(p.state)}\\b`, 'i').test(text) || new RegExp(`, ${p.code}\\b`).test(text);
+  // "Greater Austin Area" names no state: a city match is enough when the state isn't spelled out.
+  return p.city && p.state ? cityOk && (stateOk || /\barea\b/i.test(text)) : cityOk && stateOk;
+}
+
 const SUBDOMAIN_COUNTRY: Record<string, string> = {
   co: 'Colombia', ar: 'Argentina', mx: 'Mexico', pe: 'Peru', ve: 'Venezuela',
   cl: 'Chile', ec: 'Ecuador', uy: 'Uruguay', br: 'Brazil', do: 'Dominican Republic',
@@ -112,7 +171,7 @@ export function normKw(v: unknown): string[] {
 // LATAM countries are pinned by LinkedIn's country subdomains (co., mx., …).
 // The US has none, so when it is picked each phrase gets a second query on
 // www.linkedin.com narrowed to US locations.
-export function buildQueriesFromPhrases(phrases: string[], codes: string[], excludeKeywords: string[] = []) {
+export function buildQueriesFromPhrases(phrases: string[], codes: string[], excludeKeywords: string[] = [], usPlaces: UsPlace[] = []) {
   const neg = excludeKeywords.map((k) => ` -"${k}"`).join('');
   const subs = codes.filter(c => COUNTRIES[c] && c !== US_CODE);
   const queries: string[] = [];
@@ -121,7 +180,12 @@ export function buildQueriesFromPhrases(phrases: string[], codes: string[], excl
     queries.push(...phrases.map(p => `${site} ${p}${neg}`));
   }
   if (codes.includes(US_CODE)) {
-    queries.push(...phrases.map(p => `site:www.linkedin.com/in ${p} ("United States" OR "Metropolitan Area" OR "Bay Area")${neg}`));
+    if (usPlaces.length) {
+      // One query per phrase per place, so a state-wide search doesn't drown a city.
+      for (const pl of usPlaces) queries.push(...phrases.map(p => `site:www.linkedin.com/in ${p} ${placeQuery(pl)}${neg}`));
+    } else {
+      queries.push(...phrases.map(p => `site:www.linkedin.com/in ${p} ("United States" OR "Metropolitan Area" OR "Bay Area")${neg}`));
+    }
   }
   return queries;
 }
@@ -190,7 +254,7 @@ export type XrayResult = {
 // Parse raw search results → net-new candidates, applying geo-lock, dedup and exclusions.
 export function filterResults(
   rawItems: RawItem[],
-  { codes, pulled, excludeOwners, excludeKeywords = [] }: { codes: string[]; pulled: Set<string>; excludeOwners: boolean; excludeKeywords?: string[] }
+  { codes, pulled, excludeOwners, excludeKeywords = [], usPlaces = [] }: { codes: string[]; pulled: Set<string>; excludeOwners: boolean; excludeKeywords?: string[]; usPlaces?: UsPlace[] }
 ): { candidates: XrayResult[]; stats: { found: number; net_new: number; skipped_existing: number; dropped_geo: number; dropped_owner: number; dropped_offshore: number; dropped_internal: number; dropped_excluded: number } } {
   const codeSet = new Set(codes);
   const candidates: XrayResult[] = [];
@@ -202,7 +266,9 @@ export function filterResults(
     const text0 = (it.title || '') + ' ' + (it.snippet || '');
     // www.linkedin.com (or bare linkedin.com) results only count as US, and only
     // when the snippet actually places the person in the US.
-    const isUs = (sub === 'www' || sub === 'linkedin') && codeSet.has(US_CODE) && looksUs(text0) && !NON_US_LOC.test(text0);
+    // With places chosen, a US result must also be in one of them.
+    const isUs = (sub === 'www' || sub === 'linkedin') && codeSet.has(US_CODE) && !NON_US_LOC.test(text0)
+      && (usPlaces.length ? usPlaces.some((pl) => inPlace(text0, pl)) : looksUs(text0));
     if (!isUs && (sub === US_CODE || !codeSet.has(sub))) { droppedGeo++; continue; }
     const m = /linkedin\.com\/in\/([^/?#]+)/i.exec(it.link || '');
     if (!m) continue;

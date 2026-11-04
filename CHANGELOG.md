@@ -9,6 +9,7 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 
 ### Added
 - **United States** in the Sourcing (X-ray) countries (off by default). Extra per-phrase query on www.linkedin.com narrowed to US locations; only results showing a US location are kept. LATAM searches unchanged.
+- **Where in the US?** box: cities/states (up to 5) or empty for the whole country; per-place queries and location matching; remembered per opening.
 
 ---
 

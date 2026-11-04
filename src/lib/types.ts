@@ -1251,6 +1251,7 @@ export interface SearchRun {
   domain?: string;           // the AI plan's resolved discipline
   aliases?: string[];        // equivalent titles it searched as
   include?: string[];        // manual must-include keywords
+  usLocations?: string[];    // US cities/states searched ("Austin, TX", "Florida"); empty = whole US
   exclude?: string[];        // manual exclude keywords
   found: number;             // net-new candidates added
   resurfaced?: number;       // already-on-the-board people this run found again

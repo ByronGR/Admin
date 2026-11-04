@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogRelease[] = [
         title: 'Added',
         items: [
           'United States in Sourcing (X-ray) country picker (off by default). US LinkedIn profiles have no country subdomain, so each search phrase gets an extra query on www.linkedin.com narrowed to US locations, and a result only counts when it shows a US location (country, state, "City, ST" or a US metro area). People located elsewhere are still dropped, and LATAM searches work exactly as before.',
+          'Where in the US? With United States ticked, type cities or states (Austin, TX \u00b7 Florida \u00b7 Denver; up to 5) to search only there, or leave it empty for the whole country. Each place gets its own searches and only people shown in that place are kept. The places are remembered for the opening and shown in each search\u2019s details.',
         ],
       },
     ],

@@ -124,9 +124,11 @@ function SalaryCell({ value, onSave }: { value?: string; onSave: (v: string) => 
 // Keyword steering as tokens rather than a comma-separated string: a committed
 // keyword is a thing you can see and remove, and a half-typed one is visibly not
 // yet part of the search.
-function TokenField({ tokens, onChange, tone, placeholder, help }: {
+function TokenField({ tokens, onChange, tone, placeholder, help, commaAdds = true }: {
   tokens: string[]; onChange: (t: string[]) => void;
   tone: 'include' | 'exclude'; placeholder: string; help: string;
+  // Places like "Austin, TX" contain a comma, so there only Enter and ";" add one.
+  commaAdds?: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const st = tone === 'include'
@@ -134,7 +136,7 @@ function TokenField({ tokens, onChange, tone, placeholder, help }: {
     : { bg: '#FEE2E2', fg: '#B91C1C' };
 
   const commit = () => {
-    const v = draft.trim().replace(/,+$/, '');
+    const v = draft.trim().replace(/[,;]+$/, '');
     if (v && !tokens.some(t => t.toLowerCase() === v.toLowerCase())) onChange([...tokens, v]);
     setDraft('');
   };
@@ -160,7 +162,7 @@ function TokenField({ tokens, onChange, tone, placeholder, help }: {
           onChange={e => setDraft(e.target.value)}
           // Comma commits too, so pasting a comma-separated list still works.
           onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(); }
+            if (e.key === 'Enter' || e.key === ';' || (commaAdds && e.key === ',')) { e.preventDefault(); commit(); }
             else if (e.key === 'Backspace' && !draft && tokens.length) onChange(tokens.slice(0, -1));
           }}
           onBlur={commit}
@@ -177,11 +179,12 @@ function TokenField({ tokens, onChange, tone, placeholder, help }: {
 // prominent thing here, and visually distinct from the filter toolbar below.
 // A white card with a gradient header, not a tinted panel: the tint made the
 // whole tab read as one washed-out surface with no clear action.
-function SourcePanel({ plan, countries, setCountries, onRun, busy, include, setInclude, exclude, setExclude, onViewPlan }: {
+function SourcePanel({ plan, countries, setCountries, onRun, busy, include, setInclude, exclude, setExclude, usLocations, setUsLocations, onViewPlan }: {
   plan: SearchPlan | null; countries: string[]; setCountries: (c: string[]) => void;
   onRun: (mode: 'ai' | 'more') => void; busy: false | 'ai' | 'more';
   include: string[]; setInclude: (v: string[]) => void;
   exclude: string[]; setExclude: (v: string[]) => void;
+  usLocations: string[]; setUsLocations: (v: string[]) => void;
   onViewPlan: () => void;
 }) {
   const hasPlan = !!(plan && plan.phrases && plan.phrases.length);
@@ -277,6 +280,20 @@ function SourcePanel({ plan, countries, setCountries, onRun, busy, include, setI
           </div>
           {!nOn && <div style={{ fontSize: 12, color: '#B45309', marginTop: 8 }}>Pick at least one country.</div>}
         </div>
+
+        {/* Where in the US — only when United States is picked. Empty = the whole country. */}
+        {countries.includes('us') && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Where in the US?</label>
+            <TokenField
+              tokens={usLocations} onChange={(v) => setUsLocations(v.slice(0, 5))} tone="include" commaAdds={false}
+              placeholder="Whole country — or type a city or state and press Enter"
+              help={usLocations.length
+                ? `Only people in ${usLocations.join(' · ')}. Each place runs its own searches (up to 5 places).`
+                : 'Empty searches the whole US. Examples: Austin, TX · Florida · Denver · New York, NY'}
+            />
+          </div>
+        )}
 
         {/* Manual steering, on top of the AI plan */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
@@ -391,6 +408,9 @@ function SearchRefModal({ run, onClose, onFilter }: { run: SearchRun; onClose: (
         <Row label="When">{when}{run.by ? <span style={{ color: NW.gray400 }}> · {run.by}</span> : null}</Row>
         <Row label="Type">{run.mode === 'ai' ? 'AI Search — the plan was rewritten' : 'Find more — reused the saved plan'}</Row>
         <Row label="Countries">{chips(run.countries, 'plain')}</Row>
+        {run.countries?.includes('United States') && (
+          <Row label="US locations">{run.usLocations?.length ? chips(run.usLocations, 'plain') : 'Whole country'}</Row>
+        )}
         <Row label="Read as">{run.aliases?.length ? chips(run.aliases, 'plain') : <span style={{ color: NW.gray400 }}>—</span>}</Row>
         <Row label="Discipline">{run.domain || <span style={{ color: NW.gray400 }}>—</span>}</Row>
         <Row label="Must include">{chips(run.include, 'good')}</Row>
@@ -455,6 +475,7 @@ export function SourcingTab({ op }: { op: Opening }) {
   // keeps whatever the recruiter dialled in.
   const [include, setInclude] = useState<string[]>([]);
   const [exclude, setExclude] = useState<string[]>([]);
+  const [usLocations, setUsLocations] = useState<string[]>([]);
   // Audit trail. Served by the API — searchRuns has no Firestore rule of its own.
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [fRef, setFRef] = useState('');
@@ -583,6 +604,9 @@ export function SourcingTab({ op }: { op: Opening }) {
     const last = runs[0];   // loadRuns returns newest first
     if (last.include?.length) setInclude(last.include);
     if (last.exclude?.length) setExclude(last.exclude);
+    // Re-running a US search keeps its places (and US stays ticked).
+    if (last.usLocations?.length) setUsLocations(last.usLocations);
+    if (last.countries?.includes('United States')) setCountries((c) => (c.includes('us') ? c : [...c, 'us']));
   }, [runs]);
 
   async function runSearch(mode: 'ai' | 'more') {
@@ -592,7 +616,7 @@ export function SourcingTab({ op }: { op: Opening }) {
       const idToken = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/sourcing/find', {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ openingId, countries, english: true, excludeOwners: true, mode, includeKeywords: include, excludeKeywords: exclude }),
+        body: JSON.stringify({ openingId, countries, english: true, excludeOwners: true, mode, includeKeywords: include, excludeKeywords: exclude, usLocations: countries.includes('us') ? usLocations : [] }),
       });
       const d = await res.json();
       if (!d.ok) { setRunNote(d.message || d.reason || 'Search failed.'); }
@@ -725,7 +749,7 @@ export function SourcingTab({ op }: { op: Opening }) {
 
   return (
     <div style={{ marginTop: 4 }}>
-      <SourcePanel plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} onViewPlan={() => setModal('plan')} />
+      <SourcePanel plan={plan} countries={countries} setCountries={setCountries} onRun={runSearch} busy={busy} include={include} setInclude={setInclude} exclude={exclude} setExclude={setExclude} usLocations={usLocations} setUsLocations={setUsLocations} onViewPlan={() => setModal('plan')} />
       {runNote && <div style={{ fontSize: 12.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>{runNote}</div>}
       {loadErr && <div style={{ fontSize: 12.5, color: '#B45309', background: NW.yellow50, border: '1px solid #EAB30840', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>Can’t load sourced candidates — the Firestore rules for <b>sourcedCandidates</b> / <b>searchPlans</b> may still need to be published.</div>}
 

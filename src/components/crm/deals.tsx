@@ -109,26 +109,37 @@ function NextStep({ task, compact }: { task?: CrmTask; compact?: boolean }) {
 }
 
 // ── Deal card (board) ─────────────────────────────────────────────────────────
+// Every card has the same fixed slots (two-line title, company, money, a
+// two-line next-step area, owner) so all cards on the board are one height.
+const CARD_HEIGHT = 176;
+const clamp = (lines: number): CSSProperties => ({ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' });
+
 function DealCard({ deal, nextTask, onOpen, dragging }: { deal: Deal; nextTask?: CrmTask; onOpen: () => void; dragging?: boolean }) {
   const open = OPEN_STAGES.includes(deal.stage);
+  // Closed deals use the next-step slot for how they ended.
+  const closedNote = deal.stage === 'Won' ? (deal.engagementId ? 'Engagement open' : 'Won')
+    : deal.stage === 'Lost' ? (deal.lostReason || 'Lost') : '';
   return (
     <div
       onClick={onOpen}
       style={{
         background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: 12, cursor: 'grab', minWidth: 0, overflow: 'hidden',
+        height: CARD_HEIGHT, boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
         boxShadow: dragging ? '0 10px 24px rgba(0,0,0,0.12)' : '0 1px 2px rgba(0,0,0,0.03)',
       }}
     >
-      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, lineHeight: 1.3 }}>{deal.title}</div>
-      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2 }}>{deal.orgName || 'Unknown company'}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 12 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: NW.black, lineHeight: 1.3, height: 35, ...clamp(2) }}>{deal.title}</div>
+      <div style={{ fontSize: 12, color: NW.gray500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{deal.orgName || 'Unknown company'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 12, height: 16 }}>
         {deal.mrr ? <span style={{ fontWeight: 600, color: NW.teal700 }}>{fmtUsd(deal.mrr)}/mo</span> : null}
         {deal.value ? <span style={{ color: NW.gray700 }}>{fmtUsd(deal.value)}</span> : null}
         <div style={{ flex: 1 }} />
-        {deal.closeDate && <span style={{ color: NW.gray500 }}>{fmtDay(deal.closeDate).replace(/, \d{4}$/, '')}</span>}
+        {deal.closeDate && <span style={{ color: NW.gray500, whiteSpace: 'nowrap' }}>{fmtDay(deal.closeDate).replace(/, \d{4}$/, '')}</span>}
       </div>
-      {open && <div style={{ marginTop: 8 }}><NextStep task={nextTask} compact /></div>}
-      {deal.ownerName && <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 6 }}>{deal.ownerName}</div>}
+      <div style={{ marginTop: 8, height: 30 }}>
+        {open ? <NextStep task={nextTask} compact /> : <span style={{ fontSize: 11, lineHeight: 1.35, color: NW.gray500, ...clamp(2) }}>{closedNote}</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: NW.gray400, marginTop: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{deal.ownerName || 'No owner'}</div>
     </div>
   );
 }
@@ -183,7 +194,7 @@ function DealsBoard({ deals, next, onOpen, onMove }: { deals: Deal[]; next: Map<
   }
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="nw-deal-board" style={{ display: 'grid', gridTemplateColumns: `repeat(${DEAL_STAGES.length}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
+      <div className="nw-deal-board" style={{ display: 'grid', gridTemplateColumns: `repeat(${DEAL_STAGES.length}, minmax(0, 1fr))`, gap: 10, alignItems: 'stretch' }}>
         {DEAL_STAGES.map((s) => <StageColumn key={s} stage={s} deals={deals.filter((d) => d.stage === s)} next={next} onOpen={onOpen} />)}
       </div>
     </DndContext>

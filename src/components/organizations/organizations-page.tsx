@@ -676,6 +676,29 @@ export default function OrganizationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Look up, once, any company that has never been looked up on the web (e.g.
+  // ones created before the lookup existed), so their profile fills itself in.
+  // One at a time to stay inside the free plan's 10-a-minute limit; skips our
+  // own internal org. The server never re-charges a company it already tried.
+  const backfilled = useRef(false);
+  useEffect(() => {
+    if (backfilled.current || orgs.length === 0) return;
+    backfilled.current = true;
+    const todo = orgs.filter((o) => !o.lastLookup && !o.internal);
+    if (!todo.length) return;
+    (async () => {
+      let filled = 0;
+      for (const o of todo) filled += await autoFillFromWeb(o.id);
+      if (filled) {
+        showToast(`Filled ${filled} company detail${filled === 1 ? '' : 's'} from the web`, 'success');
+        const fresh = await load();
+        // If a company is open, show its new details right away.
+        setSelected((cur) => (cur ? fresh?.find((o) => o.id === cur.id) ?? cur : cur));
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgs]);
+
   // URL sync: read ?id= on mount to support direct linking
   useEffect(() => {
     if (orgs.length === 0) return;
@@ -689,7 +712,7 @@ export default function OrganizationsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgs]);
 
-  async function load() {
+  async function load(): Promise<Organization[] | undefined> {
     setLoading(true);
     try {
       const [orgSnap, openingsRes, pipelinesRes, placementsRes] = await Promise.allSettled([
@@ -734,6 +757,7 @@ export default function OrganizationsPage() {
         });
       }
       setCounts(map);
+      return loadedOrgs;
     } catch {
       showToast('Failed to load organizations', 'error');
     } finally {

@@ -176,9 +176,20 @@ export interface Organization {
   fundingStage?: string;                  // e.g. "Series A"
   region?: string;                        // HQ state / region, e.g. "Texas"
   founded?: number;                       // year founded
+  description?: string;                   // what the company does (from the web lookup)
+  headline?: string;                      // one-line tagline
+  companyType?: string;                   // Private, Public, Nonprofit…
+  tags?: string[];                        // specialties / keywords
+  ticker?: string;                        // stock ticker when public
+  totalFunding?: number;                  // USD raised to date
+  lastFundingDate?: string;               // YYYY-MM-DD
+  fundingRounds?: number;
+  twitter?: string;
+  facebook?: string;
+  pdlId?: string;                         // People Data Labs company id
   enrichedAt?: string;                    // ISO time fields were last saved from "Fill from web"
   enrichedFields?: string[];              // which profile fields came from the web lookup
-  lastLookup?: { at: string; result: 'found' | 'not_found' }; // most recent lookup and what it returned
+  lastLookup?: { at: string; result: 'found' | 'not_found'; website?: string; by?: 'website' | 'name' }; // most recent lookup
   crmSource?: CrmSource;                  // how the company reached Atlas
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

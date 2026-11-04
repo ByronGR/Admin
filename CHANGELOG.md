@@ -10,6 +10,8 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 ### Added
 - **Fill from web** on the Company profile card: People Data Labs lookup by website (employees, size, industry, HQ, LinkedIn, funding stage, founded). Shows found vs saved; tick what to keep.
 - Automatic lookup when a company is created with a website, or its website is added/changed; fills empty fields only, tags them "web", and records the last lookup on the card.
+- Companies never looked up are looked up automatically when the Organizations page opens; no website → lookup by name + country (confident matches only).
+- More details: description, headline, company type/ticker, total raised, rounds, last funding date, X/Twitter, Facebook, tags.
 
 ### Technical
 - Staff-only `/api/company-lookup`; needs `PDL_API_KEY` in Vercel.

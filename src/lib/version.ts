@@ -30,6 +30,8 @@ export const CHANGELOG: ChangelogRelease[] = [
         items: [
           'Fill from web on the Company profile card. It looks the company up by its website on People Data Labs and shows employees, size range, industry, HQ, LinkedIn, funding stage and founded year next to what is saved; tick what to keep. Gaps are pre-ticked, anything staff typed is left alone. Free plan: 100 lookups a month, and a lookup only counts when a company is found.',
           'Company details now fill in automatically: creating a company with a website, or adding or changing a company\u2019s website, looks it up and fills only the empty fields. Fields that came from the web carry a small \u201cweb\u201d tag, and the card says when it was last looked up and what came back.',
+          'Companies that have never been looked up (including ones created before this release) are looked up automatically the first time the Organizations page opens. With no website, the lookup uses the company name and country and only accepts a confident match.',
+          'More company details from the lookup: description and headline, company type and stock ticker, total funding raised, number of rounds and last funding date, X/Twitter and Facebook links, and tags.',
         ],
       },
       {

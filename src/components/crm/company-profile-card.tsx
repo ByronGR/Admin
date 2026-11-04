@@ -28,6 +28,9 @@ const SOURCE_LABELS: Record<CrmSource, string> = {
   hubspot: 'Imported from HubSpot',
 };
 
+const fmtShortUsd = (n: number) =>
+  n >= 1e9 ? `$${(n / 1e9).toFixed(1).replace(/\.0$/, '')}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : `$${Math.round(n / 1e3)}K`;
+
 function sizeLabel(org: Organization): string {
   if (org.employeeCount) return `${org.employeeCount.toLocaleString('en-US')} employees`;
   if (org.sizeRange) return `${org.sizeRange} employees`;
@@ -45,10 +48,19 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
     ['Headquarters', [org.city, org.region, org.country].filter(Boolean).join(', ') || '—', fromWeb('city', 'region', 'country')],
     ['Time zone', org.timeZone || '—'],
     ['Industry', org.industry || '—', fromWeb('industry')],
-    ['Funding stage', org.fundingStage || '—', fromWeb('fundingStage')],
+    ['Company type', org.ticker ? `${org.companyType || 'Public'} · ${org.ticker}` : org.companyType || '—', fromWeb('companyType', 'ticker')],
     ['Founded', org.founded ? String(org.founded) : '—', fromWeb('founded')],
-    ['Website', org.website ? <a href={org.website.startsWith('http') ? org.website : `https://${org.website}`} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>{org.website.replace(/^https?:\/\//, '')}</a> : '—'],
-    ['LinkedIn', org.linkedin ? <a href={org.linkedin} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>Open profile</a> : '—', fromWeb('linkedin')],
+    ['Funding stage', org.fundingStage || '—', fromWeb('fundingStage')],
+    ['Total raised', org.totalFunding ? `${fmtShortUsd(org.totalFunding)}${org.fundingRounds ? ` · ${org.fundingRounds} round${org.fundingRounds === 1 ? '' : 's'}` : ''}` : '—', fromWeb('totalFunding', 'fundingRounds')],
+    ['Last funding', org.lastFundingDate ? new Date(org.lastFundingDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—', fromWeb('lastFundingDate')],
+    ['Website', org.website ? <a href={org.website.startsWith('http') ? org.website : `https://${org.website}`} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>{org.website.replace(/^https?:\/\//, '')}</a> : '—', fromWeb('website')],
+    ['Social', (org.linkedin || org.twitter || org.facebook) ? (
+      <span style={{ display: 'inline-flex', gap: 10 }}>
+        {org.linkedin && <a href={org.linkedin} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>LinkedIn</a>}
+        {org.twitter && <a href={org.twitter} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>X / Twitter</a>}
+        {org.facebook && <a href={org.facebook} target="_blank" rel="noreferrer" style={{ color: NW.teal600 }}>Facebook</a>}
+      </span>
+    ) : '—', fromWeb('linkedin', 'twitter', 'facebook')],
   ];
   const lookupLine = org.lastLookup
     ? `Web lookup ${new Date(org.lastLookup.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: ${org.lastLookup.result === 'found' ? (org.enrichedFields?.length ? `filled ${org.enrichedFields.length} field${org.enrichedFields.length === 1 ? '' : 's'}` : 'found, nothing saved') : 'no match found'}`
@@ -63,13 +75,19 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
         action={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {stage && <Pill fg={STAGE_STYLE[stage].fg} bg={STAGE_STYLE[stage].bg}>{COMPANY_STAGE_LABELS[stage]}</Pill>}
-            <span title={org.website ? 'Look this company up by its website' : 'Add a website first'}>
-              <Button variant="secondary" size="sm" icon="globe" disabled={!org.website} onClick={() => setLookingUp(true)}>Fill from web</Button>
+            <span title={org.website ? 'Look this company up by its website' : 'Look this company up by its name'}>
+              <Button variant="secondary" size="sm" icon="globe" onClick={() => setLookingUp(true)}>Fill from web</Button>
             </span>
             <Button variant="secondary" size="sm" icon="pencil" onClick={() => setEditing(true)}>Edit</Button>
           </div>
         }
       />
+      {(org.headline || org.description) && (
+        <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${NW.gray100}` }}>
+          {org.headline && <div style={{ fontSize: 14, fontWeight: 600, color: NW.black }}>{org.headline}</div>}
+          {org.description && <div style={{ fontSize: 13, color: NW.gray600, marginTop: org.headline ? 4 : 0, lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{org.description}</div>}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '14px 22px' }}>
         {rows.map(([k, v, w]) => (
           <div key={k} style={{ minWidth: 0 }}>
@@ -81,6 +99,11 @@ export function CompanyProfileCard({ org, onUpdated }: { org: Organization; onUp
           </div>
         ))}
       </div>
+      {org.tags && org.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
+          {org.tags.map((t) => <span key={t} style={{ fontSize: 11.5, color: NW.gray600, background: NW.gray50, border: `1px solid ${NW.gray100}`, borderRadius: 999, padding: '3px 9px' }}>{t}</span>)}
+        </div>
+      )}
       {editing && <ProfileModal org={org} onClose={() => setEditing(false)} onSaved={(o) => { setEditing(false); onUpdated(o); }} />}
       {lookingUp && <LookupModal org={org} onClose={() => setLookingUp(false)} onSaved={(o) => { setLookingUp(false); onUpdated(o); }} onLooked={onUpdated} />}
     </Card>
@@ -174,10 +197,15 @@ function ProfileModal({ org, onClose, onSaved }: { org: Organization; onClose: (
 
 // ── Fill from web (People Data Labs) ──────────────────────────────────────────
 type Found = {
-  name?: string; employeeCount?: number; sizeRange?: string; industry?: string; city?: string; region?: string;
-  country?: string; linkedin?: string; founded?: number; fundingStage?: string;
+  name?: string; website?: string; description?: string; headline?: string; employeeCount?: number; sizeRange?: string;
+  industry?: string; city?: string; region?: string; country?: string; companyType?: string; founded?: number;
+  fundingStage?: string; totalFunding?: number; lastFundingDate?: string; fundingRounds?: number;
+  linkedin?: string; twitter?: string; facebook?: string; tags?: string[]; ticker?: string;
 };
 const LOOKUP_FIELDS: { key: keyof Found & keyof Organization; label: string }[] = [
+  { key: 'website', label: 'Website' },
+  { key: 'headline', label: 'Headline' },
+  { key: 'description', label: 'Description' },
   { key: 'employeeCount', label: 'Employees' },
   { key: 'sizeRange', label: 'Size range' },
   { key: 'industry', label: 'Industry' },
@@ -185,8 +213,16 @@ const LOOKUP_FIELDS: { key: keyof Found & keyof Organization; label: string }[] 
   { key: 'region', label: 'HQ state / region' },
   { key: 'country', label: 'HQ country' },
   { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'companyType', label: 'Company type' },
+  { key: 'ticker', label: 'Ticker' },
   { key: 'fundingStage', label: 'Funding stage' },
+  { key: 'totalFunding', label: 'Total raised (USD)' },
+  { key: 'fundingRounds', label: 'Funding rounds' },
+  { key: 'lastFundingDate', label: 'Last funding' },
   { key: 'founded', label: 'Founded' },
+  { key: 'twitter', label: 'X / Twitter' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'tags', label: 'Tags' },
 ];
 const REASONS: Record<string, string> = {
   not_configured: 'The company lookup isn\u2019t switched on yet: the People Data Labs key hasn\u2019t been added to Vercel.',
@@ -215,7 +251,10 @@ function LookupModal({ org, onClose, onSaved, onLooked }: { org: Organization; o
     (async () => {
       try {
         const token = await auth.currentUser?.getIdToken();
-        const r = await fetch(`/api/company-lookup?website=${encodeURIComponent(org.website || '')}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const q = org.website
+          ? `website=${encodeURIComponent(org.website)}`
+          : `name=${encodeURIComponent(org.name)}&country=${encodeURIComponent(org.country || '')}`;
+        const r = await fetch(`/api/company-lookup?${q}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         const j = await r.json().catch(() => ({ ok: false, reason: 'error' }));
         if (!j.ok) {
           setMessage(REASONS[j.reason] || 'The lookup failed. Try again in a minute.');

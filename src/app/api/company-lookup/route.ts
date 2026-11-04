@@ -3,7 +3,8 @@ import { adminAuth } from '@/lib/firebase-admin';
 import { lookupCompany, fillOrgFromWeb } from '@/lib/company-lookup';
 
 // ─── /api/company-lookup ──────────────────────────────────────────────────────
-// GET  ?website=<domain>  → what People Data Labs knows (the "Fill from web"
+// GET  ?website=<domain>  → what People Data Labs knows (or ?name=&country= when
+//                           there's no website) (the "Fill from web"
 //                           window shows it next to what's saved; nothing written).
 // POST { orgId, force? }  → look the organization up and fill ONLY its empty
 //                           fields. Called automatically when a company is
@@ -29,7 +30,8 @@ async function requireStaff(req: Request): Promise<boolean> {
 
 export async function GET(req: Request) {
   if (!(await requireStaff(req))) return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  const res = await lookupCompany(new URL(req.url).searchParams.get('website') || '');
+  const q = new URL(req.url).searchParams;
+  const res = await lookupCompany({ website: q.get('website') || '', name: q.get('name') || '', country: q.get('country') || '' });
   return NextResponse.json(res);
 }
 

@@ -42,9 +42,8 @@ export function actorEmail(): string {
 export const DEAL_STAGE_STYLE: Record<DealStage, { fg: string; bg: string }> = {
   Prospect: { fg: '#555555', bg: '#F5F4F0' },
   'Meeting booked': { fg: '#1D4ED8', bg: '#EFF6FF' },
-  Proposal: { fg: '#7C3AED', bg: '#F7F2FC' },
   'Contract sent': { fg: '#A16207', bg: '#FEFCE8' },
-  Client: { fg: '#0E6B58', bg: '#E8F8F5' },
+  Won: { fg: '#0E6B58', bg: '#E8F8F5' },
   Lost: { fg: '#C0392B', bg: '#FEF0F0' },
 };
 
@@ -95,3 +94,10 @@ export function weightedMrr(deals: Deal[]): number {
 }
 
 export const contactHref = (id: string) => `/contacts/${encodeURIComponent(id)}`;
+
+// Deals saved before 1.33 used "Proposal" and "Client"; read them as the new stages.
+export function normalizeDealStage(stage: string): DealStage {
+  if (stage === 'Client') return 'Won';
+  if (stage === 'Proposal') return 'Meeting booked';
+  return stage as DealStage;
+}

@@ -2,9 +2,9 @@
 
 // ============================================================
 // Deals — every deal in one place (board or list), plus the per-company Deals
-// tab. Stages: Prospect → Meeting booked → Proposal → Contract sent → Client / Lost.
+// tab. Stages: Prospect → Meeting booked → Contract sent → Won / Lost.
 // Clicking a deal opens its record page (/deals/[id]). Every stage move is
-// kept in the deal's stage history. Moving a deal to Client opens its
+// kept in the deal's stage history. Winning a deal opens its
 // Engagement and marks the company a client. Firestore: deals.
 // ============================================================
 
@@ -22,7 +22,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Modal } from '@/components/ui/modal';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { useToast } from '@/components/ui/toast';
-import { actorEmail, actorName, fmtUsd, fmtDay, dueInfo, dealTracking, weightedMrr, DEAL_STAGE_STYLE } from '@/lib/crm';
+import { actorEmail, actorName, fmtUsd, fmtDay, dueInfo, dealTracking, weightedMrr, normalizeDealStage, DEAL_STAGE_STYLE } from '@/lib/crm';
 import {
   DEAL_STAGES, DEAL_STAGE_PROBABILITY, CRM_PRIORITY_LABELS,
   type Contact, type CrmActivity, type CrmPriority, type CrmTask, type Deal, type DealStage, type Organization,
@@ -30,7 +30,7 @@ import {
 import { crmField, Field, DealStagePill, Empty, Stat, saveErrorMessage } from './ui';
 import { useStaff } from './use-staff';
 
-export const OPEN_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Proposal', 'Contract sent'];
+export const OPEN_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Contract sent'];
 export const dealHref = (id: string) => `/deals/${encodeURIComponent(id)}`;
 
 export function useDeals(orgId?: string) {
@@ -40,7 +40,7 @@ export function useDeals(orgId?: string) {
     try {
       const q = orgId ? query(collection(db, 'deals'), where('orgId', '==', orgId)) : collection(db, 'deals');
       const snap = await getDocs(q);
-      const list = snap.docs.map((d) => ({ ...d.data(), id: d.id }) as Deal);
+      const list = snap.docs.map((d) => { const x = { ...d.data(), id: d.id } as Deal; return { ...x, stage: normalizeDealStage(x.stage) }; });
       list.sort((a, b) => (a.closeDate || '9999').localeCompare(b.closeDate || '9999'));
       setDeals(list);
     } catch (e) {
@@ -92,7 +92,7 @@ export async function setStage(deal: Deal, stage: DealStage): Promise<Partial<De
     stage, stageChangedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     stageHistory: arrayUnion({ stage, at: new Date().toISOString(), by: actorName() }),
   };
-  if (stage === 'Client') patch.engagementId = await onWon({ ...deal, stage });
+  if (stage === 'Won') patch.engagementId = await onWon({ ...deal, stage });
   await updateDoc(doc(db, 'deals', deal.id), patch);
   return { stage, engagementId: patch.engagementId as string | undefined };
 }
@@ -102,7 +102,7 @@ function NextStep({ task, compact }: { task?: CrmTask; compact?: boolean }) {
   if (!task) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: compact ? 11 : 12, fontWeight: 600, color: '#C0392B' }}><Icon name="alert-circle" size={12} color="#C0392B" />No next step</span>;
   const due = dueInfo(task.dueDate, task.dueTime);
   return (
-    <span style={{ fontSize: compact ? 11 : 12, color: due.late ? '#C0392B' : NW.gray600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+    <span style={{ fontSize: compact ? 11 : 12, lineHeight: 1.35, color: due.late ? '#C0392B' : NW.gray600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }}>
       {due.late ? 'Overdue: ' : ''}{task.title} · {due.text}
     </span>
   );
@@ -115,7 +115,7 @@ function DealCard({ deal, nextTask, onOpen, dragging }: { deal: Deal; nextTask?:
     <div
       onClick={onOpen}
       style={{
-        background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: 12, cursor: 'grab',
+        background: NW.white, border: `1px solid ${NW.gray100}`, borderRadius: 12, padding: 12, cursor: 'grab', minWidth: 0, overflow: 'hidden',
         boxShadow: dragging ? '0 10px 24px rgba(0,0,0,0.12)' : '0 1px 2px rgba(0,0,0,0.03)',
       }}
     >
@@ -137,7 +137,7 @@ function DraggableDeal({ deal, nextTask, onOpen }: { deal: Deal; nextTask?: CrmT
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
   const style: CSSProperties = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    zIndex: isDragging ? 10 : undefined, position: 'relative', opacity: isDragging ? 0.9 : 1,
+    zIndex: isDragging ? 10 : undefined, position: 'relative', opacity: isDragging ? 0.9 : 1, minWidth: 0,
   };
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
@@ -154,7 +154,7 @@ function StageColumn({ stage, deals, next, onOpen }: { stage: DealStage; deals: 
     <div
       ref={setNodeRef}
       style={{
-        minWidth: 240, flex: '1 0 240px', background: isOver ? NW.teal50 : NW.gray50, borderRadius: 14,
+        minWidth: 0, background: isOver ? NW.teal50 : NW.gray50, borderRadius: 14,
         padding: 10, border: `1px solid ${isOver ? NW.teal500 : 'transparent'}`, transition: 'background 120ms',
       }}
     >
@@ -163,9 +163,9 @@ function StageColumn({ stage, deals, next, onOpen }: { stage: DealStage; deals: 
         <span style={{ fontSize: 13, fontWeight: 600, color: NW.black }}>{stage}</span>
         <span style={{ fontSize: 12, color: NW.gray500 }}>{deals.length}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px 10px', fontSize: 11.5, color: NW.gray500 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 4px 10px', fontSize: 11.5, color: NW.gray500, flexWrap: 'wrap' }}>
         <span>{fmtUsd(mrr)}/mo</span>
-        <span>· {Math.round(DEAL_STAGE_PROBABILITY[stage] * 100)}% likely</span>
+        <span>· {Math.round(DEAL_STAGE_PROBABILITY[stage] * 100)}%</span>
       </div>
       <div style={{ display: 'grid', gap: 8, minHeight: 60 }}>
         {deals.map((d) => <DraggableDeal key={d.id} deal={d} nextTask={next.get(d.id)} onOpen={() => onOpen(d)} />)}
@@ -183,7 +183,7 @@ function DealsBoard({ deals, next, onOpen, onMove }: { deals: Deal[]; next: Map<
   }
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'flex-start' }}>
+      <div className="nw-deal-board" style={{ display: 'grid', gridTemplateColumns: `repeat(${DEAL_STAGES.length}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
         {DEAL_STAGES.map((s) => <StageColumn key={s} stage={s} deals={deals.filter((d) => d.stage === s)} next={next} onOpen={onOpen} />)}
       </div>
     </DndContext>
@@ -289,14 +289,14 @@ export function DealModal({
         await updateDoc(doc(db, 'deals', deal.id), { ...data, updatedAt: serverTimestamp() });
         if (f.stage !== deal.stage) await setStage({ ...deal, ...data } as Deal, f.stage);
       } else {
-        const won = f.stage === 'Client';
+        const won = f.stage === 'Won';
         const ref = await addDoc(collection(db, 'deals'), {
           ...data, stage: won ? 'Prospect' : f.stage, source: 'manual', createdAt: serverTimestamp(), createdBy: actorName(),
           stageChangedAt: serverTimestamp(),
           stageHistory: [{ stage: won ? 'Prospect' : f.stage, at: new Date().toISOString(), by: actorName() }],
         });
         id = ref.id;
-        if (won) await setStage({ ...data, id: ref.id, stage: 'Prospect' } as Deal, 'Client');
+        if (won) await setStage({ ...data, id: ref.id, stage: 'Prospect' } as Deal, 'Won');
         if (f.taskTitle.trim()) {
           await addDoc(collection(db, 'crmTasks'), {
             orgId: org.id, orgName: org.name, title: f.taskTitle.trim(), type: 'todo', priority: 'none',
@@ -307,7 +307,7 @@ export function DealModal({
           });
         }
       }
-      if (f.stage === 'Client' && deal?.stage !== 'Client') showToast('Deal won: its Engagement is open on the company page');
+      if (f.stage === 'Won' && deal?.stage !== 'Won') showToast('Deal won: its Engagement is open on the company page');
       onDone(id);
     } catch (e) {
       showToast(saveErrorMessage(e), 'error');
@@ -396,10 +396,10 @@ export function DealModal({
           </>
         )}
       </div>
-      {f.stage === 'Client' && !deal?.engagementId && (
+      {f.stage === 'Won' && !deal?.engagementId && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, color: NW.teal700, background: NW.teal50, borderRadius: 10, padding: '9px 12px', marginTop: 14 }}>
           <Icon name="info" size={14} color={NW.teal700} />
-          Saving as Client opens an Engagement for this deal and marks the company a client.
+          Saving as Won opens an Engagement for this deal and marks the company a client.
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
@@ -446,7 +446,7 @@ export default function DealsPage() {
   const open = shown.filter((d) => OPEN_STAGES.includes(d.stage));
   const openMrr = open.reduce((n, d) => n + (Number(d.mrr) || 0), 0);
   const stalled = open.filter((d) => !tracking.get(d.id)?.nextTask).length;
-  const won = shown.filter((d) => d.stage === 'Client');
+  const won = shown.filter((d) => d.stage === 'Won');
   const decided = won.length + shown.filter((d) => d.stage === 'Lost').length;
   const openDeal = (d: Deal) => router.push(dealHref(d.id));
 
@@ -455,7 +455,7 @@ export default function DealsPage() {
     setDeals((ds) => ds.map((d) => (d.id === deal.id ? { ...d, stage } : d)));
     try {
       await setStage(deal, stage);
-      if (stage === 'Client') showToast(`${deal.title} won: its Engagement is open`);
+      if (stage === 'Won') showToast(`${deal.title} won: its Engagement is open`);
       reload();
     } catch (e) {
       setDeals(prev);

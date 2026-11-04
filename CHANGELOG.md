@@ -15,6 +15,10 @@ Format: `vMAJOR.MINOR.PATCH` — MAJOR = full rebuild / new product; MINOR = new
 - **Create deal** picks people, deal type, priority and an optional first task.
 - **Deal tracking**: stage history, next step on board and list, "no next step" warnings, weighted pipeline MRR.
 
+### Fixed
+- Deal stages are now Prospect, Meeting booked, Contract sent, Won, Lost (Proposal reads as Meeting booked; Client as Won).
+- The Deals board fits all five stages with no sideways scrolling; long next steps wrap inside cards.
+
 ---
 
 ## [1.32.0] — 2026-11-03

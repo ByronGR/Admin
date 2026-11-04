@@ -1015,14 +1015,14 @@ export const COMPANY_STAGE_LABELS: Record<CompanyStage, string> = {
 // Microsoft Bookings, typed in by staff, or imported from HubSpot.
 export type CrmSource = 'radar' | 'bookings' | 'manual' | 'hubspot';
 
-export type DealStage = 'Prospect' | 'Meeting booked' | 'Proposal' | 'Contract sent' | 'Client' | 'Lost';
-export const DEAL_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Proposal', 'Contract sent', 'Client', 'Lost'];
+export type DealStage = 'Prospect' | 'Meeting booked' | 'Contract sent' | 'Won' | 'Lost';
+export const DEAL_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Contract sent', 'Won', 'Lost'];
 
 export interface DealStageChange { stage: DealStage; at: string; by?: string }
 
 // Chance each stage closes — drives the weighted pipeline, like HubSpot's deal probability.
 export const DEAL_STAGE_PROBABILITY: Record<DealStage, number> = {
-  Prospect: 0.1, 'Meeting booked': 0.2, Proposal: 0.4, 'Contract sent': 0.7, Client: 1, Lost: 0,
+  Prospect: 0.1, 'Meeting booked': 0.3, 'Contract sent': 0.7, Won: 1, Lost: 0,
 };
 
 export interface Deal {

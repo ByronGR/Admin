@@ -13,7 +13,7 @@ import { fmtUsd, revenueFrom } from '@/lib/crm';
 import type { Deal, ServiceOrder } from '@/lib/types';
 import { Stat } from './ui';
 
-const OPEN = new Set(['Prospect', 'Meeting booked', 'Proposal', 'Contract sent']);
+const OPEN = new Set(['Prospect', 'Meeting booked', 'Proposal', 'Contract sent']); // Proposal: pre-1.33 deals
 
 export function RevenueSummary() {
   const router = useRouter();

@@ -254,6 +254,12 @@ body {
   max-width: 100%;
 }
 
+@media (max-width: 900px) {
+  .nw-deal-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
 @media (max-width: 1180px) {
   .nw-grid-3col {
     grid-template-columns: 280px minmax(0, 1fr) !important;
@@ -284,6 +290,10 @@ body {
   }
   /* Two-column content rows (e.g. dashboard) stack */
   .nw-grid-2col {
+    grid-template-columns: 1fr !important;
+  }
+  /* Deals board: one column per row on phones */
+  .nw-deal-board {
     grid-template-columns: 1fr !important;
   }
   /* Three-column record pages (deal, contact) stack */

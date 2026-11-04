@@ -14,7 +14,7 @@ import { NW, Icon, Button } from '@/components/nw/primitives';
 import { Card, CardHead, BackBar } from '@/components/nw/shell-ui';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useToast } from '@/components/ui/toast';
-import { fmtUsd, fmtDay, fmtDayTime, dealTracking } from '@/lib/crm';
+import { fmtUsd, fmtDay, fmtDayTime, dealTracking, normalizeDealStage } from '@/lib/crm';
 import {
   DEAL_STAGES, DEAL_STAGE_PROBABILITY, CRM_PRIORITY_LABELS, COMPANY_STAGE_LABELS,
   type Deal, type DealStage, type Organization,
@@ -52,7 +52,8 @@ export default function DealRecordPage() {
     try {
       const snap = await getDoc(doc(db, 'deals', id));
       if (!snap.exists()) { setMissing(true); return; }
-      const d = { ...snap.data(), id: snap.id } as Deal;
+      const raw = { ...snap.data(), id: snap.id } as Deal;
+      const d = { ...raw, stage: normalizeDealStage(raw.stage), stageHistory: raw.stageHistory?.map((h) => ({ ...h, stage: normalizeDealStage(h.stage) })) };
       setDeal(d);
       const o = await getDoc(doc(db, 'organizations', d.orgId));
       setOrg(o.exists() ? ({ ...o.data(), id: o.id } as Organization) : null);
@@ -68,7 +69,7 @@ export default function DealRecordPage() {
     setMoving(true);
     try {
       await setStage(deal, stage);
-      if (stage === 'Client') showToast('Deal won: its Engagement is open on the company page');
+      if (stage === 'Won') showToast('Deal won: its Engagement is open on the company page');
       await load();
     } catch (e) {
       showToast(saveErrorMessage(e), 'error');
@@ -142,7 +143,7 @@ export default function DealRecordPage() {
             <Prop label="Chance of closing">{Math.round(DEAL_STAGE_PROBABILITY[deal.stage] * 100)}%</Prop>
             <Prop label="Last activity">{tr.lastActivityAt ? fmtDayTime(tr.lastActivityAt) : 'Nothing logged yet'}</Prop>
             <Prop label="Next step">
-              {tr.nextTask ? tr.nextTask.title : <span style={{ color: deal.stage === 'Client' || deal.stage === 'Lost' ? NW.gray500 : '#C0392B', fontWeight: 600 }}>None set</span>}
+              {tr.nextTask ? tr.nextTask.title : <span style={{ color: deal.stage === 'Won' || deal.stage === 'Lost' ? NW.gray500 : '#C0392B', fontWeight: 600 }}>None set</span>}
             </Prop>
             {deal.stage === 'Lost' && <Prop label="Lost reason">{deal.lostReason || '—'}</Prop>}
             <Prop label="Created">{deal.createdBy ? `By ${deal.createdBy}` : '—'}</Prop>
@@ -195,7 +196,7 @@ export default function DealRecordPage() {
             {deal.engagementId ? (
               <Button variant="secondary" size="sm" iconRight="arrow-up-right" onClick={() => router.push(orgHref(deal.orgId, 'engagements'))}>Open contracts &amp; payments</Button>
             ) : (
-              <div style={{ fontSize: 12.5, color: NW.gray500 }}>Opens automatically when the deal moves to Client.</div>
+              <div style={{ fontSize: 12.5, color: NW.gray500 }}>Opens automatically when the deal is won.</div>
             )}
           </Card>
         </div>

@@ -36,6 +36,13 @@ export const CHANGELOG: ChangelogRelease[] = [
           'Deal tracking: every stage move is recorded with who and when; the board and list show each deal\u2019s next step, flag open deals with no next step, and the Deals page shows weighted pipeline MRR.',
         ],
       },
+      {
+        title: 'Fixed',
+        items: [
+          'Deal stages are now Prospect, Meeting booked, Contract sent, Won and Lost. Deals saved as Proposal show as Meeting booked, and Client shows as Won.',
+          'The Deals board fits all five stages on screen with no sideways scrolling, and long next steps wrap inside the card instead of spilling out.',
+        ],
+      },
     ],
   },
   {

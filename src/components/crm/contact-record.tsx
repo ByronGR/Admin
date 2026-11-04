@@ -13,7 +13,7 @@ import { NW, Button, Avatar } from '@/components/nw/primitives';
 import { Card, CardHead, BackBar } from '@/components/nw/shell-ui';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useToast } from '@/components/ui/toast';
-import { fmtUsd } from '@/lib/crm';
+import { fmtUsd, normalizeDealStage } from '@/lib/crm';
 import { LIFECYCLE_LABELS, type Contact, type Deal, type LifecycleStage } from '@/lib/types';
 import { Timeline } from './timeline';
 import { ContactModal, initialsOf } from './contacts-tab';
@@ -48,7 +48,7 @@ export default function ContactRecordPage() {
       if (!snap.exists()) { setMissing(true); return; }
       setContact({ ...snap.data(), id: snap.id } as Contact);
       const d = await getDocs(query(collection(db, 'deals'), where('contactIds', 'array-contains', id)));
-      setDeals(d.docs.map((x) => ({ ...x.data(), id: x.id }) as Deal));
+      setDeals(d.docs.map((x) => { const y = { ...x.data(), id: x.id } as Deal; return { ...y, stage: normalizeDealStage(y.stage) }; }));
     } catch (e) {
       showToast(saveErrorMessage(e), 'error');
     }

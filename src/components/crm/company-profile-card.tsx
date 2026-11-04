@@ -7,7 +7,8 @@
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { db, auth, doc, updateDoc, serverTimestamp } from '@/lib/firebase';
+import { db, auth, doc, getDoc, updateDoc, serverTimestamp } from '@/lib/firebase';
+import { autoFillFromWeb } from '@/lib/crm';
 import { NW, Button } from '@/components/nw/primitives';
 import { Card, CardHead } from '@/components/nw/shell-ui';
 import { Modal } from '@/components/ui/modal';
@@ -127,6 +128,15 @@ function ProfileModal({ org, onClose, onSaved }: { org: Organization; onClose: (
       for (const [k, v] of Object.entries(patch)) next[k] = v ?? undefined;
       onSaved(next as unknown as Organization);
       showToast('Company profile saved');
+      // A new or changed website: fill the remaining gaps from the web.
+      if (patch.website && patch.website !== (org.website || null)) {
+        autoFillFromWeb(org.id).then(async (n) => {
+          if (!n) return;
+          const snap = await getDoc(doc(db, 'organizations', org.id));
+          if (snap.exists()) onSaved({ ...snap.data(), id: snap.id } as Organization);
+          showToast(`Filled ${n} company detail${n === 1 ? '' : 's'} from the web`);
+        });
+      }
     } catch (e) {
       showToast(saveErrorMessage(e), 'error');
     } finally {

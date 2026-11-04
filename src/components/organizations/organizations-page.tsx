@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { fmtDate, initials, genSafeId, fmtCurrency } from '@/lib/utils';
+import { autoFillFromWeb } from '@/lib/crm';
 import type {
   Organization, Pipeline, Placement, Opening, OrgPackage, OrgContractType, OrgUser,
   AccountHealthGrade, HealthHistoryEntry, OrgTier, OrgPOC, EngagementType, ClientAccount,
@@ -783,6 +784,13 @@ export default function OrganizationsPage() {
       showToast('Organization created', 'success');
       await load();
 
+      // Fill size, HQ, industry etc. from the web automatically (empty fields only).
+      if (form.website?.trim()) {
+        autoFillFromWeb(docRef.id).then((n) => {
+          if (n) { showToast(`Filled ${n} company detail${n === 1 ? '' : 's'} from the web`, 'success'); load(); }
+        });
+      }
+
       // Send invite in background (after modal closed)
       if (form.inviteEmail.trim()) {
         const inviteEmail = form.inviteEmail.trim();
@@ -1437,6 +1445,16 @@ function OrgDetail({
     }
   }
 
+  // Look the company up on the web and pull the result into this page.
+  function fillFromWebInBackground() {
+    autoFillFromWeb(org.id).then(async (n) => {
+      if (!n) return;
+      const snap = await getDoc(doc(db, 'organizations', org.id));
+      if (snap.exists()) onUpdated({ ...snap.data(), id: snap.id } as Organization);
+      showToast(`Filled ${n} company detail${n === 1 ? '' : 's'} from the web`, 'success');
+    });
+  }
+
   // ── Save edits ─────────────────────────────────────────────────────────────
 
   async function saveEdits() {
@@ -1465,6 +1483,7 @@ function OrgDetail({
       showToast('Saved', 'success');
       setEditing(false);
       await onRefresh();
+      if (data.website && data.website !== (org.website || null)) fillFromWebInBackground();
     } catch {
       showToast('Failed to save', 'error');
     } finally {

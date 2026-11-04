@@ -101,3 +101,22 @@ export function normalizeDealStage(stage: string): DealStage {
   if (stage === 'Proposal') return 'Meeting booked';
   return stage as DealStage;
 }
+
+// Ask the server to look a company up on People Data Labs and fill only its
+// empty profile fields. Safe to fire and forget: it never overwrites what
+// staff typed, skips a website it already looked up, and costs nothing on a
+// miss. Resolves to how many fields were filled (0 on any problem).
+export async function autoFillFromWeb(orgId: string): Promise<number> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    const r = await fetch('/api/company-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ orgId }),
+    });
+    const j = await r.json().catch(() => null);
+    return j?.ok && Array.isArray(j.filled) ? j.filled.length : 0;
+  } catch {
+    return 0;
+  }
+}

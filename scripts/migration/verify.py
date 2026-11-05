@@ -86,6 +86,7 @@ PAIRS = [
     ("pipeline_messages",    "messages",               "n365"),
     ("pipelineRequests",     "requests",               "n365"),
     ("notifications",        "notifications",          "n365"),
+    ("deals",                "deals",                  "n365"),
 ]
 
 print(f"export : {EXPORT}\n")

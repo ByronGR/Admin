@@ -36,7 +36,7 @@ import {
   arrayUnion,
 } from '@/lib/firebase';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
-import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
+import { createDoc, loadCollection, openStoredFile, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader } from '@/components/nw/shell-ui';
@@ -2485,6 +2485,7 @@ function ApplicantProfile({ profile, note }: { profile: Candidate; note?: string
           </p>
           <a
             href={profile.cvUrl || profile.resumeUrl}
+            onClick={(e) => { e.preventDefault(); void openStoredFile(profile.cvUrl || profile.resumeUrl); }}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-600 text-[var(--green)] transition-colors hover:border-[var(--green)]"

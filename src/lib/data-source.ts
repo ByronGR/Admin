@@ -266,3 +266,60 @@ export async function loadDoc(collection: string, id: string): Promise<Row | nul
   const snap = await getDoc(doc(db, collection, id));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Row) : null;
 }
+
+// ── Stored files ───────────────────────────────────────────────────────────
+
+/**
+ * Open a stored file — a CV, a photograph — in a new tab.
+ *
+ * On Firebase the stored value is already a usable download URL. On Supabase
+ * the bucket is private, because these are CVs and photographs of real people
+ * and a public bucket would put every one of them behind a guessable URL. So
+ * each view is signed for the person asking, and the link expires.
+ *
+ * The tab is opened BEFORE the signing request, not after. A window.open() that
+ * happens once an await has resolved is no longer attributable to the click
+ * that caused it, and every browser blocks it as a popup.
+ */
+export async function openStoredFile(ref: string | null | undefined): Promise<void> {
+  if (!ref) return;
+
+  if (!readsFromSupabase()) {
+    window.open(ref, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const tab = window.open('', '_blank', 'noopener,noreferrer');
+  try {
+    const url = await signedFileUrl(ref);
+    if (!url) throw new Error('No link');
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
+
+/**
+ * A short-lived link to a stored file, or the reference unchanged on Firebase.
+ *
+ * Accepts either a storage path or an original Firebase download URL: paths
+ * were preserved exactly on the way across, so the two differ only by host and
+ * nothing has to be rewritten in the database for a stored link to resolve.
+ */
+export async function signedFileUrl(ref: string | null | undefined): Promise<string | null> {
+  if (!ref) return null;
+  if (!readsFromSupabase()) return ref;
+
+  const user = await currentUser();
+  if (!user) return null;
+  const token = await user.getIdToken();
+
+  const res = await fetch(`/api/ds/file?url=${encodeURIComponent(ref)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { url?: string };
+  return body.url ?? null;
+}

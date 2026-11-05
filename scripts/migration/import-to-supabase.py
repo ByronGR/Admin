@@ -400,6 +400,35 @@ def do_engagement_documents(orgs, engagements):
     return "engagement_documents", "n365", rows
 
 
+def do_deals(orgs):
+    """
+    One real deal, created 2026-11-04. Described as unused, it turned out to be
+    newly used — so it moves rather than being left behind in a database we are
+    migrating off.
+    """
+    rows = []
+    for d in docs("deals"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(d.get("orgId")),
+            "legacy_org_id": d.get("orgId"),
+            "title": d.get("title") or "(untitled)",
+            "org_name": d.get("orgName"),
+            "stage": d.get("stage"),
+            "value": positive(d.get("value")),
+            "currency": d.get("currency"),
+            "priority": d.get("priority"),
+            "source": d.get("source"),
+            "lost_reason": d.get("lostReason"),
+            "stage_changed_at": ts(d.get("stageChangedAt")),
+            "owner_email": d.get("ownerEmail") or d.get("owner"),
+            "created_at": ts(d.get("createdAt")),
+            "updated_at": ts(d.get("updatedAt")) or ts(d.get("createdAt")),
+            "raw": d,
+        })
+    return "deals", "n365", rows
+
+
 def do_org_documents(orgs):
     rows = []
     for d in docs("organizationDocuments"):
@@ -641,7 +670,8 @@ def main():
                   lambda: do_kickoff(orgs, openings),
                   lambda: do_engagements(orgs),
                   lambda: do_engagement_documents(orgs, fetch_map("engagements", "n365") if APPLY else {}),
-                  lambda: do_org_documents(orgs)):
+                  lambda: do_org_documents(orgs),
+                  lambda: do_deals(orgs)):
         t, s, rows = maker()
         steps.append((t, s, rows))
         if APPLY and (ONLY is None or ONLY == t):

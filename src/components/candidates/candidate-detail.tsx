@@ -66,7 +66,7 @@ import {
   Target,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
-import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
+import { createDoc, loadCollection, openStoredFile, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
 const CEFR_TO_PCT: Record<CEFRLevel, number> = {
@@ -1007,7 +1007,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
             <Calendar className="h-4 w-4" /> Schedule
           </button>
           {cvUrl ? (
-            <a href={cvUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', fontSize: 14, fontWeight: 600, color: NW.white, background: NW.teal500, borderRadius: 999, textDecoration: 'none' }}>
+            <a href={cvUrl} onClick={(e) => { e.preventDefault(); void openStoredFile(cvUrl); }} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', fontSize: 14, fontWeight: 600, color: NW.white, background: NW.teal500, borderRadius: 999, textDecoration: 'none' }}>
               <FileText className="h-4 w-4" /> View CV
             </a>
           ) : (
@@ -1489,7 +1489,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: `1px solid ${NW.gray100}` }}>
                 <span style={{ width: 32, height: 32, borderRadius: 8, background: NW.rose50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: NW.rose600 }}><FileText className="h-4 w-4" /></span>
                 <span style={{ flex: 1, fontSize: 13, color: NW.gray700 }}>Resume / CV</span>
-                <a href={cvUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: NW.teal600 }}><ExternalLink className="h-3.5 w-3.5" /> View</a>
+                <a href={cvUrl} onClick={(e) => { e.preventDefault(); void openStoredFile(cvUrl); }} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: NW.teal600 }}><ExternalLink className="h-3.5 w-3.5" /> View</a>
               </div>
             )}
             {linkedInUrl && (

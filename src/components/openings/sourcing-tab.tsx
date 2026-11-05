@@ -17,6 +17,7 @@ import {
   SRC_STATUSES, SRC_REASONS, SRC_COUNTRIES,
   type Opening, type SourcedCandidate, type SourceStatus, type SearchPlan, type SearchRun,
 } from '@/lib/types';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 // Staff who can own a sourced candidate.
 const SRC_OWNERS = [
@@ -347,7 +348,7 @@ function AddManualModal({ openingId, onClose, onDone }: { openingId: string; onC
     setSaving(true);
     const slug = li.replace(/^.*\/in\//, '').replace(/[/?#].*$/, '');
     try {
-      await addDoc(collection(db, 'sourcedCandidates'), {
+      await createDoc('sourcedCandidates', {
         openingId, name: name.trim() || nameFromSlug(li), li: '/in/' + slug, linkedin: 'https://www.linkedin.com/in/' + slug,
         location: SRC_COUNTRIES.find(c => c.code === country)?.name || '', country: SRC_COUNTRIES.find(c => c.code === country)?.name || '',
         source: 'Manual', owner, status: 'New', reason: '', salary: '', applied: false, last: 'just now', notes: '',
@@ -528,7 +529,7 @@ export function SourcingTab({ op }: { op: Opening }) {
   }, [op.code, op.id]);
 
   const save = (id: string, patch: Partial<SourcedCandidate>) => {
-    updateDoc(doc(db, 'sourcedCandidates', id), { ...patch, updatedAt: serverTimestamp() }).catch(e => { console.error('[sourcing] save', e); alert('Could not save — check permissions.'); });
+    patchDoc('sourcedCandidates', id, { ...patch, updatedAt: serverTimestamp() }).catch(e => { console.error('[sourcing] save', e); alert('Could not save — check permissions.'); });
   };
   const setStatus = (r: SourcedCandidate, status: SourceStatus) => {
     const patch: Partial<SourcedCandidate> = { status };

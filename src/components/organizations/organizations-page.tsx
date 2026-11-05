@@ -21,7 +21,7 @@ import {
   uploadBytes,
   getDownloadURL,
 } from '@/lib/firebase';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
@@ -786,7 +786,7 @@ export default function OrganizationsPage() {
     setSaving(true);
     try {
       const shortId = genSafeId(6);
-      const docRef = await addDoc(collection(db, 'organizations'), {
+      const newOrgId = await createDoc('organizations', {
         name: form.name.trim(),
         shortId,
         website: form.website || null,
@@ -811,7 +811,7 @@ export default function OrganizationsPage() {
 
       // Fill size, HQ, industry etc. from the web automatically (empty fields only).
       if (form.website?.trim()) {
-        autoFillFromWeb(docRef.id).then((n) => {
+        autoFillFromWeb(newOrgId).then((n) => {
           if (n) { showToast(`Filled ${n} company detail${n === 1 ? '' : 's'} from the web`, 'success'); load(); }
         });
       }
@@ -820,10 +820,10 @@ export default function OrganizationsPage() {
       if (form.inviteEmail.trim()) {
         const inviteEmail = form.inviteEmail.trim();
         const orgName = form.name.trim();
-        await updateDoc(doc(db, 'organizations', docRef.id), {
+        await patchDoc('organizations', newOrgId, {
           orgUsers: [{ email: inviteEmail, status: 'invited', invitedAt: new Date().toISOString() }],
         });
-        const { emailSent } = await sendInviteEmail(inviteEmail, docRef.id, orgName);
+        const { emailSent } = await sendInviteEmail(inviteEmail, newOrgId, orgName);
         showToast(
           emailSent ? `Invite email sent to ${inviteEmail} ✓` : 'User added — add NEXT_PUBLIC_RESEND_API_KEY in Vercel to send emails',
           emailSent ? 'success' : 'info',
@@ -1367,7 +1367,7 @@ function OrgDetail({
         teamLeadEmail: staffForm.teamLeadEmail.trim() || null,
         updatedAt: serverTimestamp(),
       };
-      await updateDoc(doc(db, 'organizations', org.id), data);
+      await patchDoc('organizations', org.id, data);
       onUpdated({
         ...org,
         accountManager: data.accountManager ?? undefined,
@@ -1398,7 +1398,7 @@ function OrgDetail({
         parentOrgName: parent?.name ?? null,
         updatedAt: serverTimestamp(),
       };
-      await updateDoc(doc(db, 'organizations', org.id), data);
+      await patchDoc('organizations', org.id, data);
       onUpdated({
         ...org,
         isStrategicPartner: data.isStrategicPartner,
@@ -1439,7 +1439,7 @@ function OrgDetail({
           phone: p.phone?.trim() || '',
           isDecisionMaker: !!p.isDecisionMaker,
         }));
-      await updateDoc(doc(db, 'organizations', org.id), { pocContacts: clean, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { pocContacts: clean, updatedAt: serverTimestamp() });
       onUpdated({ ...org, pocContacts: clean });
       setPocList(clean);
       showToast('Contacts updated', 'success');
@@ -1460,7 +1460,7 @@ function OrgDetail({
       const storageRef = ref(storage, `org-logos/${org.id}.${ext}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, 'organizations', org.id), { logo: url, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { logo: url, updatedAt: serverTimestamp() });
       onUpdated({ ...org, logo: url });
       showToast('Logo updated', 'success');
     } catch {
@@ -1502,7 +1502,7 @@ function OrgDetail({
         accountManagerEmail: editForm.accountManagerEmail.trim() || null,
         updatedAt: serverTimestamp(),
       };
-      await updateDoc(doc(db, 'organizations', org.id), data);
+      await patchDoc('organizations', org.id, data);
       const { updatedAt: _ts, ...dataWithoutTs } = data;
       onUpdated({ ...org, ...dataWithoutTs } as Organization);
       showToast('Saved', 'success');
@@ -1535,7 +1535,7 @@ function OrgDetail({
         }
       }
       await Promise.allSettled([...userDocIds].map((id) => deleteDoc(doc(db, 'users', id))));
-      await deleteDoc(doc(db, 'organizations', org.id));
+      await removeDoc('organizations', org.id);
       showToast(`Organization deleted — ${userDocIds.size} user${userDocIds.size === 1 ? '' : 's'} removed`, 'success');
       onClose();
       await onRefresh();
@@ -1552,7 +1552,7 @@ function OrgDetail({
     const suspend = (org.status ?? 'active') !== 'suspended';
     setSuspending(true);
     try {
-      await updateDoc(doc(db, 'organizations', org.id), {
+      await patchDoc('organizations', org.id, {
         status: suspend ? 'suspended' : 'active',
         updatedAt: serverTimestamp(),
       });
@@ -1582,7 +1582,7 @@ function OrgDetail({
       // the client on the create-account screen, so we only store the email here.
       const newUser: OrgUser = { email, role: addUserRole, status: 'invited', invitedAt: new Date().toISOString() };
       const updatedUsers = [...orgUsers, newUser];
-      await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
       setAddUserEmail('');
       setAddUserRole('member');
@@ -1627,7 +1627,7 @@ function OrgDetail({
     markUserBusy(email, true);
     try {
       const updatedUsers = orgUsers.map((x) => (x.email === email ? { ...x, role } : x));
-      await updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { orgUsers: updatedUsers, updatedAt: serverTimestamp() });
       onUpdated({ ...org, orgUsers: updatedUsers });
       if (account?.id) {
         await updateDoc(doc(db, 'users', account.id), { portalRole: role, updatedAt: serverTimestamp() });
@@ -1683,7 +1683,7 @@ function OrgDetail({
       setClientAccounts((m) => ({ ...m, [positionAccount.email]: { ...positionAccount, jobTitle, displayRole: jobTitle } }));
       // Mirror onto the org's invited list so the title persists there too.
       const updatedUsers = orgUsers.map((u) => u.email === positionAccount.email ? { ...u, jobTitle } : u);
-      updateDoc(doc(db, 'organizations', org.id), { orgUsers: updatedUsers, updatedAt: serverTimestamp() })
+      patchDoc('organizations', org.id, { orgUsers: updatedUsers, updatedAt: serverTimestamp() })
         .then(() => onUpdated({ ...org, orgUsers: updatedUsers })).catch(() => null);
       showToast('Position updated ✓', 'success');
       setPositionModal(false);
@@ -1754,7 +1754,7 @@ function OrgDetail({
       const now = new Date().toISOString();
       const entry: HealthHistoryEntry = { grade: healthGradePick, note, at: now };
       const history = [entry, ...(org.healthHistory ?? [])];
-      await updateDoc(doc(db, 'organizations', org.id), {
+      await patchDoc('organizations', org.id, {
         healthGrade: healthGradePick,
         healthUpdatedAt: now,
         healthHistory: history,
@@ -1779,7 +1779,7 @@ function OrgDetail({
     if (Number.isNaN(value) || value < 0) { showToast('Enter a valid amount', 'error'); return; }
     setSavingSpend(true);
     try {
-      await updateDoc(doc(db, 'organizations', org.id), { totalSpend: value, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { totalSpend: value, updatedAt: serverTimestamp() });
       onUpdated({ ...org, totalSpend: value });
       showToast('Lifetime spend updated', 'success');
       setSpendModal(false);
@@ -1798,7 +1798,7 @@ function OrgDetail({
     const note = next ? (window.prompt('What action is needed? (optional)') ?? '') : '';
     setSavingAction(true);
     try {
-      await updateDoc(doc(db, 'organizations', org.id), {
+      await patchDoc('organizations', org.id, {
         actionNeeded: next,
         actionNote: note,
         updatedAt: serverTimestamp(),
@@ -1872,7 +1872,7 @@ function OrgDetail({
                                 setStatusOpen(false);
                                 if (s === (org.status ?? 'active')) return;
                                 try {
-                                  await updateDoc(doc(db, 'organizations', org.id), { status: s, updatedAt: serverTimestamp() });
+                                  await patchDoc('organizations', org.id, { status: s, updatedAt: serverTimestamp() });
                                   onUpdated({ ...org, status: s });
                                   showToast('Status updated', 'success');
                                   await onRefresh();

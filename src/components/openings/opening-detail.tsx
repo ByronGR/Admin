@@ -38,6 +38,7 @@ import {
 import { NW, MONO, Icon, Avatar as NWAvatar, Button as NWButton } from '@/components/nw/primitives';
 import { HoldToDelete } from '@/components/ui/hold-to-delete';
 import { PIPELINE_STAGES } from '@/components/pipeline/pipeline-page';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 // ── Brief status badge (used by openings-page list too) ──────────────────────
 export function ApprovalBadge({ status }: { status?: string }) {
@@ -459,7 +460,7 @@ export function OpeningDetail({
   async function saveSheet() {
     setSheetSaving(true);
     try {
-      await updateDoc(doc(db, 'openings', opening.id), {
+      await patchDoc('openings', opening.id, {
         ...buildSheetFields(),
         updatedAt: serverTimestamp(),
       });
@@ -479,7 +480,7 @@ export function OpeningDetail({
     }
     setApprovalSaving(true);
     try {
-      await updateDoc(doc(db, 'openings', opening.id), {
+      await patchDoc('openings', opening.id, {
         ...buildSheetFields(),
         published:      true,
         publishedAt:    serverTimestamp(),
@@ -514,13 +515,13 @@ export function OpeningDetail({
   async function pauseOpening() {
     setApprovalSaving(true);
     try {
-      await updateDoc(doc(db, 'openings', opening.id), {
+      await patchDoc('openings', opening.id, {
         published: false,
         status:    'paused',
         updatedAt: serverTimestamp(),
       });
       // Keep the pipeline in sync so its list badge reflects the paused opening.
-      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: 'paused', updatedAt: serverTimestamp() }).catch(() => {});
+      patchDoc('pipelines', opening.code || opening.id, { status: 'paused', updatedAt: serverTimestamp() }).catch(() => {});
       showToast('Opening paused — removed from the job board', 'success');
       await onRefresh();
     } catch {
@@ -535,13 +536,13 @@ export function OpeningDetail({
   async function resumeOpening() {
     setApprovalSaving(true);
     try {
-      await updateDoc(doc(db, 'openings', opening.id), {
+      await patchDoc('openings', opening.id, {
         published:   true,
         status:      'open',
         publishedAt: serverTimestamp(),
         updatedAt:   serverTimestamp(),
       });
-      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: 'active', updatedAt: serverTimestamp() }).catch(() => {});
+      patchDoc('pipelines', opening.code || opening.id, { status: 'active', updatedAt: serverTimestamp() }).catch(() => {});
       // Refresh before claiming success, and keep the two failures apart: a
       // refresh that throws is not a write that failed, and reporting it as one
       // sends you looking in the wrong place.
@@ -569,7 +570,7 @@ export function OpeningDetail({
     setSaving(true);
     try {
       const goneFromJobs = ['paused', 'cancelled', 'filled'].includes(editForm.status);
-      await updateDoc(doc(db, 'openings', opening.id), {
+      await patchDoc('openings', opening.id, {
         title:          editForm.title,
         location:       editForm.location,
         description:    editForm.description,
@@ -604,7 +605,7 @@ export function OpeningDetail({
       });
       // Mirror the opening status onto the pipeline so its list badge stays accurate.
       const pipeStatus = editForm.status === 'paused' ? 'paused' : editForm.status === 'cancelled' ? 'cancelled' : 'active';
-      updateDoc(doc(db, 'pipelines', opening.code || opening.id), { status: pipeStatus, updatedAt: serverTimestamp() }).catch(() => {});
+      patchDoc('pipelines', opening.code || opening.id, { status: pipeStatus, updatedAt: serverTimestamp() }).catch(() => {});
       showToast(
         goneFromJobs && opening.published
           ? 'Opening updated · removed from the job board'
@@ -624,10 +625,10 @@ export function OpeningDetail({
     setDeleting(true);
     try {
       const code = opening.code ?? opening.id;
-      await deleteDoc(doc(db, 'openings', opening.id));
+      await removeDoc('openings', opening.id);
       await Promise.allSettled([
-        deleteDoc(doc(db, 'pipelines', code)),
-        deleteDoc(doc(db, 'kickoffBriefs', code)),
+        removeDoc('pipelines', code),
+        removeDoc('kickoffBriefs', code),
       ]);
       showToast('Opening, pipeline, and kick-off brief deleted', 'success');
       onClose();
@@ -1088,7 +1089,7 @@ export function OpeningDetail({
               onClick={async () => {
                 setApprovalSaving(true);
                 try {
-                  await updateDoc(doc(db, 'openings', opening.id), { approvalStatus: 'approved', updatedAt: serverTimestamp() });
+                  await patchDoc('openings', opening.id, { approvalStatus: 'approved', updatedAt: serverTimestamp() });
                   showToast('Opening approved', 'success');
                   await onRefresh();
                 } catch { showToast('Failed', 'error'); }

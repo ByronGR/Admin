@@ -15,7 +15,7 @@ import type { Organization } from '@/lib/types';
 import { useStaff, type StaffOption } from '@/components/ui/staff-picker';
 import type { AirtableRole } from '@/app/api/airtable-roles/route';
 import { fmtCurrencyRange } from '@/lib/utils';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -357,8 +357,8 @@ function KickoffInner() {
       if (jobTitle) updates.title = jobTitle;
       if (selectedOrgId) { updates.orgId = selectedOrgId; updates.orgName = org?.name ?? ''; }
       await Promise.all([
-        updateDoc(doc(db, 'openings', pipelineCode), updates),
-        updateDoc(doc(db, 'pipelines', pipelineCode), updates),
+        patchDoc('openings', pipelineCode, updates),
+        patchDoc('pipelines', pipelineCode, updates),
       ]);
     } catch {
       // Non-critical
@@ -564,8 +564,8 @@ function KickoffInner() {
                     const newTitle = e.target.value.trim();
                     if (newTitle && newTitle !== openingTitle) {
                       setOpeningData((d) => d ? { ...d, title: newTitle } : d);
-                      updateDoc(doc(db, 'openings', pipelineCode), { title: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
-                      updateDoc(doc(db, 'pipelines', pipelineCode), { title: newTitle, openingTitle: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
+                      patchDoc('openings', pipelineCode, { title: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
+                      patchDoc('pipelines', pipelineCode, { title: newTitle, openingTitle: newTitle, updatedAt: serverTimestamp() }).catch(() => null);
                       const el = formRef.current?.elements.namedItem('jobTitle') as HTMLInputElement | null;
                       if (el) el.value = newTitle;
                     }
@@ -582,8 +582,8 @@ function KickoffInner() {
                     setSelectedOrgId(newOrgId);
                     const org = orgs.find((o) => o.id === newOrgId);
                     setOpeningData((d) => d ? { ...d, orgId: newOrgId, orgName: org?.name ?? '' } : d);
-                    updateDoc(doc(db, 'openings', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
-                    updateDoc(doc(db, 'pipelines', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    patchDoc('openings', pipelineCode, { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    patchDoc('pipelines', pipelineCode, { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
                     if (submitError) setSubmitError('');
                   }}
                   className="text-xs border border-[#E5E4E0] rounded-md px-2 py-1 bg-white outline-none focus:border-[#16A085]"
@@ -768,8 +768,8 @@ function KickoffInner() {
                     setSelectedOrgId(newOrgId);
                     const org = orgs.find((o) => o.id === newOrgId);
                     setOpeningData((d) => d ? { ...d, orgId: newOrgId, orgName: org?.name ?? '' } : d);
-                    updateDoc(doc(db, 'openings', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
-                    updateDoc(doc(db, 'pipelines', pipelineCode), { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    patchDoc('openings', pipelineCode, { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
+                    patchDoc('pipelines', pipelineCode, { orgId: newOrgId, orgName: org?.name ?? '', updatedAt: serverTimestamp() }).catch(() => null);
                     if (submitError) setSubmitError('');
                   }}
                   className={`w-full text-sm border rounded-lg px-3 py-2 outline-none transition-colors ${

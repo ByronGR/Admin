@@ -66,7 +66,7 @@ import {
   Target,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
 const CEFR_TO_PCT: Record<CEFRLevel, number> = {
@@ -184,7 +184,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         assessedBy: profile?.name || profile?.email || undefined,
         assessedAt: new Date().toISOString(),
       };
-      await updateDoc(doc(db, 'candidates', candidate.id), {
+      await patchDoc('candidates', candidate.id, {
         englishScore: next,
         updatedAt: serverTimestamp(),
       });
@@ -210,7 +210,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
         if (!list.some((e) => e.candidateId === candidate.id)) return;
         const cands = list.map((e) => (e.candidateId === candidate.id ? { ...e, ...snap } : e));
         try {
-          await updateDoc(doc(db, 'pipelines', pipeline.id), { candidates: cands, updatedAt: serverTimestamp() });
+          await patchDoc('pipelines', pipeline.id, { candidates: cands, updatedAt: serverTimestamp() });
         } catch {
           /* best-effort — never block the profile edit */
         }
@@ -226,7 +226,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     setFieldSaving(true);
     const value = fieldDraft.trim() || null;
     try {
-      await updateDoc(doc(db, 'candidates', candidate.id), {
+      await patchDoc('candidates', candidate.id, {
         [key]: value,
         updatedAt: serverTimestamp(),
       });
@@ -466,7 +466,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     try {
       const handledBy = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
       const handledByEmail = profile?.email || auth.currentUser?.email || '';
-      await updateDoc(doc(db, 'pipelineRequests', req.id), {
+      await patchDoc('pipelineRequests', req.id, {
         status,
         handledBy,
         handledByEmail,
@@ -572,8 +572,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
               ...(dropOff ? { dropOffReason: dropOff.reason, dropOffNote: dropOff.note } : {}),
             },
       );
-      await updateDoc(doc(db, 'pipelines', pipeline.id), { candidates: newCandidates, updatedAt: serverTimestamp() });
-      await updateDoc(doc(db, 'candidates', candidate.id), {
+      await patchDoc('pipelines', pipeline.id, { candidates: newCandidates, updatedAt: serverTimestamp() });
+      await patchDoc('candidates', candidate.id, {
         activePipelineCode: pipeline.code,
         activePipelineStage: toStage,
         updatedAt: serverTimestamp(),
@@ -792,7 +792,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       const authorName = profile?.name || auth.currentUser?.displayName || 'Nearwork team';
       const authorEmail = profile?.email || auth.currentUser?.email || '';
 
-      await addDoc(collection(db, 'candidateNotes'), {
+      await createDoc('candidateNotes', {
         candidateId: candidate.id,
         candidateCode: candidate.code ?? '',
         text: noteText,

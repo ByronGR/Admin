@@ -29,6 +29,7 @@ import {
 } from '@/lib/types';
 import { crmField, Field, DealStagePill, Empty, Stat, saveErrorMessage } from './ui';
 import { useStaff } from './use-staff';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 export const OPEN_STAGES: DealStage[] = ['Prospect', 'Meeting booked', 'Contract sent'];
 export const dealHref = (id: string) => `/deals/${encodeURIComponent(id)}`;
@@ -82,7 +83,7 @@ async function onWon(deal: Deal): Promise<string | undefined> {
     });
     engagementId = ref.id;
   }
-  await updateDoc(doc(db, 'organizations', deal.orgId), { companyStage: 'client', updatedAt: serverTimestamp() });
+  await patchDoc('organizations', deal.orgId, { companyStage: 'client', updatedAt: serverTimestamp() });
   return engagementId;
 }
 

@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Sparkles, Check, Minus, RefreshCw, ExternalLink, Search } from 'lucide-react';
 import type { Opening, OpeningReqs } from '@/lib/types';
 import type { MatchDetail } from '@/lib/candidate-match';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 interface MatchResponse {
   reqs: OpeningReqs;
@@ -85,7 +86,7 @@ export function MatchesTab({ op }: { op: Opening }) {
       const code = op.code || op.id;
       const snap = await getDoc(doc(db, 'candidates', m.candidateId));
       const c = snap.exists() ? snap.data() as Record<string, unknown> : {};
-      await updateDoc(doc(db, 'pipelines', code), {
+      await patchDoc('pipelines', code, {
         candidates: arrayUnion({
           candidateId: m.candidateId,
           candidateCode: m.candidateId,

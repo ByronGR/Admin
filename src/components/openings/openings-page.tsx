@@ -10,7 +10,7 @@ import {
   setDoc,
   serverTimestamp,
 } from '@/lib/firebase';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
@@ -92,7 +92,7 @@ export default function OpeningsPage() {
     setCreating(true);
     try {
       const code = generateCode('NW');
-      await setDoc(doc(db, 'openings', code), {
+      await saveDoc('openings', code, {
         code,
         status: 'draft',
         approvalStatus: 'draft',
@@ -100,7 +100,7 @@ export default function OpeningsPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await setDoc(doc(db, 'pipelines', code), {
+      await saveDoc('pipelines', code, {
         code,
         status: 'active',
         candidates: [],

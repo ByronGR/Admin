@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { auth, db, doc, updateDoc, serverTimestamp } from '@/lib/firebase';
 import { NW, Icon, Button } from '@/components/nw/primitives';
 import type { Opening, Organization } from '@/lib/types';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 const label: React.CSSProperties = {
   display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
@@ -60,8 +61,8 @@ export function OpeningAdminControls({
     setPtSaving(true);
     try {
       await Promise.all([
-        updateDoc(doc(db, 'openings', opening.id), { pipelineType, updatedAt: serverTimestamp() }),
-        updateDoc(doc(db, 'pipelines', code), { pipelineType, updatedAt: serverTimestamp() }).catch(() => {}),
+        patchDoc('openings', opening.id, { pipelineType, updatedAt: serverTimestamp() }),
+        patchDoc('pipelines', code, { pipelineType, updatedAt: serverTimestamp() }).catch(() => {}),
       ]);
       showToast(`Engagement set to ${pipelineType === 'sourcing' ? 'Sourcing only' : 'Full recruitment'}`, 'success');
       await onChanged();

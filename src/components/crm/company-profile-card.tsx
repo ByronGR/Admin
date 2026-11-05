@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { COMPANY_STAGE_LABELS, type CompanyStage, type CrmSource, type Organization } from '@/lib/types';
 import { crmField, Field, Pill, saveErrorMessage } from './ui';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 const STAGE_STYLE: Record<CompanyStage, { fg: string; bg: string }> = {
   prospect: { fg: '#1D4ED8', bg: '#EFF6FF' },
@@ -140,7 +141,7 @@ function ProfileModal({ org, onClose, onSaved }: { org: Organization; onClose: (
       linkedin: f.linkedin.trim() || null,
     };
     try {
-      await updateDoc(doc(db, 'organizations', org.id), { ...patch, updatedAt: serverTimestamp() });
+      await patchDoc('organizations', org.id, { ...patch, updatedAt: serverTimestamp() });
       // Firestore stores nulls; the in-memory org uses undefined for "not set".
       const next = { ...org } as Record<string, unknown>;
       for (const [k, v] of Object.entries(patch)) next[k] = v ?? undefined;

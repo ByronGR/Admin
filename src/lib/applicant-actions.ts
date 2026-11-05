@@ -9,6 +9,7 @@
 import { db, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from '@/lib/firebase';
 import { clientCandidateSnapshot } from '@/lib/client-candidate-snapshot';
 import type { Candidate } from '@/lib/types';
+import { saveDoc, patchDoc, removeDoc, createDoc } from '@/lib/data-source';
 
 export interface ApplicantDoc {
   id: string;
@@ -59,18 +60,18 @@ export async function approveApplicant(
   };
 
   await Promise.all([
-    updateDoc(doc(db, 'pipelines', pipeline.id), {
+    patchDoc('pipelines', pipeline.id, {
       candidates: arrayUnion(entry),
       updatedAt: serverTimestamp(),
     }),
-    updateDoc(doc(db, 'applications', app.id), {
+    patchDoc('applications', app.id, {
       status: 'approved',
       inPipeline: true,
       pipelineStage: 'applied',
     }),
     // Mirror onto the candidate so the Candidates list shows progress at once.
     // Best-effort: a failure here must not leave the approval half-done.
-    updateDoc(doc(db, 'candidates', candId), {
+    patchDoc('candidates', candId, {
       activePipelineCode: pipeline.code,
       activePipelineStage: 'applied',
       updatedAt: serverTimestamp(),
@@ -82,7 +83,7 @@ export async function approveApplicant(
 
 /** Reject an applicant. They stay in `applications`, marked and timestamped. */
 export async function rejectApplicant(app: ApplicantDoc, reason?: string): Promise<void> {
-  await updateDoc(doc(db, 'applications', app.id), {
+  await patchDoc('applications', app.id, {
     status: 'rejected',
     rejectedAt: new Date().toISOString(),
     ...(reason ? { rejectReason: reason } : {}),

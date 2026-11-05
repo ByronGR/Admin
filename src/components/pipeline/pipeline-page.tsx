@@ -36,7 +36,7 @@ import {
   arrayUnion,
 } from '@/lib/firebase';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader } from '@/components/nw/shell-ui';
@@ -521,12 +521,12 @@ export default function PipelinePage() {
           : {}),
       };
     });
-    await updateDoc(doc(db, 'pipelines', pipeline.id), {
+    await patchDoc('pipelines', pipeline.id, {
       candidates: newCandidates,
       updatedAt: serverTimestamp(),
     });
     // Mirror stage to the candidate doc so the Candidates list can show pipeline progress
-    updateDoc(doc(db, 'candidates', candidateCode), {
+    patchDoc('candidates', candidateCode, {
       activePipelineCode: pipelineCode,
       activePipelineStage: toStage,
       updatedAt: serverTimestamp(),
@@ -698,7 +698,7 @@ export default function PipelinePage() {
       (c) => c.candidateId !== candidateCode
     );
     try {
-      await updateDoc(doc(db, 'pipelines', pipeline.id), {
+      await patchDoc('pipelines', pipeline.id, {
         candidates: newCandidates,
         updatedAt: serverTimestamp(),
       });
@@ -720,7 +720,7 @@ export default function PipelinePage() {
   // already mirrors onto its pipeline.
   async function updatePipelineStatus(pipelineId: string, status: string) {
     try {
-      await updateDoc(doc(db, 'pipelines', pipelineId), { status, updatedAt: serverTimestamp() });
+      await patchDoc('pipelines', pipelineId, { status, updatedAt: serverTimestamp() });
 
       const openingRef = doc(db, 'openings', pipelineId);
       const openingSnap = await getDoc(openingRef).catch(() => null);
@@ -763,7 +763,7 @@ export default function PipelinePage() {
 
   async function deletePipeline(pipelineId: string) {
     try {
-      await deleteDoc(doc(db, 'pipelines', pipelineId));
+      await removeDoc('pipelines', pipelineId);
       showToast('Pipeline deleted', 'success');
     } catch {
       showToast('Failed to delete pipeline', 'error');
@@ -823,7 +823,7 @@ export default function PipelinePage() {
     };
 
     try {
-      await updateDoc(doc(db, 'pipelines', pipeline.id), {
+      await patchDoc('pipelines', pipeline.id, {
         candidates: [...(pipeline.candidates ?? []), newEntry],
         updatedAt: serverTimestamp(),
       });
@@ -1534,7 +1534,7 @@ function PipelineWorkspace({
 
   async function saveEdits() {
     try {
-      await updateDoc(doc(db, 'pipelines', pipeline.id), {
+      await patchDoc('pipelines', pipeline.id, {
         recruiter: editRecruiter,
         accountManager: editManager,
         status: editStatus,
@@ -2057,17 +2057,17 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
         ...(cand ? clientCandidateSnapshot(cand) : {}),
       };
       await Promise.all([
-        updateDoc(doc(db, 'pipelines', pipeline.id), {
+        patchDoc('pipelines', pipeline.id, {
           candidates: arrayUnion(newEntry),
           updatedAt: serverTimestamp(),
         }),
-        updateDoc(doc(db, 'applications', app.id), {
+        patchDoc('applications', app.id, {
           status: 'approved',
           inPipeline: true,
           pipelineStage: 'applied',
         }),
         // Mirror to candidates doc so the Candidates list shows pipeline progress immediately
-        updateDoc(doc(db, 'candidates', candId), {
+        patchDoc('candidates', candId, {
           activePipelineCode: pipeline.code,
           activePipelineStage: 'applied',
           updatedAt: serverTimestamp(),
@@ -2096,7 +2096,7 @@ function ApplicantsPanel({ pipeline }: { pipeline: Pipeline }) {
   async function handleReject(app: AppDoc) {
     setRejectingId(app.id);
     try {
-      await updateDoc(doc(db, 'applications', app.id), {
+      await patchDoc('applications', app.id, {
         status: 'rejected',
         rejectedAt: new Date().toISOString(),
       });

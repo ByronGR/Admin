@@ -14,7 +14,7 @@ import {
   getDoc,
   setDoc,
 } from '@/lib/firebase';
-import { loadCollection, readsFromSupabase } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, readsFromSupabase, removeDoc, saveDoc } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
@@ -350,7 +350,7 @@ export default function CandidatesPage() {
         if (!existing.exists()) break;
         code = generateCandidateId();
       }
-      await setDoc(doc(db, 'candidates', code), {
+      await saveDoc('candidates', code, {
         code,
         name: form.name,
         email: form.email,

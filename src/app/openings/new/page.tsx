@@ -10,7 +10,7 @@ import { StaffPicker } from '@/components/ui/staff-picker';
 import { generateCode } from '@/lib/utils';
 import type { Organization } from '@/lib/types';
 import { ChevronLeft, Radar } from 'lucide-react';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 
 export default function NewOpeningPage() {
   const router = useRouter();
@@ -86,7 +86,7 @@ export default function NewOpeningPage() {
     try {
       const code = generateCode('NW');
       const skills = form.skills.split(',').map((s) => s.trim()).filter(Boolean);
-      await setDoc(doc(db, 'openings', code), {
+      await saveDoc('openings', code, {
         title: form.title.trim(),
         code,
         orgId: form.orgId,
@@ -107,7 +107,7 @@ export default function NewOpeningPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await setDoc(doc(db, 'pipelines', code), {
+      await saveDoc('pipelines', code, {
         code,
         title: form.title.trim(),
         openingId: code,

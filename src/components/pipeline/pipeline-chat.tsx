@@ -41,7 +41,7 @@ import {
   X,
   MessageCircle,
 } from 'lucide-react';
-import { loadCollection } from '@/lib/data-source';
+import { createDoc, loadCollection, patchDoc, removeDoc, saveDoc } from '@/lib/data-source';
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 
@@ -288,7 +288,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
           snap.forEach((d) => {
             const data = d as unknown as { orgId?: string };
             if (data.orgId !== resolvedOrgId) {
-              updateDoc(doc(db, 'pipeline_messages', d.id), { orgId: resolvedOrgId }).catch(
+              patchDoc('pipeline_messages', d.id, { orgId: resolvedOrgId }).catch(
                 (e) => console.error('[pipeline-chat] orgId backfill failed', e)
               );
             }
@@ -427,7 +427,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     }
     setSending(true);
     try {
-      await addDoc(collection(db, 'pipeline_messages'), {
+      await createDoc('pipeline_messages', {
         pipelineCode: pipeline.code,
         orgId: resolvedOrgId,
         kind: 'msg',
@@ -465,7 +465,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     if (!cand) return;
     setIntSubmitting(true);
     try {
-      await addDoc(collection(db, 'pipeline_messages'), {
+      await createDoc('pipeline_messages', {
         pipelineCode: pipeline.code,
         orgId: resolvedOrgId,
         kind: 'interview',
@@ -511,7 +511,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
       else reactions[idx] = { ...r, userIds };
     }
     try {
-      await updateDoc(doc(db, 'pipeline_messages', messageId), { reactions });
+      await patchDoc('pipeline_messages', messageId, { reactions });
     } catch (err) {
       console.error('Pipeline chat: reaction failed', err);
     }
@@ -524,7 +524,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     const msg = messages.find((m) => m.id === messageId);
     if (!msg) return;
     try {
-      await updateDoc(doc(db, 'pipeline_messages', messageId), { pinned: !msg.pinned });
+      await patchDoc('pipeline_messages', messageId, { pinned: !msg.pinned });
     } catch {}
   }
 

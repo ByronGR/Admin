@@ -10,6 +10,7 @@ import { StaffPicker } from '@/components/ui/staff-picker';
 import { generateCode } from '@/lib/utils';
 import type { Organization } from '@/lib/types';
 import { ChevronLeft, Radar } from 'lucide-react';
+import { loadCollection } from '@/lib/data-source';
 
 export default function NewOpeningPage() {
   const router = useRouter();
@@ -38,8 +39,8 @@ export default function NewOpeningPage() {
   const [reachLoading, setReachLoading] = useState(false);
 
   useEffect(() => {
-    getDocs(collection(db, 'organizations'))
-      .then((snap) => setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization))))
+    loadCollection('organizations')
+      .then((snap) => setOrgs((snap as unknown as Organization[])))
       .catch(() => showToast('Failed to load organizations', 'error'))
       .finally(() => setOrgsLoading(false));
   }, []);

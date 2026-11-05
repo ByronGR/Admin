@@ -41,6 +41,7 @@ import {
   X,
   MessageCircle,
 } from 'lucide-react';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 
@@ -213,11 +214,11 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
 
   useEffect(() => {
     const orgIds = [pipeline.orgId].filter(Boolean) as string[];
-    getDocs(collection(db, 'users'))
+    loadCollection('users')
       .then((snap) => {
         const users: MentionUser[] = [];
-        snap.docs.forEach((d) => {
-          const data = d.data() as {
+        snap.forEach((d) => {
+          const data = d as unknown as {
             name?: string;
             email?: string;
             staffRole?: string;
@@ -272,7 +273,7 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage));
+        const rows = (snap as unknown as ChatMessage[]);
         rows.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
         setMessages(rows);
         setMsgsLoading(false);
@@ -284,8 +285,8 @@ export default function PipelineChatPanel({ pipeline }: { pipeline: Pipeline }) 
         // write access, so backfill orgId here whenever a teammate opens the
         // thread. Guarded so it only writes the missing ones (no update loop).
         if (resolvedOrgId) {
-          snap.docs.forEach((d) => {
-            const data = d.data() as { orgId?: string };
+          snap.forEach((d) => {
+            const data = d as unknown as { orgId?: string };
             if (data.orgId !== resolvedOrgId) {
               updateDoc(doc(db, 'pipeline_messages', d.id), { orgId: resolvedOrgId }).catch(
                 (e) => console.error('[pipeline-chat] orgId backfill failed', e)

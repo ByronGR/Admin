@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/nw/shell-ui';
 import { Button, NW } from '@/components/nw/primitives';
 import { UploadCloud, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { loadCollection } from '@/lib/data-source';
 
 interface WorkEntry {
   company: string; title: string; startDate: string; endDate: string;
@@ -137,9 +138,9 @@ export default function CVParserPage() {
 
   async function loadPeople() {
     if (people.length) return;
-    const snap = await getDocs(collection(db, 'candidates'));
-    setPeople(snap.docs.map((d) => {
-      const c = d.data() as { name?: string; email?: string };
+    const snap = await loadCollection('candidates');
+    setPeople(snap.map((d) => {
+      const c = d as unknown as { name?: string; email?: string };
       return { id: d.id, name: c.name || '(no name)', email: (c.email || '').toLowerCase() };
     }));
   }

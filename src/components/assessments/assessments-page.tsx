@@ -31,6 +31,7 @@ import {
   Check,
   Send,
 } from 'lucide-react';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -63,13 +64,13 @@ export default function AssessmentsPage() {
     setLoading(true);
     try {
       const [aSnap, cSnap, oSnap] = await Promise.all([
-        getDocs(collection(db, 'assessments')),
-        getDocs(collection(db, 'candidates')),
-        getDocs(collection(db, 'openings')),
+        loadCollection('assessments'),
+        loadCollection('candidates'),
+        loadCollection('openings'),
       ]);
-      setAssessments(sortByTimestamp(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Assessment)), 'createdAt'));
-      setCandidates(cSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)));
-      setOpenings(oSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+      setAssessments(sortByTimestamp((aSnap as unknown as Assessment[]), 'createdAt'));
+      setCandidates((cSnap as unknown as Candidate[]));
+      setOpenings((oSnap as unknown as Opening[]));
     } catch {
       showToast('Failed to load assessments', 'error');
     } finally {

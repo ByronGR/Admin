@@ -11,6 +11,7 @@ import { sortByTimestamp, initials } from '@/lib/utils';
 import type { Placement, Organization } from '@/lib/types';
 import { NW, MONO, Icon, Avatar, CompanyTile, Button } from '@/components/nw/primitives';
 import { PageHeader, Card } from '@/components/nw/shell-ui';
+import { loadCollection } from '@/lib/data-source';
 
 export interface ManagedTeam {
   id: string;
@@ -63,17 +64,17 @@ export default function TeamsPage() {
   async function load() {
     setLoading(true);
     const [teamRes, placeRes, orgRes] = await Promise.allSettled([
-      getDocs(collection(db, 'managedTeams')),
-      getDocs(collection(db, 'placements')),
-      getDocs(collection(db, 'organizations')),
+      loadCollection('managedTeams'),
+      loadCollection('placements'),
+      loadCollection('organizations'),
     ]);
     if (teamRes.status === 'fulfilled') {
-      setTeams(sortByTimestamp(teamRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as ManagedTeam)), 'createdAt'));
+      setTeams(sortByTimestamp((teamRes.value as unknown as ManagedTeam[]), 'createdAt'));
     } else {
       showToast('Failed to load managed teams', 'error');
     }
-    if (placeRes.status === 'fulfilled') setPlacements(placeRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)));
-    if (orgRes.status === 'fulfilled') setOrgs(orgRes.value.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
+    if (placeRes.status === 'fulfilled') setPlacements((placeRes.value as unknown as Placement[]));
+    if (orgRes.status === 'fulfilled') setOrgs((orgRes.value as unknown as Organization[]));
     setLoading(false);
   }
 

@@ -13,6 +13,7 @@ import { NW, MONO, Icon, Avatar, CompanyTile, Button } from '@/components/nw/pri
 import { Card, CardHead, BackBar, Table, Th, Td, TableRow, StatusBadge } from '@/components/nw/shell-ui';
 import { type ManagedTeam, TeamHealth, colorFor, placementsForOrg } from './teams-page';
 import { type IconName } from 'lucide-react/dynamic';
+import { loadCollection } from '@/lib/data-source';
 
 function Fact({ icon, label, value, sub, accent }: { icon: IconName; label: string; value: React.ReactNode; sub?: React.ReactNode; accent?: string }) {
   return (
@@ -43,11 +44,11 @@ export function TeamDetail({ team, onRefresh }: { team: ManagedTeam; onRefresh: 
   async function load() {
     setLoading(true);
     const [placeRes, orgRes] = await Promise.allSettled([
-      getDocs(collection(db, 'placements')),
-      getDocs(collection(db, 'organizations')),
+      loadCollection('placements'),
+      loadCollection('organizations'),
     ]);
-    if (placeRes.status === 'fulfilled') setPlacements(placeRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)));
-    if (orgRes.status === 'fulfilled') setOrgs(orgRes.value.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
+    if (placeRes.status === 'fulfilled') setPlacements((placeRes.value as unknown as Placement[]));
+    if (orgRes.status === 'fulfilled') setOrgs((orgRes.value as unknown as Organization[]));
     setLoading(false);
   }
 

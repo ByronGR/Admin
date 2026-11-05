@@ -26,6 +26,7 @@ import { STAFF_ROLE_LABELS } from '@/lib/types';
 import { Search, Mail, UserX, UserCheck, Copy, Check } from 'lucide-react';
 import { NW, MONO, Avatar, Button, Chip } from '@/components/nw/primitives';
 import { PageHeader, Card } from '@/components/nw/shell-ui';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Role badge colors ────────────────────────────────────────────────────────
 
@@ -71,13 +72,13 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const [usersSnap, invitesSnap] = await Promise.all([
-        getDocs(collection(db, 'users')),
+        loadCollection('users'),
         getDocs(query(collection(db, 'staffInvites'), where('status', '==', 'pending'))),
       ]);
       // Team = Nearwork staff only (the shared `users` collection also holds
       // client/partner accounts, which must not appear here).
-      const staff = usersSnap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as UserProfile))
+      const staff = usersSnap
+        .map((d) => ({ ...d, id: d.id } as unknown as UserProfile))
         .filter((u) => isNearworkEmail(u.email ?? ''));
       setUsers(staff);
       setInvites(invitesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as StaffInvite)));

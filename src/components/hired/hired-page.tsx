@@ -22,6 +22,7 @@ import { ENGAGEMENT_LABELS } from '@/lib/types';
 import { Search, X } from 'lucide-react';
 import { NW, MONO, Icon, Avatar, CompanyTile, Button } from '@/components/nw/primitives';
 import { PageHeader, Card, SegTabs, Table, Th, Td, TableRow, StatusBadge } from '@/components/nw/shell-ui';
+import { loadCollection } from '@/lib/data-source';
 
 // Fire a follower broadcast to /api/notify (best-effort — never blocks the save).
 async function broadcastNotify(payload: Record<string, unknown>): Promise<void> {
@@ -114,23 +115,23 @@ export default function HiredPage() {
     // Each collection loads independently — a failure on one (e.g. orgs rules)
     // must never block the candidate directory used by the placement picker.
     const [placeRes, candRes, orgRes] = await Promise.allSettled([
-      getDocs(collection(db, 'placements')),
-      getDocs(collection(db, 'candidates')),
-      getDocs(collection(db, 'organizations')),
+      loadCollection('placements'),
+      loadCollection('candidates'),
+      loadCollection('organizations'),
     ]);
     if (placeRes.status === 'fulfilled') {
-      setPlacements(sortByTimestamp(placeRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)), 'createdAt'));
+      setPlacements(sortByTimestamp((placeRes.value as unknown as Placement[]), 'createdAt'));
     } else {
       showToast('Failed to load placements', 'error');
     }
     if (candRes.status === 'fulfilled') {
-      setCandidates(candRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate)));
+      setCandidates((candRes.value as unknown as Candidate[]));
     }
     if (orgRes.status === 'fulfilled') {
       const m: Record<string, string> = {};
       const list: Array<{ id: string; name: string }> = [];
-      orgRes.value.docs.forEach((d) => {
-        const data = d.data() as Organization & { shortId?: string };
+      orgRes.value.forEach((d) => {
+        const data = d as unknown as Organization & { shortId?: string };
         if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; list.push({ id: d.id, name: data.name }); }
       });
       setOrgNames(m);

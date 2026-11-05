@@ -66,6 +66,7 @@ import {
   Target,
 } from 'lucide-react';
 import { NW, MONO, MatchScore, Avatar as NWAvatar } from '@/components/nw/primitives';
+import { loadCollection } from '@/lib/data-source';
 
 // CEFR → 0-100 for the Nearwork Score radar / display.
 const CEFR_TO_PCT: Record<CEFRLevel, number> = {
@@ -248,11 +249,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    getDocs(collection(db, 'users'))
+    loadCollection('users')
       .then((snap) => {
-        const users: MentionUser[] = snap.docs
+        const users: MentionUser[] = snap
           .map((d) => {
-            const data = d.data() as { name?: string; email?: string; staffRole?: string; role?: string; jobTitle?: string };
+            const data = d as unknown as { name?: string; email?: string; staffRole?: string; role?: string; jobTitle?: string };
             return {
               id: d.id,
               name: data.name ?? data.email ?? '',
@@ -347,8 +348,8 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       collection(db, 'pipelines'),
       (snap) => {
         const matches: Array<{ pipeline: Pipeline; entry: PipelineCandidate }> = [];
-        snap.docs.forEach((d) => {
-          const p = { id: d.id, ...d.data() } as Pipeline;
+        snap.forEach((d) => {
+          const p = { ...d, id: d.id } as unknown as Pipeline;
           const entry = (p.candidates ?? []).find((c) => c.candidateId === candidate.id);
           if (entry) matches.push({ pipeline: p, entry });
         });
@@ -510,11 +511,11 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   const [dropNote, setDropNote] = useState('');
 
   useEffect(() => {
-    getDocs(collection(db, 'openings'))
+    loadCollection('openings')
       .then((snap) => {
         const m: Record<string, string> = {};
-        snap.docs.forEach((d) => {
-          const o = d.data() as { code?: string; status?: string };
+        snap.forEach((d) => {
+          const o = d as unknown as { code?: string; status?: string };
           m[d.id] = o.status ?? '';
           if (o.code) m[o.code] = o.status ?? '';
         });
@@ -656,7 +657,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
       .then((snaps) => {
         const byId = new Map<string, ApplicationDoc>();
         snaps.forEach((snap) =>
-          snap.docs.forEach((d) => byId.set(d.id, { id: d.id, ...d.data() } as ApplicationDoc))
+          snap.forEach((d) => byId.set(d.id, { ...d, id: d.id } as unknown as ApplicationDoc))
         );
         const apps = Array.from(byId.values());
         apps.sort((a, b) => {
@@ -685,7 +686,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
     setAssessmentLoading(true);
     getDocs(query(collection(db, 'assessments'), where('candidateId', '==', candidate.id)))
       .then((snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Assessment));
+        const list = (snap as unknown as Assessment[]);
         // Prefer the most recently completed/scored assessment.
         const scored = list.filter(
           (a) => a.technicalScore != null || a.nearworkScore != null || a.completedAt
@@ -708,7 +709,7 @@ export function CandidateDetail({ candidate }: { candidate: Candidate }) {
   useEffect(() => {
     getDocs(query(collection(db, 'placements'), where('candidateId', '==', candidate.id)))
       .then((snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Placement));
+        const list = (snap as unknown as Placement[]);
         list.sort(
           (a, b) =>
             new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime()

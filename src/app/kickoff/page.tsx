@@ -15,6 +15,7 @@ import type { Organization } from '@/lib/types';
 import { useStaff, type StaffOption } from '@/components/ui/staff-picker';
 import type { AirtableRole } from '@/app/api/airtable-roles/route';
 import { fmtCurrencyRange } from '@/lib/utils';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -170,8 +171,8 @@ function KickoffInner() {
   // ── Load orgs ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    getDocs(collection(db, 'organizations'))
-      .then((snap) => setOrgs(snap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization))))
+    loadCollection('organizations')
+      .then((snap) => setOrgs((snap as unknown as Organization[])))
       .catch(() => {/* non-critical */});
   }, [user]);
 

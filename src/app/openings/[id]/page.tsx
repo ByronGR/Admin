@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { OpeningDetail } from '@/components/openings/opening-detail';
 import { useAuth } from '@/hooks/use-auth';
 import type { Opening, Organization } from '@/lib/types';
+import { loadCollection } from '@/lib/data-source';
 
 export default function OpeningDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,13 +23,13 @@ export default function OpeningDetailPage() {
   async function load() {
     const [snap, orgSnap] = await Promise.all([
       getDoc(doc(db, 'openings', id)),
-      getDocs(collection(db, 'organizations')),
+      loadCollection('organizations'),
     ]);
     if (!snap.exists()) {
       setNotFound(true);
     } else {
       setOpening({ id: snap.id, ...snap.data() } as Opening);
-      setOrgs(orgSnap.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
+      setOrgs((orgSnap as unknown as Organization[]));
     }
     setLoading(false);
   }

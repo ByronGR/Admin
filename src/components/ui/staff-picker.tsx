@@ -5,6 +5,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { Search, X, Check } from 'lucide-react';
 import { db, HARD_CODED_SUPER_ADMINS, isNearworkEmail } from '@/lib/firebase';
 import { initials } from '@/lib/utils';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Nearwork staff directory (shared, cached) ───────────────────────────────
 // Loads the team once and shares the result across every picker on the page, so
@@ -19,9 +20,9 @@ function loadStaff(): Promise<StaffOption[]> {
   staffCache = (async () => {
     const byEmail = new Map<string, StaffOption>();
     try {
-      const snap = await getDocs(collection(db, 'users'));
-      snap.docs.forEach((d) => {
-        const data = d.data() as { name?: string; email?: string; jobTitle?: string; staffRole?: string; role?: string };
+      const snap = await loadCollection('users');
+      snap.forEach((d) => {
+        const data = d as unknown as { name?: string; email?: string; jobTitle?: string; staffRole?: string; role?: string };
         const email = (data.email ?? '').toLowerCase();
         // Team = Nearwork staff only; the shared `users` collection also holds
         // client/partner accounts, which must not be selectable here.

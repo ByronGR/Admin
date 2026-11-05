@@ -11,6 +11,7 @@ import type { Organization, Placement, Opening } from '@/lib/types';
 import { NW, MONO, Icon, CompanyTile } from '@/components/nw/primitives';
 import { PageHeader, Card, SegTabs, Table, Th, Td, TableRow, StatusBadge } from '@/components/nw/shell-ui';
 import { colorFor, placementsForOrg } from '@/components/teams/teams-page';
+import { loadCollection } from '@/lib/data-source';
 
 function SppStat({ label, value, accent }: { label: string; value: React.ReactNode; accent: string }) {
   return (
@@ -49,14 +50,14 @@ export default function SppPage() {
   async function load() {
     setLoading(true);
     const [orgRes, placeRes, openRes] = await Promise.allSettled([
-      getDocs(collection(db, 'organizations')),
-      getDocs(collection(db, 'placements')),
-      getDocs(collection(db, 'openings')),
+      loadCollection('organizations'),
+      loadCollection('placements'),
+      loadCollection('openings'),
     ]);
-    if (orgRes.status === 'fulfilled') setOrgs(orgRes.value.docs.map((d) => ({ ...d.data(), id: d.id } as Organization)));
+    if (orgRes.status === 'fulfilled') setOrgs((orgRes.value as unknown as Organization[]));
     else showToast('Failed to load partners', 'error');
-    if (placeRes.status === 'fulfilled') setPlacements(placeRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Placement)));
-    if (openRes.status === 'fulfilled') setOpenings(openRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)));
+    if (placeRes.status === 'fulfilled') setPlacements((placeRes.value as unknown as Placement[]));
+    if (openRes.status === 'fulfilled') setOpenings((openRes.value as unknown as Opening[]));
     setLoading(false);
   }
 

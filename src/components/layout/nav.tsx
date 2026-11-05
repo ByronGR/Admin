@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { initials, fmtRelative, fmtDate, fmtTime } from '@/lib/utils';
 import type { Notification as AppNotification } from '@/lib/types';
 import { NW, Icon, MONO } from '@/components/nw/primitives';
+import { loadCollection } from '@/lib/data-source';
 
 // ─── Read-suppression ─────────────────────────────────────────────────────────
 // Marking a notification read in-app should also suppress it from the pending
@@ -96,21 +97,21 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
     // Each collection is read independently — a failure on one (rules, missing
     // index) must not silently wipe out the whole search.
     const [cRes, oRes, opRes, pRes, hRes] = await Promise.allSettled([
-      getDocs(collection(db, 'candidates')),
-      getDocs(collection(db, 'organizations')),
-      getDocs(collection(db, 'openings')),
-      getDocs(collection(db, 'pipelines')),
-      getDocs(collection(db, 'placements')),
+      loadCollection('candidates'),
+      loadCollection('organizations'),
+      loadCollection('openings'),
+      loadCollection('pipelines'),
+      loadCollection('placements'),
     ]);
-    const cDocs = cRes.status === 'fulfilled' ? cRes.value.docs : [];
-    const oDocs = oRes.status === 'fulfilled' ? oRes.value.docs : [];
-    const opDocs = opRes.status === 'fulfilled' ? opRes.value.docs : [];
-    const pDocs = pRes.status === 'fulfilled' ? pRes.value.docs : [];
-    const hDocs = hRes.status === 'fulfilled' ? hRes.value.docs : [];
+    const cDocs = cRes.status === 'fulfilled' ? cRes.value : [];
+    const oDocs = oRes.status === 'fulfilled' ? oRes.value : [];
+    const opDocs = opRes.status === 'fulfilled' ? opRes.value : [];
+    const pDocs = pRes.status === 'fulfilled' ? pRes.value : [];
+    const hDocs = hRes.status === 'fulfilled' ? hRes.value : [];
     {
       const res: SearchResult[] = [];
       cDocs.forEach((d) => {
-        const data = d.data();
+        const data = d as Record<string, unknown>;
         const name = (data.name ?? '') as string;
         const email = (data.email ?? '') as string;
         const role = (data.currentRole ?? data.role ?? '') as string;
@@ -123,7 +124,7 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
         }
       });
       oDocs.forEach((d) => {
-        const data = d.data();
+        const data = d as Record<string, unknown>;
         const name = (data.name ?? '') as string;
         const industry = (data.industry ?? '') as string;
         if (name.toLowerCase().includes(term) || industry.toLowerCase().includes(term)) {
@@ -131,7 +132,7 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
         }
       });
       opDocs.forEach((d) => {
-        const data = d.data();
+        const data = d as Record<string, unknown>;
         const title = (data.title ?? '') as string;
         const orgName = (data.orgName ?? '') as string;
         if (title.toLowerCase().includes(term) || orgName.toLowerCase().includes(term)) {
@@ -139,7 +140,7 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
         }
       });
       pDocs.forEach((d) => {
-        const data = d.data();
+        const data = d as Record<string, unknown>;
         const title = (data.title ?? data.openingTitle ?? '') as string;
         const code = (data.code ?? '') as string;
         if (title.toLowerCase().includes(term) || code.toLowerCase().includes(term)) {
@@ -147,7 +148,7 @@ function GlobalSearch({ compact = false }: { compact?: boolean }) {
         }
       });
       hDocs.forEach((d) => {
-        const data = d.data();
+        const data = d as Record<string, unknown>;
         const name = (data.name ?? data.candidateName ?? '') as string;
         const role = (data.role ?? '') as string;
         if (name.toLowerCase().includes(term) || role.toLowerCase().includes(term)) {
@@ -264,7 +265,7 @@ export function Nav({ showMenu = false, onMenuClick }: { showMenu?: boolean; onM
       limit(20),
     );
     const unsub = onSnapshot(qy, (snap) => {
-      setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
+      setNotifications((snap as unknown as AppNotification[]));
     }, () => {/* silently fail */});
     return unsub;
   }, [profile?.id]);

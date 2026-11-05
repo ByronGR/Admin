@@ -14,6 +14,7 @@ import {
   getDoc,
   setDoc,
 } from '@/lib/firebase';
+import { loadCollection, readsFromSupabase } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal } from '@/components/ui/modal';
@@ -166,18 +167,18 @@ export default function CandidatesPage() {
   // Resolve opening/pipeline titles + latest application per candidate for the
   // "Last activity" column.
   useEffect(() => {
-    getDocs(collection(db, 'pipelines'))
+    loadCollection('pipelines')
       .then((snap) => {
         const m: Record<string, string> = {};
-        snap.docs.forEach((d) => {
-          const x = d.data() as { code?: string; title?: string };
+        snap.forEach((d) => {
+          const x = d as unknown as { code?: string; title?: string };
           if (x.code) m[x.code] = x.title || x.code;
         });
         setPipelineTitles(m);
       })
       .catch(() => {});
 
-    getDocs(collection(db, 'applications'))
+    loadCollection('applications')
       .then((snap) => {
         const tsMs = (v: unknown): number => {
           if (!v) return 0;
@@ -186,8 +187,8 @@ export default function CandidatesPage() {
           return 0;
         };
         const m: Record<string, { title: string; whenTs: unknown; status?: string }> = {};
-        snap.docs.forEach((d) => {
-          const a = d.data() as { candidateId?: string; candidateCode?: string; openingTitle?: string; jobTitle?: string; openingCode?: string; submittedAt?: unknown; status?: string };
+        snap.forEach((d) => {
+          const a = d as unknown as { candidateId?: string; candidateCode?: string; openingTitle?: string; jobTitle?: string; openingCode?: string; submittedAt?: unknown; status?: string };
           const title = a.openingTitle || a.jobTitle || a.openingCode || 'a role';
           const entry = { title, whenTs: a.submittedAt, status: a.status };
           for (const key of [a.candidateId, a.candidateCode]) {
@@ -203,6 +204,24 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     setLoading(true);
+
+    // Supabase is read-only until cutover, so there is nothing to listen to:
+    // a live subscription would never fire, and every edit still lands in
+    // Firebase. One read is the honest shape while that is true. The live
+    // listener below stays for as long as Firebase is the one being written to.
+    if (readsFromSupabase()) {
+      loadCollection('candidates')
+        .then((rows) => {
+          setCandidates(sortByTimestamp(rows as unknown as Candidate[], 'createdAt'));
+          setLoading(false);
+        })
+        .catch(() => {
+          showToast('Failed to load candidates', 'error');
+          setLoading(false);
+        });
+      return;
+    }
+
     const unsub = onSnapshot(
       collection(db, 'candidates'),
       (snap) => {

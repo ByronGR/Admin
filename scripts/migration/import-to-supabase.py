@@ -79,13 +79,31 @@ def unwrap(v):
     return v
 
 
+def finite(o):
+    """
+    Replace NaN and Infinity with None, everywhere, recursively.
+
+    Python writes them as bare NaN / Infinity, which is not valid JSON, and
+    PostgREST rejects the whole request body one appears in — a single corrupt
+    field in one candidate took down the batch of eleven it travelled with. NaN
+    is not a value anyone entered, so recording "unknown" is the honest result.
+    """
+    if isinstance(o, float):
+        return None if (o != o or o in (float("inf"), float("-inf"))) else o
+    if isinstance(o, dict):
+        return {k: finite(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [finite(v) for v in o]
+    return o
+
+
 def docs(name):
     path = os.path.join(EXPORT, f"{name}.json")
     if not os.path.exists(path):
         return []
     out = []
     for d in json.load(open(path)):
-        row = {a: unwrap(b) for a, b in (d.get("fields") or {}).items()}
+        row = {a: finite(unwrap(b)) for a, b in (d.get("fields") or {}).items()}
         row["__id"] = d["name"].rsplit("/", 1)[-1]
         out.append(row)
     return out
@@ -366,6 +384,22 @@ def do_engagements(orgs):
     return "engagements", "n365", rows
 
 
+def do_engagement_documents(orgs, engagements):
+    rows = []
+    for d in docs("engagementDocuments"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "engagement_id": engagements.get(d.get("engagementId")),
+            "legacy_engagement_id": d.get("engagementId"),
+            "org_id": orgs.get(d.get("orgId") or d.get("organizationId")) or orgs.get(NEARWORK_LEGACY_ORG),
+            "name": d.get("name") or d.get("fileName"),
+            "storage_path": d.get("path") or d.get("storagePath") or d.get("url"),
+            "created_at": ts(d.get("createdAt")),
+            "raw": d,
+        })
+    return "engagement_documents", "n365", rows
+
+
 def do_org_documents(orgs):
     rows = []
     for d in docs("organizationDocuments"):
@@ -378,6 +412,191 @@ def do_org_documents(orgs):
             "raw": d,
         })
     return "organization_documents", "n365", rows
+
+
+def do_candidates(orgs):
+    """
+    Nearwork's own candidate pool.
+
+    None of the 192 carry an orgId in Firestore — they are ours, not a client's —
+    so they land under Nearwork with source='nearwork'. That one column is the
+    whole guest-versus-owned rule: a client's ATS can never surface a name that
+    was never offered to them.
+
+    The source documents carry ninety fields with years of duplication
+    (linkedin/linkedIn, photoUrl/photoURL, five salary fields). Only what a
+    screen filters or sorts on is mapped; the rest stays whole in `raw`.
+    """
+    rows = []
+    for d in docs("candidates"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "code": d.get("code") or d.get("candidateCode") or d["__id"],
+            "source": "nearwork",
+            "origin_ref": d["__id"],
+            "name": d.get("name") or "(unnamed)",
+            "email": d.get("email"),
+            "phone": d.get("phone"),
+            "role": d.get("role") or d.get("currentRole"),
+            "headline": d.get("headline"),
+            "status": d.get("status"),
+            "city": d.get("city") or d.get("locationCity"),
+            "location": d.get("location"),
+            "photo_url": d.get("photoUrl") or d.get("photoURL"),
+            "cv_url": d.get("cvUrl") or d.get("cv"),
+            "linkedin": d.get("linkedin") or d.get("linkedIn"),
+            "skills": d.get("skills") or [],
+            "tools": d.get("tools") or [],
+            "english": d.get("english") or d.get("englishLevel"),
+            "expected_salary_amount": positive(d.get("expectedSalaryAmount") or d.get("salaryAmount")),
+            "expected_salary_currency": d.get("expectedSalaryCurrency") or d.get("salaryCurrency"),
+            "work_history": d.get("workHistory") or d.get("work") or [],
+            "education": d.get("education") or [],
+            "certifications": d.get("certifications") or [],
+            "languages": d.get("languages") or [],
+            "created_at": ts(d.get("createdAt")),
+            "updated_at": ts(d.get("updatedAt")),
+            "raw": d,
+        })
+    return "candidates", "n365", rows
+
+
+APPLICATION_STATUS = {
+    "applied": "new", "new": "new", "pending": "new",
+    "approved": "advanced", "advanced": "advanced", "hired": "advanced",
+    "rejected": "not_selected", "declined": "not_selected",
+    "not_selected": "not_selected",
+}
+
+
+def do_applications(orgs, openings, candidates):
+    """
+    Every one of the 231 resolves to a real opening and a real candidate, so
+    none is dropped. opening_id and candidate_id are both NOT NULL and the links
+    are what make an application mean anything.
+    """
+    rows, orphans = [], 0
+    for d in docs("applications"):
+        opening = (openings.get(d.get("openingId"))
+                   or openings.get(d.get("openingCode"))
+                   or openings.get(d.get("jobId")))
+        cand = candidates.get(d.get("candidateDocId")) or candidates.get(d.get("candidateId"))
+        if not opening or not cand:
+            orphans += 1
+            continue
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "opening_id": opening,
+            "candidate_id": cand,
+            "status": APPLICATION_STATUS.get((d.get("status") or "").lower(), "new"),
+            "source": d.get("source"),
+            "answers": d.get("questions") or [],
+            "applied_at": ts(d.get("submittedAt")) or ts(d.get("createdAt")) or ts(d.get("updatedAt")),
+            "raw": d,
+        })
+    if orphans:
+        print(f"    note: {orphans} applications had no matching opening or candidate")
+
+    # n365.applications is unique on (opening_id, candidate_id) — one
+    # application per person per role. Seventeen pairs repeat in Firestore.
+    # Rather than drop the extras, the most recent becomes the row and the
+    # earlier ones are kept inside its raw under "superseded", so the full
+    # history survives the move and nothing has to be fetched from Firebase to
+    # answer "did they apply twice?".
+    best = {}
+    for r in rows:
+        key = (r["opening_id"], r["candidate_id"])
+        prev = best.get(key)
+        if prev is None:
+            best[key] = r
+            continue
+        keep, drop = (r, prev) if (r.get("applied_at") or "") >= (prev.get("applied_at") or "") else (prev, r)
+        keep["raw"] = {**keep["raw"], "superseded": [*keep["raw"].get("superseded", []), drop["raw"]]}
+        best[key] = keep
+
+    merged = len(rows) - len(best)
+    if merged:
+        print(f"    note: {merged} repeat applications folded into the latest for that role")
+    return "applications", "n365", list(best.values())
+
+
+def do_candidate_activity(orgs, candidates):
+    rows = []
+    for d in docs("candidateActivity"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "candidate_id": candidates.get(d.get("candidateId") or d.get("candidateDocId")),
+            "legacy_candidate_id": d.get("candidateId") or d.get("candidateDocId"),
+            "type": d.get("type") or d.get("action"),
+            "summary": d.get("summary") or d.get("message") or d.get("note"),
+            "actor_name": d.get("actorName") or d.get("by"),
+            "actor_email": d.get("actorEmail"),
+            "created_at": ts(d.get("createdAt")) or ts(d.get("at")),
+            "raw": d,
+        })
+    return "candidate_activity", "n365", rows
+
+
+def do_notes(orgs, candidates):
+    rows = []
+    for d in docs("candidateNotes"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "candidate_id": candidates.get(d.get("candidateId") or d.get("candidateDocId")),
+            # Admin wrote these, so they are ours and staff-internal unless the
+            # document says otherwise. Guessing "client_visible" would leak.
+            "side": d.get("side") or "nearwork",
+            "visibility": d.get("scope") or "staff_internal",
+            "body": d.get("body") or d.get("text") or "",
+            "author_name": d.get("authorName") or d.get("author"),
+            "author_email": d.get("authorEmail"),
+            "created_at": ts(d.get("createdAt")),
+            "updated_at": ts(d.get("updatedAt")) or ts(d.get("createdAt")),
+            "raw": d,
+        })
+    return "notes", "n365", rows
+
+
+def do_messages(orgs, pipelines):
+    rows = []
+    for d in docs("pipeline_messages"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "pipeline_id": pipelines.get(d.get("pipelineId") or d.get("pipelineCode")),
+            "body": d.get("body") or d.get("text") or "",
+            "author_name": d.get("authorName") or d.get("author"),
+            "author_email": d.get("authorEmail"),
+            "author_type": "client" if (d.get("side") or d.get("authorType")) == "client" else "nearwork",
+            "created_at": ts(d.get("createdAt")),
+            "raw": d,
+        })
+    return "messages", "n365", rows
+
+
+def do_requests(orgs, candidates, pipelines):
+    rows = []
+    for d in docs("pipelineRequests"):
+        rows.append({
+            "legacy_id": d["__id"],
+            "org_id": orgs.get(NEARWORK_LEGACY_ORG),
+            "candidate_id": candidates.get(d.get("candidateId")),
+            "pipeline_id": pipelines.get(d.get("pipelineId") or d.get("pipelineCode")),
+            "type": d.get("type") or "move",
+            "from_stage": d.get("fromStage"),
+            "to_stage": d.get("toStage"),
+            "reason": d.get("reason"),
+            "status": d.get("status") or "pending",
+            "requested_by_email": d.get("requestedByEmail") or d.get("requestedBy"),
+            "created_at": ts(d.get("createdAt")),
+            "updated_at": ts(d.get("updatedAt")) or ts(d.get("createdAt")),
+            "raw": d,
+        })
+    return "requests", "n365", rows
 
 
 def main():
@@ -401,10 +620,27 @@ def main():
         print(f"  {'openings':24} {n:>5} / {len(rows)}")
     openings = fetch_map("openings", "n365") if APPLY else {}
 
-    for maker in (lambda: do_pipelines(orgs, openings),
+    t, s_, rows = do_pipelines(orgs, openings)
+    if APPLY:
+        n = upsert(t, rows, s_)
+        print(f"  {'pipelines':24} {n:>5} / {len(rows)}")
+    pipelines = fetch_map("pipelines", "n365") if APPLY else {}
+
+    t, s_, rows = do_candidates(orgs)
+    if APPLY:
+        n = upsert(t, rows, s_)
+        print(f"  {'candidates':24} {n:>5} / {len(rows)}")
+    candidates = fetch_map("candidates", "n365") if APPLY else {}
+
+    for maker in (lambda: do_applications(orgs, openings, candidates),
+                  lambda: do_candidate_activity(orgs, candidates),
+                  lambda: do_notes(orgs, candidates),
+                  lambda: do_messages(orgs, pipelines),
+                  lambda: do_requests(orgs, candidates, pipelines),
                   lambda: do_sourced(openings),
                   lambda: do_kickoff(orgs, openings),
                   lambda: do_engagements(orgs),
+                  lambda: do_engagement_documents(orgs, fetch_map("engagements", "n365") if APPLY else {}),
                   lambda: do_org_documents(orgs)):
         t, s, rows = maker()
         steps.append((t, s, rows))

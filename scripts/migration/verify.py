@@ -29,6 +29,29 @@ def fb(name):
     return len(json.load(open(p))) if os.path.exists(p) else 0
 
 
+def superseded_count(table="applications", schema="n365"):
+    """
+    Repeat applications folded into the row that superseded them.
+
+    n365.applications allows one application per person per role, so seventeen
+    Firestore rows live inside another row's raw rather than beside it. They are
+    still here, so they still count — a verification that ignored them would
+    report a loss that did not happen.
+    """
+    req = urllib.request.Request(
+        f"{URL}/rest/v1/{table}?select=raw&raw->superseded=not.is.null")
+    req.add_header("apikey", KEY)
+    req.add_header("Authorization", f"Bearer {KEY}")
+    if schema:
+        req.add_header("Accept-Profile", schema)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            rows = json.load(r)
+        return sum(len((x.get("raw") or {}).get("superseded") or []) for x in rows)
+    except urllib.error.HTTPError:
+        return 0
+
+
 def sb(table, schema=None):
     """Count rows that came from Firebase, i.e. that carry a legacy_id."""
     req = urllib.request.Request(
@@ -71,14 +94,17 @@ print(f"  {'-'*24} {'-'*9} {'-'*9}   {'-'*18}")
 bad = 0
 for src, dst, schema in PAIRS:
     a, b = fb(src), sb(dst, schema)
+    folded = superseded_count() if src == "applications" else 0
+    if folded and isinstance(b, int):
+        b += folded
     if isinstance(b, str):
-        status, mark = b, "!"
+        status = b
     elif a == b:
-        status, mark = "match", "ok"
+        status = "match" + (f" ({folded} folded in)" if folded else "")
     elif b == 0:
-        status, mark = "not yet imported", ".."
+        status = "not yet imported"
     else:
-        status, mark = f"MISSING {a - b}", "!!"
+        status = f"MISSING {a - b}"
         bad += 1
     print(f"  {src:24} {a:>9} {b:>9}   {status}")
 

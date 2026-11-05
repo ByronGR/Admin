@@ -57,8 +57,11 @@ export default function OpeningsPage() {
         if (oRes.status === 'fulfilled') {
           setOpenings(sortByTimestamp(oRes.value as unknown as Opening[], 'createdAt'));
         } else {
+          console.error('openings load failed:', oRes.reason);
           showToast('Failed to load openings', 'error');
         }
+        if (pRes.status === 'rejected') console.error('pipelines load failed:', pRes.reason);
+        if (orgRes.status === 'rejected') console.error('organizations load failed:', orgRes.reason);
         if (orgRes.status === 'fulfilled') {
           const m: Record<string, string> = {};
           orgRes.value.forEach((d) => {

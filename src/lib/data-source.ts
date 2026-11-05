@@ -18,7 +18,7 @@
 //  design cannot shift. Proper relational queries replace this per screen,
 //  later, once the data is proven to be here.
 // ═══════════════════════════════════════════════════════════════════════════
-import { auth } from '@/lib/firebase';
+import { auth, onAuthStateChanged } from '@/lib/firebase';
 
 export type Row = Record<string, unknown> & { id: string };
 
@@ -84,6 +84,25 @@ export function isMigrated(collection: string): boolean {
 }
 
 /**
+ * The signed-in user, once Firebase has actually decided who that is.
+ *
+ * Firebase restores a session asynchronously, so auth.currentUser is null for
+ * the first moments after a page loads — including inside the effect that
+ * fetches data. Reading it directly made every load fail with "Not signed in"
+ * before a request was even sent, which looked exactly like an empty database.
+ */
+function currentUser(): Promise<import('firebase/auth').User | null> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return new Promise((resolve) => {
+    const stop = onAuthStateChanged(auth, (u) => {
+      stop();
+      resolve(u);
+    });
+  });
+}
+
+
+/**
  * Read a whole collection in the shape the screens already use.
  *
  * Goes through Admin's own server rather than straight to Supabase: staff are
@@ -94,8 +113,9 @@ export function isMigrated(collection: string): boolean {
 export async function fetchCollection(collection: string): Promise<Row[]> {
   if (!TABLES[collection]) throw new Error(`No Supabase table mapped for "${collection}"`);
 
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) throw new Error('Not signed in');
+  const user = await currentUser();
+  if (!user) throw new Error('Not signed in');
+  const token = await user.getIdToken();
 
   const res = await fetch(`/api/ds/${encodeURIComponent(collection)}`, {
     headers: { Authorization: `Bearer ${token}` },

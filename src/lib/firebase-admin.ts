@@ -99,7 +99,15 @@ function adminApp(): App {
     return cachedApp;
   }
 
-  cachedApp = initializeApp({ credential: applicationDefault() });
+  // Application Default Credentials carry no project id when they come from
+  // `gcloud auth application-default login`, and verifyIdToken() needs one to
+  // check a token's audience — without it every token is rejected and the
+  // caller looks like a stranger. The WIF branch above already passes it
+  // explicitly; so does this one.
+  cachedApp = initializeApp({
+    credential: applicationDefault(),
+    projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,
+  });
   return cachedApp;
 }
 

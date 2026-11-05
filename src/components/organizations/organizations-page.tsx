@@ -21,6 +21,7 @@ import {
   uploadBytes,
   getDownloadURL,
 } from '@/lib/firebase';
+import { loadCollection } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
@@ -716,16 +717,16 @@ export default function OrganizationsPage() {
     setLoading(true);
     try {
       const [orgSnap, openingsRes, pipelinesRes, placementsRes] = await Promise.allSettled([
-        getDocs(collection(db, 'organizations')),
-        getDocs(collection(db, 'openings')),
-        getDocs(collection(db, 'pipelines')),
-        getDocs(collection(db, 'placements')),
+        loadCollection('organizations'),
+        loadCollection('openings'),
+        loadCollection('pipelines'),
+        loadCollection('placements'),
       ]);
       if (orgSnap.status !== 'fulfilled') throw orgSnap.reason;
       // Spread data first, then override `id` with the Firestore doc ID so a
       // data field named `id` (e.g. a short-code like "TKQKCC") never shadows
       // the real document ID that Firestore operations (updateDoc, queries) need.
-      const loadedOrgs = orgSnap.value.docs.map((d) => ({ ...d.data(), id: d.id } as Organization));
+      const loadedOrgs = orgSnap.value as unknown as Organization[];
       loadedOrgs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setOrgs(loadedOrgs);
 
@@ -735,23 +736,23 @@ export default function OrganizationsPage() {
       loadedOrgs.forEach((o) => { map[o.id] = { openRoles: 0, pipeline: 0, placements: 0 }; });
       const byOrg = (orgId?: string) => loadedOrgs.find((o) => keyFor(o).includes(orgId ?? ''));
       if (openingsRes.status === 'fulfilled') {
-        openingsRes.value.docs.forEach((d) => {
-          const data = d.data() as Opening;
+        openingsRes.value.forEach((d) => {
+          const data = d as unknown as Opening;
           if (data.status !== 'open') return;
           const o = byOrg(data.orgId);
           if (o) map[o.id].openRoles += 1;
         });
       }
       if (pipelinesRes.status === 'fulfilled') {
-        pipelinesRes.value.docs.forEach((d) => {
-          const data = d.data() as Pipeline;
+        pipelinesRes.value.forEach((d) => {
+          const data = d as unknown as Pipeline;
           const o = byOrg(data.orgId);
           if (o) map[o.id].pipeline += data.candidates?.length ?? 0;
         });
       }
       if (placementsRes.status === 'fulfilled') {
-        placementsRes.value.docs.forEach((d) => {
-          const data = d.data() as Placement;
+        placementsRes.value.forEach((d) => {
+          const data = d as unknown as Placement;
           const o = byOrg(data.orgId);
           if (o) map[o.id].placements += 1;
         });
@@ -1110,10 +1111,10 @@ function OrgDetail({
   // offer a real dropdown instead of free text. Selecting a person captures both
   // their name and email, which then flow down to app.nearwork.co.
   useEffect(() => {
-    getDocs(collection(db, 'users'))
+    loadCollection('users')
       .then((snap) => {
-        const staff = snap.docs
-          .map((d) => d.data() as { name?: string; email?: string })
+        const staff = snap
+          .map((d) => d as unknown as { name?: string; email?: string })
           .filter((u) => (u.email || '').toLowerCase().endsWith('@nearwork.co'))
           .map((u) => ({ name: u.name || u.email || '', email: (u.email || '').toLowerCase() }))
           .sort((a, b) => a.name.localeCompare(b.name));

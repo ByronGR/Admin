@@ -22,6 +22,7 @@ import {
   onSnapshot,
   isNearworkEmail,
 } from '@/lib/firebase';
+import { loadCollection } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { useAuth } from '@/hooks/use-auth';
 import { fmtRelative, fmtDate, fmtTime, initials } from '@/lib/utils';
@@ -473,18 +474,18 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const [orgsRes, openingsRes, candidatesRes, pipelinesRes, placementsRes, staffRes, applicationsRes] = await Promise.allSettled([
-        getDocs(collection(db, 'organizations')),
-        getDocs(collection(db, 'openings')),
-        getDocs(collection(db, 'candidates')),
-        getDocs(collection(db, 'pipelines')),
-        getDocs(collection(db, 'placements')),
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'applications')),
+        loadCollection('organizations'),
+        loadCollection('openings'),
+        loadCollection('candidates'),
+        loadCollection('pipelines'),
+        loadCollection('placements'),
+        loadCollection('users'),
+        loadCollection('applications'),
       ]);
 
-      function docsOf<T>(res: PromiseSettledResult<Awaited<ReturnType<typeof getDocs>>>): T[] {
+      function docsOf<T>(res: PromiseSettledResult<Awaited<ReturnType<typeof loadCollection>>>): T[] {
         if (res.status !== 'fulfilled') return [];
-        return res.value.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as T));
+        return res.value as unknown as T[];
       }
 
       const orgs = docsOf<Organization>(orgsRes);
@@ -496,7 +497,9 @@ export default function DashboardPage() {
       const applications = docsOf<AppDoc>(applicationsRes);
       const staff =
         staffRes.status === 'fulfilled'
-          ? staffRes.value.docs.map((d) => d.data()).filter((m) => isNearworkEmail((m.email as string) ?? ''))
+          ? (staffRes.value as unknown as Array<Record<string, unknown>>).filter((m) =>
+              isNearworkEmail((m.email as string) ?? ''),
+            )
           : [];
 
       const activeOrgs = orgs.filter((o) => o.status === 'active');

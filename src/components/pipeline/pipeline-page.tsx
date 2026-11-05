@@ -36,6 +36,7 @@ import {
   arrayUnion,
 } from '@/lib/firebase';
 import { notifyStageEmail } from '@/lib/notify-stage-email';
+import { loadCollection } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { NW, MONO, Button as NWButton } from '@/components/nw/primitives';
 import { PageHeader } from '@/components/nw/shell-ui';
@@ -339,9 +340,9 @@ export default function PipelinePage() {
   // Build a set of valid candidateIds so the board can hide entries whose
   // backing candidate doc was deleted from the candidates collection.
   useEffect(() => {
-    getDocs(collection(db, 'candidates'))
+    loadCollection('candidates')
       .then((snap) => {
-        setActiveCandidateIds(new Set(snap.docs.map((d) => d.id)));
+        setActiveCandidateIds(new Set(snap.map((d) => d.id)));
       })
       .catch(() => {
         // Non-critical — if this fails, show all candidates (fail open).
@@ -354,11 +355,11 @@ export default function PipelinePage() {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, 'assessments'));
+        const snap = await loadCollection('assessments');
         const map: Record<string, number> = {};
         const set = new Set<string>();
-        snap.docs.forEach((d) => {
-          const a = d.data() as { candidateId?: string; pipelineCode?: string; nearworkScore?: number; overallScore?: number; status?: string };
+        snap.forEach((d) => {
+          const a = d as unknown as { candidateId?: string; pipelineCode?: string; nearworkScore?: number; overallScore?: number; status?: string };
           if (a.candidateId && typeof a.nearworkScore === 'number') {
             if (map[a.candidateId] === undefined || a.nearworkScore > map[a.candidateId]) {
               map[a.candidateId] = a.nearworkScore;
@@ -394,11 +395,11 @@ export default function PipelinePage() {
 
   // Resolve org names so rows can show the client org from the pipeline's orgId.
   useEffect(() => {
-    getDocs(collection(db, 'organizations'))
+    loadCollection('organizations')
       .then((snap) => {
         const map: Record<string, string> = {};
-        snap.docs.forEach((d) => {
-          const data = d.data() as { name?: string; shortId?: string };
+        snap.forEach((d) => {
+          const data = d as unknown as { name?: string; shortId?: string };
           if (data.name) {
             map[d.id] = data.name;
             if (data.shortId) map[data.shortId] = data.name;
@@ -778,8 +779,8 @@ export default function PipelinePage() {
     const t = setTimeout(async () => {
       setCandidateSearchLoading(true);
       try {
-        const snap = await getDocs(collection(db, 'candidates'));
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidate));
+        const snap = await loadCollection('candidates');
+        const all = snap as unknown as Candidate[];
         const q = candidateSearch.toLowerCase();
         setCandidateResults(
           all

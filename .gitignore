@@ -35,3 +35,4 @@ tmp/
 *firebase-adminsdk*.json
 serviceAccount*.json
 *-service-account.json
+scripts/migration/export/

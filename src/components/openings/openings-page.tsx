@@ -10,6 +10,7 @@ import {
   setDoc,
   serverTimestamp,
 } from '@/lib/firebase';
+import { loadCollection } from '@/lib/data-source';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Spinner } from '@/components/ui/spinner';
 import { useToast } from '@/components/ui/toast';
@@ -48,28 +49,28 @@ export default function OpeningsPage() {
 
   useEffect(() => {
     Promise.allSettled([
-      getDocs(collection(db, 'openings')),
-      getDocs(collection(db, 'pipelines')),
-      getDocs(collection(db, 'organizations')),
+      loadCollection('openings'),
+      loadCollection('pipelines'),
+      loadCollection('organizations'),
     ])
       .then(([oRes, pRes, orgRes]) => {
         if (oRes.status === 'fulfilled') {
-          setOpenings(sortByTimestamp(oRes.value.docs.map((d) => ({ id: d.id, ...d.data() } as Opening)), 'createdAt'));
+          setOpenings(sortByTimestamp(oRes.value as unknown as Opening[], 'createdAt'));
         } else {
           showToast('Failed to load openings', 'error');
         }
         if (orgRes.status === 'fulfilled') {
           const m: Record<string, string> = {};
-          orgRes.value.docs.forEach((d) => {
-            const data = d.data() as { name?: string; shortId?: string };
+          orgRes.value.forEach((d) => {
+            const data = d as { name?: string; shortId?: string };
             if (data.name) { m[d.id] = data.name; if (data.shortId) m[data.shortId] = data.name; }
           });
           setOrgNames(m);
         }
         if (pRes.status === 'fulfilled') {
           const m: Record<string, { pipeline: number; review: number }> = {};
-          pRes.value.docs.forEach((d) => {
-            const p = d.data() as Pipeline;
+          pRes.value.forEach((d) => {
+            const p = d as unknown as Pipeline;
             if (!p.code) return;
             const cands = p.candidates ?? [];
             m[p.code] = { pipeline: cands.length, review: cands.filter((c) => c.pendingReview).length };

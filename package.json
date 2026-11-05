@@ -16,6 +16,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google-cloud/storage": "^7.21.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@supabase/supabase-js": "^2.119.0",
     "@vercel/functions": "^3.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
